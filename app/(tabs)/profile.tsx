@@ -115,6 +115,19 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* API Keys */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>API Keys</Text>
+          <View style={styles.settingsCard}>
+            <SettingRow
+              icon="🔑"
+              label="Manage API Keys"
+              value="TMDB · Backend · Supabase"
+              onPress={() => router.push('/settings')}
+            />
+          </View>
+        </View>
+
         {/* Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>

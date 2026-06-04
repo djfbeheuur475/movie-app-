@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Config, ImageSizes } from '../constants/config';
+import { useApiKeysStore } from '../store/apiKeysStore';
 import type {
   TMDBMovie,
   TMDBTVShow,
@@ -12,10 +13,14 @@ import type {
 
 const tmdb = axios.create({
   baseURL: Config.TMDB_BASE_URL,
-  params: {
-    api_key: process.env.EXPO_PUBLIC_TMDB_API_KEY,
-    language: 'en-US',
-  },
+  params: { language: 'en-US' },
+});
+
+// Inject the TMDB key from secure store on every request
+tmdb.interceptors.request.use((config) => {
+  const key = useApiKeysStore.getState().tmdbKey;
+  if (key) config.params = { ...config.params, api_key: key };
+  return config;
 });
 
 // ─── Image helpers ────────────────────────────────────────────────────────────

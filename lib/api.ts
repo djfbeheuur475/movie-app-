@@ -2,11 +2,15 @@
 import axios from 'axios';
 import { Config } from '../constants/config';
 import { supabase } from './supabase';
+import { useApiKeysStore } from '../store/apiKeysStore';
 
 const api = axios.create({ baseURL: Config.BACKEND_URL });
 
-// Attach Supabase JWT to every backend request
 api.interceptors.request.use(async (config) => {
+  // Use stored backend URL if available
+  const storedUrl = useApiKeysStore.getState().backendUrl;
+  if (storedUrl) config.baseURL = storedUrl;
+
   const { data } = await supabase.auth.getSession();
   if (data.session?.access_token) {
     config.headers.Authorization = `Bearer ${data.session.access_token}`;
