@@ -107,18 +107,18 @@ export default function DiscoverScreen() {
     include_adult: false,
   };
 
-  const { data: discoverData, isLoading: discoverLoading } = useQuery({
+  const { data: discoverData, isLoading: discoverLoading } = useQuery<any[]>({
     queryKey: ['discover', mediaType, sortBy, selectedGenre],
-    queryFn: () =>
+    queryFn: (): Promise<any[]> =>
       mediaType === 'movie'
         ? tmdbApi.discoverMovies(discoverParams)
         : tmdbApi.discoverTV(discoverParams),
     enabled: !searchQuery,
   });
 
-  const { data: searchData, isLoading: searchLoading } = useQuery({
+  const { data: searchData, isLoading: searchLoading } = useQuery<any[]>({
     queryKey: ['discover-search', mediaType, searchQuery],
-    queryFn: () =>
+    queryFn: (): Promise<any[]> =>
       mediaType === 'movie'
         ? tmdbApi.searchMovies(searchQuery)
         : tmdbApi.searchTVShows(searchQuery),
