@@ -55,22 +55,31 @@ export default function HeroSection({ item, aiExplanation }: Props) {
         style={styles.gradient}
       />
       <View style={styles.content}>
+        {/* Featured badge */}
+        <View style={styles.featuredBadge}>
+          <Text style={styles.featuredText}>
+            FEATURED {item.mediaType === 'tv' ? 'SERIES' : 'FILM'}
+            {item.rating > 0 ? `  ★ ${item.rating.toFixed(1)}` : ''}
+          </Text>
+        </View>
+
         <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+
+        {item.overview ? (
+          <Text style={styles.overview} numberOfLines={2}>{item.overview}</Text>
+        ) : null}
+
         {aiExplanation && (
           <View style={styles.aiTag}>
             <Text style={styles.aiTagText}>✦ AI Pick</Text>
             <Text style={styles.aiExplanation} numberOfLines={2}>{aiExplanation}</Text>
           </View>
         )}
+
         <View style={styles.meta}>
           <Text style={styles.metaText}>{item.releaseDate?.slice(0, 4)}</Text>
-          {item.rating > 0 && (
-            <View style={styles.rating}>
-              <Text style={styles.star}>★</Text>
-              <Text style={styles.metaText}>{item.rating.toFixed(1)}</Text>
-            </View>
-          )}
         </View>
+
         <View style={styles.actions}>
           <TouchableOpacity style={styles.playButton} onPress={handlePress} activeOpacity={0.8}>
             <Text style={styles.playButtonText}>▶  More Info</Text>
@@ -103,11 +112,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xl,
   },
-  title: {
-    fontSize: 28,
+  featuredBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.primary + '22',
+    borderWidth: 1,
+    borderColor: Colors.primary + '80',
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: Spacing.sm,
+  },
+  featuredText: {
+    fontSize: 10,
     fontWeight: '800',
+    color: Colors.primary,
+    letterSpacing: 1.5,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: '900',
     color: Colors.text,
     letterSpacing: -0.5,
+    marginBottom: Spacing.xs,
+  },
+  overview: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    lineHeight: 18,
     marginBottom: Spacing.sm,
   },
   aiTag: {
@@ -147,26 +178,27 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   playButton: {
-    backgroundColor: Colors.text,
-    paddingVertical: 10,
+    backgroundColor: Colors.primary,
+    paddingVertical: 11,
     paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.md,
     flex: 1,
     alignItems: 'center',
   },
   playButtonText: {
     ...Typography.subheading,
     color: Colors.background,
+    fontWeight: '700',
   },
   addButton: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingVertical: 11,
     paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.md,
     flex: 1,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   addButtonText: {
     ...Typography.subheading,

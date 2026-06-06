@@ -167,11 +167,25 @@ export default function SettingsScreen() {
 
           {/* TMDB */}
           <View style={styles.card}>
-            <SectionHeader
-              icon="🎬"
-              title="TMDB API Key"
-              description="Required · Powers all movie & TV data, images, and search."
-            />
+            <View style={styles.cardTitleRow}>
+              <SectionHeader
+                icon="🎬"
+                title="TMDB API Key"
+                description="Required · Powers all movie & TV data, images, and search."
+              />
+              {fields.tmdbKey.length > 0 && (
+                <View style={styles.keySetBadge}>
+                  <Text style={styles.keySetBadgeText}>✓ Set</Text>
+                </View>
+              )}
+            </View>
+            {fields.tmdbKey.length > 0 && (
+              <View style={styles.keyPreview}>
+                <Text style={styles.keyPreviewText}>
+                  {fields.tmdbKey.slice(0, 8)}{'•'.repeat(Math.min(16, fields.tmdbKey.length - 8))}
+                </Text>
+              </View>
+            )}
             <SettingInput
               label="API Key (v3 auth)"
               value={fields.tmdbKey}
@@ -301,6 +315,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     gap: Spacing.md,
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  keySetBadge: {
+    backgroundColor: Colors.success + '22',
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.success + '60',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginTop: 2,
+  },
+  keySetBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.success,
+  },
+  keyPreview: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  keyPreviewText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: Colors.textMuted,
+    letterSpacing: 1,
   },
   sectionHeader: {
     flexDirection: 'row',

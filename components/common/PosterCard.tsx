@@ -51,6 +51,7 @@ export default function PosterCard({ item, width = 120, showTitle = false, showR
         )}
         {showRating && item.rating > 0 && (
           <View style={styles.ratingBadge}>
+            <Text style={{ fontSize: 9, color: Colors.primary }}>★</Text>
             <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
           </View>
         )}
@@ -91,17 +92,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 6,
     right: 6,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(0,0,0,0.82)',
     borderRadius: BorderRadius.sm,
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: Colors.accent,
+    borderColor: Colors.primary + '80',
   },
   ratingText: {
-    ...Typography.caption,
-    color: Colors.accent,
+    fontSize: 10,
     fontWeight: '700',
+    color: Colors.primary,
   },
   title: {
     ...Typography.caption,

@@ -102,7 +102,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient
-        colors={['#1a0000', Colors.background]}
+        colors={['#1a0f00', Colors.background]}
         style={StyleSheet.absoluteFill}
       />
 

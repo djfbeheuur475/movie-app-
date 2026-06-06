@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
-import { Colors, Spacing } from '../../constants/theme';
+import { Colors } from '../../constants/theme';
 
 function TabIcon({ label, icon, focused }: { label: string; icon: string; focused: boolean }) {
   return (
@@ -29,9 +29,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="search"
+        name="discover"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon label="Search" icon="🔍" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon label="Discover" icon="🔍" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="watchlist"
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon label="Watchlist" icon="🎬" focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -41,10 +47,20 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="ai"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon label="Profile" icon="👤" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon label="AI" icon="✦" focused={focused} />,
         }}
+      />
+
+      {/* Hidden tabs — still navigable but not in the tab bar */}
+      <Tabs.Screen
+        name="search"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{ href: null }}
       />
     </Tabs>
   );
@@ -64,8 +80,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   tabIcon: {
-    fontSize: 22,
-    opacity: 0.5,
+    fontSize: 20,
+    opacity: 0.45,
   },
   tabIconActive: {
     opacity: 1,
@@ -77,5 +93,6 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     color: Colors.primary,
+    fontWeight: '700',
   },
 });

@@ -106,10 +106,15 @@ export default function HomeScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.logoText}>CINE<Text style={styles.logoAccent}>AI</Text></Text>
+          <View style={styles.logoWrap}>
+            <View style={styles.logoIcon}>
+              <Text style={styles.logoIconText}>▶</Text>
+            </View>
+            <Text style={styles.logoText}>CINE<Text style={styles.logoAccent}>AI</Text></Text>
+          </View>
           <TouchableOpacity
             style={styles.aiButton}
-            onPress={() => router.push('/ai-assistant')}
+            onPress={() => router.push('/(tabs)/ai')}
             activeOpacity={0.8}
           >
             <Text style={styles.aiButtonText}>✦ Ask AI</Text>
@@ -178,11 +183,29 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
   },
+  logoWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoIconText: {
+    fontSize: 14,
+    color: Colors.background,
+    fontWeight: '900',
+  },
   logoText: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
     color: Colors.text,
-    letterSpacing: -1,
+    letterSpacing: -0.5,
   },
   logoAccent: {
     color: Colors.primary,
@@ -190,13 +213,13 @@ const styles = StyleSheet.create({
   aiButton: {
     backgroundColor: Colors.primary,
     paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 20,
   },
   aiButtonText: {
     ...Typography.label,
-    color: Colors.text,
-    fontWeight: '700',
+    color: Colors.background,
+    fontWeight: '800',
   },
   rows: {
     paddingTop: Spacing.xl,
