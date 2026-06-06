@@ -6,17 +6,19 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,6 +26,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleEmailAuth = async () => {
     if (!email || !password) {
@@ -47,6 +50,48 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const redirectUri = AuthSession.makeRedirectUri({ scheme: 'cineai', path: 'auth/callback' });
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUri,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error || !data.url) {
+        Alert.alert('Google sign-in error', error?.message ?? 'Could not start sign-in');
+        return;
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
+
+      if (result.type === 'success') {
+        // Extract tokens from the redirect URL fragment
+        const fragment = result.url.split('#')[1] ?? '';
+        const params = new URLSearchParams(fragment);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token') ?? '';
+
+        if (accessToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) Alert.alert('Session error', sessionError.message);
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   const handleGuestMode = () => {
     router.replace('/(tabs)');
   };
@@ -56,84 +101,103 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Background gradient */}
       <LinearGradient
         colors={['#1a0000', Colors.background]}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Logo area */}
-      <View style={styles.logoArea}>
-        <Text style={styles.logoText}>CINE</Text>
-        <Text style={styles.logoAccent}>AI</Text>
-        <Text style={styles.logoTagline}>Discover. Track. Experience.</Text>
-      </View>
-
-      {/* Form */}
-      <View style={styles.form}>
-        <Text style={styles.formTitle}>{isSignUp ? 'Create Account' : 'Welcome Back'}</Text>
-
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Email"
-          placeholderTextColor={Colors.textMuted}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          selectionColor={Colors.primary}
-        />
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Password"
-          placeholderTextColor={Colors.textMuted}
-          secureTextEntry
-          selectionColor={Colors.primary}
-        />
-
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={handleEmailAuth}
-          disabled={isLoading}
-          activeOpacity={0.8}
-        >
-          {isLoading ? (
-            <ActivityIndicator color={Colors.text} />
-          ) : (
-            <Text style={styles.primaryBtnText}>{isSignUp ? 'Create Account' : 'Sign In'}</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.toggleMode}
-          onPress={() => setIsSignUp((v) => !v)}
-        >
-          <Text style={styles.toggleText}>
-            {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        {/* Logo */}
+        <View style={styles.logoArea}>
+          <Text style={styles.logoText}>CINE<Text style={styles.logoAccent}>AI</Text></Text>
+          <Text style={styles.logoTagline}>DISCOVER · TRACK · EXPERIENCE</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.guestBtn}
-          onPress={handleGuestMode}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.guestBtnText}>Continue without account</Text>
-        </TouchableOpacity>
+        {/* Form card */}
+        <View style={styles.form}>
+          <Text style={styles.formTitle}>{isSignUp ? 'Create Account' : 'Welcome Back'}</Text>
 
-        <Text style={styles.disclaimer}>
-          By continuing you agree to our Terms of Service and Privacy Policy.
-        </Text>
-      </View>
+          {/* Google button */}
+          <TouchableOpacity
+            style={styles.googleBtn}
+            onPress={handleGoogleSignIn}
+            disabled={googleLoading}
+            activeOpacity={0.85}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color={Colors.text} size="small" />
+            ) : (
+              <>
+                <Text style={styles.googleIcon}>G</Text>
+                <Text style={styles.googleBtnText}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or use email</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Email / Password */}
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Email"
+            placeholderTextColor={Colors.textMuted}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            selectionColor={Colors.primary}
+          />
+          <TextInput
+            style={styles.input}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Password"
+            placeholderTextColor={Colors.textMuted}
+            secureTextEntry
+            selectionColor={Colors.primary}
+          />
+
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={handleEmailAuth}
+            disabled={isLoading}
+            activeOpacity={0.8}
+          >
+            {isLoading ? (
+              <ActivityIndicator color={Colors.text} />
+            ) : (
+              <Text style={styles.primaryBtnText}>{isSignUp ? 'Create Account' : 'Sign In'}</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toggleMode} onPress={() => setIsSignUp((v) => !v)}>
+            <Text style={styles.toggleText}>
+              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Guest */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity style={styles.guestBtn} onPress={handleGuestMode} activeOpacity={0.8}>
+            <Text style={styles.guestBtnText}>Continue without account</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.disclaimer}>
+            By continuing you agree to our Terms of Service and Privacy Policy.
+          </Text>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -143,14 +207,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+  },
   logoArea: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 0,
+    paddingTop: 80,
+    paddingBottom: 40,
   },
   logoText: {
     fontSize: 52,
@@ -159,17 +223,12 @@ const styles = StyleSheet.create({
     letterSpacing: -2,
   },
   logoAccent: {
-    fontSize: 52,
-    fontWeight: '900',
     color: Colors.primary,
-    letterSpacing: -2,
   },
   logoTagline: {
     ...Typography.caption,
     color: Colors.textMuted,
-    width: '100%',
-    textAlign: 'center',
-    marginTop: -8,
+    marginTop: 4,
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
@@ -185,7 +244,44 @@ const styles = StyleSheet.create({
   formTitle: {
     ...Typography.heading,
     color: Colors.text,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    height: 50,
+    marginBottom: Spacing.md,
+  },
+  googleIcon: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#4285F4',
+    fontFamily: 'serif',
+  },
+  googleBtnText: {
+    ...Typography.subheading,
+    color: Colors.text,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing.md,
+    gap: Spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    ...Typography.caption,
+    color: Colors.textMuted,
   },
   input: {
     backgroundColor: Colors.surfaceElevated,
@@ -204,7 +300,7 @@ const styles = StyleSheet.create({
     height: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   primaryBtnText: {
     ...Typography.subheading,
@@ -217,21 +313,6 @@ const styles = StyleSheet.create({
   toggleText: {
     ...Typography.body,
     color: Colors.primary,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: Spacing.xl,
-    gap: Spacing.md,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  dividerText: {
-    ...Typography.caption,
-    color: Colors.textMuted,
   },
   guestBtn: {
     borderWidth: 1,

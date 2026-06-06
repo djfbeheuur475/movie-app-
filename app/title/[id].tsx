@@ -100,7 +100,10 @@ export default function TitleDetailScreen() {
           isInWatchlist={inWatchlist}
         />
 
-        <CastList cast={detailAny.credits?.cast ?? []} />
+        <CastList
+          cast={detailAny.credits?.cast ?? []}
+          crew={detailAny.credits?.crew ?? []}
+        />
 
         {recommendations.length > 0 && (
           <View style={{ marginTop: Spacing.xl }}>
