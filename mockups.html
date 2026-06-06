@@ -1,1474 +1,1266 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CineAI — App Mockups</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg:               #0a0a0a;
-    --surface:          #141414;
-    --surfaceEl:        #1f1f1f;
-    --border:           #2a2a2a;
-    --primary:          #e50914;
-    --accent:           #f5c518;
-    --text:             #ffffff;
-    --textSec:          #a3a3a3;
-    --textMuted:        #666666;
-    --success:          #46d369;
-    --purple:           #7c3aed;
-    --page:             #050505;
+    --page-bg: #050505;
+    --frame: #1a1a1a;
+    --app-bg: #0a0a0a;
+    --surface: #141414;
+    --surface-el: #1f1f1f;
+    --border: #2a2a2a;
+    --red: #e50914;
+    --gold: #f5c518;
+    --white: #ffffff;
+    --text-sec: #a3a3a3;
+    --text-muted: #666666;
+    --green: #46d369;
+    --purple: #7b2d8b;
   }
-
-  html { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif; }
 
   body {
-    background: var(--page);
-    color: var(--text);
+    background: var(--page-bg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     min-height: 100vh;
-    padding: 48px 32px 80px;
-    overflow-x: auto;
+    padding: 48px 40px 60px;
   }
 
-  /* ── Page header ── */
-  .page-header {
-    text-align: center;
-    margin-bottom: 56px;
-  }
-  .page-header h1 {
+  h1.page-title {
+    color: var(--white);
     font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 4px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--textMuted);
-    margin-bottom: 12px;
+    text-align: center;
+    margin-bottom: 8px;
+    opacity: 0.5;
   }
-  .page-header .logo {
-    font-size: 36px;
-    font-weight: 900;
-    letter-spacing: -1.5px;
-    color: var(--text);
+  h2.page-sub {
+    color: var(--red);
+    font-size: 28px;
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 48px;
+    letter-spacing: -0.5px;
   }
-  .page-header .logo span { color: var(--primary); }
-  .page-header .sub {
-    font-size: 12px;
-    letter-spacing: 3px;
-    color: var(--textMuted);
-    margin-top: 6px;
-    text-transform: uppercase;
-  }
+  h2.page-sub span { color: var(--white); }
 
-  /* ── Scroll container ── */
-  .stage {
+  .scroll-track {
     display: flex;
-    flex-direction: row;
     gap: 40px;
-    align-items: flex-start;
-    width: max-content;
-    margin: 0 auto;
-    padding: 16px 8px 24px;
+    overflow-x: auto;
+    padding-bottom: 24px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
   }
+  .scroll-track::-webkit-scrollbar { height: 4px; }
+  .scroll-track::-webkit-scrollbar-track { background: #111; border-radius: 2px; }
+  .scroll-track::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-  /* ── Phone frame ── */
+  /* ─── PHONE FRAME ─── */
   .phone-wrap {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
-    flex-shrink: 0;
+    gap: 16px;
   }
-  .phone-label {
+  .screen-label {
+    color: var(--text-muted);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 2px;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--textMuted);
-    text-align: center;
   }
 
-  .phone {
-    width: 393px;
-    height: 852px;
-    background: #1a1a1a;
+  .phone-frame {
+    width: 415px;
+    height: 892px;
+    background: var(--frame);
     border-radius: 52px;
+    padding: 20px;
     box-shadow:
-      0 0 0 2px #333,
-      0 0 0 4px #111,
-      0 40px 80px rgba(0,0,0,0.7),
-      0 20px 40px rgba(0,0,0,0.5);
+      0 0 0 1px #333,
+      0 30px 80px rgba(0,0,0,0.8),
+      inset 0 0 0 1px #444,
+      0 0 60px rgba(229,9,20,0.04);
     position: relative;
-    overflow: hidden;
-    flex-shrink: 0;
   }
 
-  /* Side buttons */
-  .phone::before {
-    content: '';
+  .phone-notch {
     position: absolute;
-    right: -4px;
-    top: 160px;
-    width: 4px;
-    height: 72px;
-    background: #222;
-    border-radius: 0 2px 2px 0;
-    box-shadow: 0 90px 0 #222;
-    z-index: 100;
-  }
-  .phone::after {
-    content: '';
-    position: absolute;
-    left: -4px;
-    top: 140px;
-    width: 4px;
-    height: 40px;
-    background: #222;
-    border-radius: 2px 0 0 2px;
-    box-shadow: 0 52px 0 #222, 0 104px 0 #222;
-    z-index: 100;
-  }
-
-  /* Screen */
-  .screen {
-    position: absolute;
-    inset: 10px;
-    border-radius: 44px;
-    background: var(--bg);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* Notch */
-  .notch {
-    position: absolute;
-    top: 0;
+    top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    width: 126px;
-    height: 34px;
-    background: #1a1a1a;
-    border-radius: 0 0 24px 24px;
-    z-index: 50;
+    width: 120px;
+    height: 30px;
+    background: var(--frame);
+    border-radius: 0 0 18px 18px;
+    z-index: 20;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
   }
   .notch-cam {
-    width: 10px;
-    height: 10px;
+    width: 10px; height: 10px;
+    background: #0d0d0d;
     border-radius: 50%;
-    background: #111;
-    border: 1px solid #333;
+    border: 1.5px solid #333;
   }
-  .notch-pill {
-    width: 60px;
-    height: 6px;
+  .notch-bar {
+    width: 60px; height: 5px;
+    background: #0d0d0d;
     border-radius: 3px;
-    background: #111;
-    border: 1px solid #333;
+  }
+
+  .phone-screen {
+    width: 100%;
+    height: 100%;
+    background: var(--app-bg);
+    border-radius: 34px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Status bar */
   .status-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 14px 24px 4px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text);
-    flex-shrink: 0;
-    z-index: 10;
-  }
-  .status-time { font-variant-numeric: tabular-nums; }
-  .status-icons { display: flex; gap: 5px; align-items: center; }
-  .status-icons svg { fill: var(--text); }
-
-  /* Content area */
-  .content {
-    flex: 1;
-    overflow: hidden;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* ── Shared UI atoms ── */
-  .logo-text { font-size: 22px; font-weight: 900; letter-spacing: -1px; color: var(--text); }
-  .logo-text .ai { color: var(--primary); }
-
-  .tab-bar {
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    padding: 10px 0 20px;
-    background: rgba(20,20,20,0.97);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .tab-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: var(--textMuted);
-    text-transform: uppercase;
-  }
-  .tab-item.active { color: var(--primary); }
-  .tab-icon { font-size: 18px; }
-
-  .btn-red {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--primary);
-    color: var(--text);
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 700;
-    padding: 13px 0;
-    cursor: pointer;
-    border: none;
-    width: 100%;
-  }
-
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    padding: 6px 14px;
-    font-size: 12px;
-    color: var(--text);
-    white-space: nowrap;
-  }
-
-  /* ── Gradient poster helpers ── */
-  .poster {
-    border-radius: 8px;
-    overflow: hidden;
-    position: relative;
-    background: var(--surfaceEl);
-    flex-shrink: 0;
-  }
-  .poster-text {
-    position: absolute;
-    bottom: 6px;
-    left: 0; right: 0;
-    text-align: center;
-    font-size: 8px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: rgba(255,255,255,0.85);
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-    padding: 0 4px;
-  }
-
-  /* poster gradient presets */
-  .g-red    { background: linear-gradient(160deg, #3d0000 0%, #8b0000 50%, #1a0000 100%); }
-  .g-blue   { background: linear-gradient(160deg, #00143d 0%, #0a2b6e 50%, #000d2b 100%); }
-  .g-green  { background: linear-gradient(160deg, #001a0e 0%, #0a3d22 50%, #001a0e 100%); }
-  .g-purple { background: linear-gradient(160deg, #1a0033 0%, #3d006e 50%, #0d001a 100%); }
-  .g-orange { background: linear-gradient(160deg, #2b1500 0%, #6e3300 50%, #1a0d00 100%); }
-  .g-teal   { background: linear-gradient(160deg, #001a1a 0%, #006e6e 40%, #001a1a 100%); }
-  .g-dark   { background: linear-gradient(160deg, #1a1a1a 0%, #333 50%, #0a0a0a 100%); }
-  .g-warm   { background: linear-gradient(160deg, #1a1500 0%, #4a3d00 50%, #1a1500 100%); }
-
-  .scrollable { overflow-y: auto; flex: 1; }
-  .scrollable::-webkit-scrollbar { display: none; }
-
-  /* ─────────────────────────────────────────────
-     SCREEN 1: Welcome / Onboarding
-  ───────────────────────────────────────────── */
-  #s1 .bg-grad {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, #1a0000 0%, #0d0d0d 40%, #0a0a0a 100%);
-  }
-  #s1 .inner {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 0 28px 24px;
-    flex: 1;
-    justify-content: center;
-    gap: 0;
-  }
-  #s1 .big-logo {
-    font-size: 72px;
-    font-weight: 900;
-    letter-spacing: -3px;
-    color: var(--text);
-    line-height: 1;
-    margin-bottom: 6px;
-  }
-  #s1 .big-logo .ai { color: var(--primary); }
-  #s1 .tagline {
-    font-size: 9px;
-    letter-spacing: 4px;
-    color: var(--textMuted);
-    text-transform: uppercase;
-    margin-bottom: 32px;
-  }
-  #s1 .feature-list {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 13px;
-    margin-bottom: 28px;
-  }
-  #s1 .feature-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  #s1 .feature-icon { font-size: 20px; width: 28px; text-align: center; flex-shrink: 0; }
-  #s1 .feature-label { font-size: 14px; color: var(--textSec); font-weight: 400; }
-  #s1 .disclaimer {
-    width: 100%;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 16px;
-    font-size: 11px;
-    color: var(--textMuted);
-    line-height: 17px;
-    text-align: center;
-    margin-bottom: 22px;
-  }
-  #s1 .step-indicator {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 24px;
-  }
-  #s1 .dot {
-    width: 6px; height: 6px; border-radius: 3px;
-    background: var(--border);
-  }
-  #s1 .dot.active { background: var(--primary); width: 20px; }
-
-  /* ─────────────────────────────────────────────
-     SCREEN 2: TMDB API Key Setup
-  ───────────────────────────────────────────── */
-  #s2 .bg-grad {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, #1a0000 0%, #0d0d0d 40%, #0a0a0a 100%);
-  }
-  #s2 .inner {
-    position: relative;
-    z-index: 1;
-    padding: 8px 24px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    flex: 1;
-    overflow-y: auto;
-  }
-  #s2 .inner::-webkit-scrollbar { display: none; }
-  #s2 .step-num {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    color: var(--primary);
-    text-transform: uppercase;
-  }
-  #s2 .step-title {
-    font-size: 28px;
-    font-weight: 800;
-    color: var(--text);
-    letter-spacing: -0.5px;
-    margin-top: 2px;
-  }
-  #s2 .step-desc {
-    font-size: 13px;
-    color: var(--textSec);
-    line-height: 19px;
-  }
-  #s2 .step-desc .hi { color: var(--success); font-weight: 600; }
-  #s2 .instruction-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  #s2 .instr-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text);
-    margin-bottom: 2px;
-  }
-  #s2 .instr-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  #s2 .num-circle {
-    width: 20px; height: 20px;
-    border-radius: 50%;
-    background: var(--primary);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10px; font-weight: 700; color: #fff;
-    flex-shrink: 0; margin-top: 1px;
-  }
-  #s2 .instr-text { font-size: 12px; color: var(--textSec); line-height: 18px; }
-  #s2 .tmdb-link {
-    font-size: 12px;
-    color: var(--primary);
-    font-weight: 600;
-    border-bottom: 1px solid var(--primary);
-    align-self: flex-start;
-    padding-bottom: 1px;
-    margin-top: 4px;
-  }
-  #s2 .input-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--textSec); text-transform: uppercase; margin-bottom: 6px; }
-  #s2 .fake-input {
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 13px 14px;
-    font-size: 13px;
-    color: var(--textMuted);
-    font-family: monospace;
-  }
-
-  /* ─────────────────────────────────────────────
-     SCREEN 3: Home Feed
-  ───────────────────────────────────────────── */
-  #s3 .top-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 20px 6px;
-    flex-shrink: 0;
-  }
-  #s3 .ai-pill {
-    background: var(--primary);
-    border-radius: 100px;
-    padding: 6px 14px;
-    font-size: 11px;
-    font-weight: 700;
-    color: #fff;
-  }
-  #s3 .hero {
-    position: relative;
-    height: 320px;
-    flex-shrink: 0;
-    overflow: hidden;
-  }
-  #s3 .hero-bg {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, #3d0000 0%, #1a0000 30%, #0d0020 60%, #000 100%);
-  }
-  #s3 .hero-grain {
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
-    opacity: 0.4;
-  }
-  #s3 .hero-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to bottom, transparent 30%, rgba(10,10,10,0.6) 70%, #0a0a0a 100%);
-  }
-  #s3 .hero-content {
-    position: absolute;
-    bottom: 16px;
-    left: 16px;
-    right: 16px;
-  }
-  #s3 .hero-label {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--primary);
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
-  #s3 .hero-title {
-    font-size: 26px;
-    font-weight: 900;
-    letter-spacing: -0.5px;
-    color: #fff;
-    margin-bottom: 5px;
-    line-height: 1.1;
-  }
-  #s3 .hero-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    font-size: 11px;
-    color: var(--textSec);
-  }
-  #s3 .star { color: var(--accent); }
-  #s3 .hero-btns { display: flex; gap: 8px; }
-  #s3 .btn-white {
-    flex: 1;
-    background: rgba(255,255,255,0.95);
-    color: #000;
-    border-radius: 8px;
-    padding: 9px 0;
-    text-align: center;
-    font-size: 12px;
-    font-weight: 700;
-  }
-  #s3 .btn-ghost {
-    flex: 1;
-    background: rgba(255,255,255,0.12);
-    color: #fff;
-    border-radius: 8px;
-    padding: 9px 0;
-    text-align: center;
-    font-size: 12px;
-    font-weight: 600;
-    border: 1px solid rgba(255,255,255,0.2);
-  }
-  #s3 .row-section { padding: 16px 0 0; flex-shrink: 0; }
-  #s3 .row-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 16px;
-    margin-bottom: 10px;
-  }
-  #s3 .row-title { font-size: 15px; font-weight: 700; color: var(--text); }
-  #s3 .row-more { font-size: 11px; color: var(--primary); font-weight: 600; }
-  #s3 .poster-row {
-    display: flex;
-    gap: 9px;
-    padding: 0 16px;
-    overflow: hidden;
-  }
-
-  /* ─────────────────────────────────────────────
-     SCREEN 4: Search
-  ───────────────────────────────────────────── */
-  #s4 .inner { padding: 8px 20px 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-  #s4 .page-title { font-size: 32px; font-weight: 800; color: var(--text); letter-spacing: -1px; margin-bottom: 12px; }
-  #s4 .search-bar {
-    display: flex;
-    align-items: center;
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 14px;
-    gap: 10px;
-    margin-bottom: 24px;
-    flex-shrink: 0;
-  }
-  #s4 .search-icon { font-size: 15px; color: var(--textMuted); }
-  #s4 .search-placeholder { font-size: 13px; color: var(--textMuted); }
-  #s4 .section-label { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
-  #s4 .genre-wrap {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 24px;
-  }
-  #s4 .genre-pill {
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    padding: 7px 14px;
-    font-size: 12px;
-    color: var(--text);
-    white-space: nowrap;
-  }
-  #s4 .recent-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  #s4 .recent-icon { font-size: 14px; }
-  #s4 .recent-text { font-size: 13px; color: var(--textSec); }
-
-  /* ─────────────────────────────────────────────
-     SCREEN 5: Title Detail
-  ───────────────────────────────────────────── */
-  #s5 .hero-area {
-    position: relative;
-    height: 260px;
-    flex-shrink: 0;
-  }
-  #s5 .hero-bg {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, #00143d 0%, #0a0a3d 50%, #000 100%);
-  }
-  #s5 .hero-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(10,10,10,0.7) 70%, #0a0a0a 100%);
-  }
-  #s5 .back-btn {
-    position: absolute;
-    top: 14px;
-    left: 14px;
-    width: 34px; height: 34px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.6);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
-    color: #fff;
-    z-index: 10;
-  }
-  #s5 .mini-poster {
-    position: absolute;
-    bottom: -36px;
-    left: 16px;
-    width: 76px; height: 112px;
-    border-radius: 8px;
-    overflow: hidden;
-    z-index: 5;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.8);
-  }
-  #s5 .detail-body {
-    padding: 50px 16px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 13px;
-  }
-  #s5 .detail-title { font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: -0.5px; }
-  #s5 .detail-tagline { font-size: 12px; color: var(--textSec); font-style: italic; }
-  #s5 .badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  #s5 .badge {
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 3px 8px;
-    font-size: 10px;
-    color: var(--textSec);
-    font-weight: 600;
-  }
-  #s5 .badge.star { color: var(--accent); border-color: #4a3d00; background: #1a1500; }
-  #s5 .genre-pills { display: flex; gap: 6px; }
-  #s5 .gpill {
-    background: rgba(229,9,20,0.12);
-    border: 1px solid rgba(229,9,20,0.3);
-    border-radius: 100px;
-    padding: 4px 10px;
-    font-size: 11px;
-    color: var(--primary);
-    font-weight: 600;
-  }
-  #s5 .action-btns { display: flex; gap: 8px; }
-  #s5 .btn-trailer {
-    background: var(--primary);
-    border-radius: 8px;
-    padding: 9px 14px;
-    font-size: 12px; font-weight: 700;
-    color: #fff;
-    flex: 1; text-align: center;
-  }
-  #s5 .btn-wl {
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 9px 12px;
-    font-size: 12px; font-weight: 600;
-    color: var(--textSec);
-    flex: 1; text-align: center;
-  }
-  #s5 .btn-stremio {
-    background: rgba(124,58,237,0.15);
-    border: 1px solid rgba(124,58,237,0.4);
-    border-radius: 8px;
-    padding: 9px 12px;
-    font-size: 11px; font-weight: 700;
-    color: #a78bfa;
-    flex: 1; text-align: center;
-  }
-  #s5 .overview-text { font-size: 12px; color: var(--textSec); line-height: 18px; }
-  #s5 .ai-card {
-    background: rgba(229,9,20,0.08);
-    border: 1px solid rgba(229,9,20,0.25);
-    border-radius: 12px;
-    padding: 12px 14px;
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-  }
-  #s5 .ai-icon { font-size: 16px; color: var(--primary); flex-shrink: 0; margin-top: 1px; }
-  #s5 .ai-card-text { font-size: 11px; color: var(--textSec); line-height: 17px; }
-  #s5 .ai-card-title { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 3px; }
-  #s5 .providers-row { display: flex; gap: 8px; }
-  #s5 .provider-box {
-    width: 40px; height: 40px; border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 8px; font-weight: 800; letter-spacing: -0.5px;
-    text-transform: uppercase; color: #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-  }
-  #s5 .p-netflix { background: #e50914; }
-  #s5 .p-prime   { background: #00a8e0; }
-  #s5 .p-disney  { background: #113ccf; }
-  #s5 .p-hbo     { background: #5822b4; }
-  #s5 .cast-row { display: flex; gap: 12px; overflow: hidden; }
-  #s5 .cast-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-  #s5 .cast-avatar {
-    width: 44px; height: 44px; border-radius: 50%;
-    overflow: hidden; flex-shrink: 0;
-  }
-  #s5 .cast-name { font-size: 9px; color: var(--textSec); text-align: center; width: 44px; line-height: 1.2; }
-  #s5 .section-heading { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
-
-  /* ─────────────────────────────────────────────
-     SCREEN 6: AI Assistant
-  ───────────────────────────────────────────── */
-  #s6 .ai-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 20px 10px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  #s6 .close-btn { font-size: 16px; color: var(--textMuted); }
-  #s6 .ai-header-title {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 15px; font-weight: 700; color: var(--text);
-  }
-  #s6 .ai-star { color: var(--primary); font-size: 16px; }
-  #s6 .messages {
-    flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;
-  }
-  #s6 .messages::-webkit-scrollbar { display: none; }
-  #s6 .bubble-row { display: flex; }
-  #s6 .bubble-row.user { justify-content: flex-end; }
-  #s6 .bubble {
-    max-width: 80%;
-    border-radius: 16px;
-    padding: 10px 13px;
-    font-size: 12px;
-    line-height: 18px;
-  }
-  #s6 .bubble.ai { background: var(--surfaceEl); color: var(--textSec); border-radius: 16px 16px 16px 4px; }
-  #s6 .bubble.user { background: var(--primary); color: #fff; border-radius: 16px 16px 4px 16px; }
-  #s6 .rec-posters { display: flex; gap: 6px; margin-top: 8px; }
-  #s6 .rec-poster {
-    width: 48px; height: 70px; border-radius: 6px; overflow: hidden; flex-shrink: 0;
-  }
-  #s6 .chips-area {
-    padding: 0 16px 12px;
-    display: flex; flex-wrap: wrap; gap: 7px;
-    flex-shrink: 0;
-  }
-  #s6 .chip {
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    padding: 7px 12px;
-    font-size: 11px;
-    color: var(--text);
-  }
-  #s6 .input-area {
+    height: 44px;
     display: flex;
     align-items: flex-end;
-    gap: 8px;
-    padding: 10px 16px 20px;
-    border-top: 1px solid var(--border);
-    background: var(--bg);
+    justify-content: space-between;
+    padding: 0 20px 8px;
     flex-shrink: 0;
+    position: relative;
+    z-index: 10;
   }
-  #s6 .ai-input {
-    flex: 1;
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 14px;
-    font-size: 12px;
-    color: var(--textMuted);
+  .status-time { color: var(--white); font-size: 12px; font-weight: 700; }
+  .status-icons { display: flex; gap: 5px; align-items: center; }
+  .sig-bar { width: 3px; background: var(--white); border-radius: 1px; }
+  .batt {
+    width: 22px; height: 11px;
+    border: 1.5px solid rgba(255,255,255,0.7);
+    border-radius: 3px;
+    position: relative;
+    display: flex; align-items: center; padding: 1.5px;
   }
-  #s6 .send-btn {
-    width: 40px; height: 40px; border-radius: 50%;
-    background: var(--primary);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; color: #fff; font-weight: 700;
-    flex-shrink: 0;
+  .batt-fill { width: 75%; height: 100%; background: white; border-radius: 1.5px; }
+  .batt::after {
+    content: '';
+    position: absolute; right: -4px; top: 50%;
+    transform: translateY(-50%);
+    width: 3px; height: 5px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 0 1px 1px 0;
   }
 
-  /* ─────────────────────────────────────────────
-     SCREEN 7: Settings / API Keys
-  ───────────────────────────────────────────── */
-  #s7 .settings-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 20px 10px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  #s7 .back-link { font-size: 13px; color: var(--primary); font-weight: 600; }
-  #s7 .settings-title { font-size: 15px; font-weight: 700; color: var(--text); }
-  #s7 .info-bar {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 10px 20px;
-    font-size: 11px;
-    color: var(--textSec);
-    line-height: 16px;
-    flex-shrink: 0;
-  }
-  #s7 .info-bar .green { color: var(--success); font-weight: 600; }
-  #s7 .settings-scroll {
-    flex: 1; overflow-y: auto; padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 12px;
-  }
-  #s7 .settings-scroll::-webkit-scrollbar { display: none; }
-  #s7 .api-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 14px;
+  /* ─── SHARED UTILITIES ─── */
+  .screen-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ════════════════════════════════
+     SCREEN 1 — WELCOME
+  ════════════════════════════════ */
+  .s1-bg {
+    flex: 1;
+    background: linear-gradient(160deg, #1a0005 0%, #0a0a0a 50%);
     display: flex;
     flex-direction: column;
+    padding: 0 24px 28px;
+    overflow: hidden;
+  }
+  .s1-hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 12px;
   }
-  #s7 .card-header {
+  .s1-logo-ring {
+    width: 80px; height: 80px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, #e50914 0%, #8b0000 100%);
     display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border);
-  }
-  #s7 .card-icon { font-size: 18px; margin-top: 1px; }
-  #s7 .card-title { font-size: 13px; font-weight: 700; color: var(--text); }
-  #s7 .card-desc { font-size: 10px; color: var(--textMuted); line-height: 14px; margin-top: 2px; }
-  #s7 .field-label {
-    font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
-    color: var(--textSec); margin-bottom: 5px;
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  #s7 .field-link { font-size: 9px; color: var(--primary); }
-  #s7 .fake-input {
-    background: var(--surfaceEl);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 12px;
-    color: var(--textMuted);
-    font-family: monospace;
-    position: relative;
-    display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+    box-shadow: 0 8px 32px rgba(229,9,20,0.4);
+    font-size: 36px;
   }
-  #s7 .fake-input .dots { letter-spacing: 4px; font-size: 14px; color: var(--textSec); }
-  #s7 .eye-icon { font-size: 14px; flex-shrink: 0; }
-  #s7 .hint { font-size: 10px; color: var(--textMuted); margin-top: 3px; }
-  #s7 .hint.green-hint { color: var(--success); }
-  #s7 .save-btn {
-    background: var(--primary);
-    border-radius: 10px;
-    padding: 13px;
-    text-align: center;
-    font-size: 14px; font-weight: 700; color: #fff;
-    flex-shrink: 0;
+  .s1-brand {
+    font-size: 60px;
+    font-weight: 900;
+    letter-spacing: -2px;
+    line-height: 1;
   }
-  #s7 .reset-btn {
-    border: 1px solid rgba(229,9,20,0.4);
-    background: rgba(229,9,20,0.08);
-    border-radius: 10px;
-    padding: 12px;
+  .s1-brand .brand-cine { color: var(--white); }
+  .s1-brand .brand-ai { color: var(--red); }
+  .s1-tagline {
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .s1-divider {
+    width: 40px; height: 1px;
+    background: var(--border);
+    margin: 8px auto;
+  }
+  .s1-features { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 8px; }
+  .s1-feat {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 11px 14px;
+  }
+  .s1-feat-icon {
+    width: 32px; height: 32px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .s1-feat-text { display: flex; flex-direction: column; gap: 2px; }
+  .s1-feat-title { color: var(--white); font-size: 12.5px; font-weight: 600; }
+  .s1-feat-desc { color: var(--text-muted); font-size: 10.5px; }
+  .s1-disclaimer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 11px 14px;
+    display: flex; align-items: flex-start; gap: 8px;
+    margin-top: 14px;
+  }
+  .s1-disclaimer-text { font-size: 10px; color: var(--text-muted); line-height: 1.5; }
+  .s1-btn {
+    margin-top: 14px;
+    background: var(--red);
+    color: var(--white);
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 14px;
+    padding: 15px;
     text-align: center;
-    font-size: 13px; font-weight: 700; color: var(--primary);
-    flex-shrink: 0;
+    letter-spacing: 0.03em;
+    box-shadow: 0 6px 24px rgba(229,9,20,0.35);
+  }
+  .s1-terms { text-align: center; margin-top: 10px; font-size: 9.5px; color: var(--text-muted); }
+
+  /* ════════════════════════════════
+     SCREEN 2 — TMDB SETUP
+  ════════════════════════════════ */
+  .s2-content {
+    flex: 1; padding: 16px 24px 28px;
+    display: flex; flex-direction: column;
+    background: var(--app-bg);
+  }
+  .s2-step-badge {
+    background: rgba(229,9,20,0.15);
+    border: 1px solid rgba(229,9,20,0.3);
+    color: var(--red);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    border-radius: 20px; padding: 4px 10px;
+    align-self: flex-start; margin-bottom: 14px;
+  }
+  .s2-title { font-size: 26px; font-weight: 800; color: var(--white); margin-bottom: 4px; line-height: 1.2; }
+  .s2-subtitle { font-size: 12px; color: var(--text-sec); margin-bottom: 20px; }
+  .s2-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px; margin-bottom: 20px;
+  }
+  .s2-card-title {
+    font-size: 11px; font-weight: 700; color: var(--text-sec);
+    letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px;
+  }
+  .s2-step { display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start; }
+  .s2-step:last-child { margin-bottom: 0; }
+  .s2-step-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: rgba(229,9,20,0.2); color: var(--red);
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .s2-step-text { font-size: 11.5px; color: var(--text-sec); line-height: 1.5; }
+  .s2-step-link { color: var(--red); }
+  .s2-label { font-size: 11px; font-weight: 600; color: var(--text-sec); margin-bottom: 8px; letter-spacing: 0.05em; }
+  .s2-input {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 12px; padding: 13px 14px;
+    color: var(--text-muted); font-size: 12.5px;
+    font-family: 'SF Mono', monospace;
+    margin-bottom: 6px; letter-spacing: 0.05em;
+  }
+  .s2-hint { font-size: 10px; color: var(--text-muted); margin-bottom: 20px; }
+  .s2-unlock-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  .s2-unlock-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+  }
+  .s2-unlock-icon {
+    width: 20px; height: 20px; border-radius: 5px;
+    background: rgba(70,211,105,0.15);
+    display: flex; align-items: center; justify-content: center; font-size: 11px;
+  }
+  .s2-unlock-title { font-size: 11px; font-weight: 600; color: var(--text-sec); }
+  .s2-unlock-body { font-size: 10.5px; color: var(--text-muted); line-height: 1.7; }
+  .s2-btn {
+    background: var(--red); color: var(--white);
+    font-size: 14px; font-weight: 700;
+    border-radius: 14px; padding: 15px; text-align: center;
+    box-shadow: 0 6px 24px rgba(229,9,20,0.35); margin-top: auto;
+  }
+  .s2-skip { text-align: center; margin-top: 12px; font-size: 11px; color: var(--text-muted); }
+  .s2-progress { display: flex; gap: 6px; margin-bottom: 20px; }
+  .s2-dot { height: 3px; border-radius: 2px; flex: 1; }
+
+  /* ════════════════════════════════
+     SCREEN 3 — HOME FEED
+  ════════════════════════════════ */
+  .s3-header {
+    height: 50px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; background: var(--app-bg); flex-shrink: 0;
+  }
+  .s3-logo { font-size: 16px; font-weight: 900; letter-spacing: -0.5px; }
+  .s3-logo .ai { color: var(--red); }
+  .s3-ai-pill {
+    background: rgba(229,9,20,0.15); border: 1px solid rgba(229,9,20,0.35);
+    color: var(--red); font-size: 11px; font-weight: 700;
+    border-radius: 20px; padding: 5px 11px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .s3-hero {
+    height: 310px;
+    background: linear-gradient(160deg, #2d0a2e 0%, #1a0520 30%, #0a0515 60%, #0a0a0a 100%);
+    position: relative; flex-shrink: 0; overflow: hidden;
+  }
+  .s3-hero-overlay {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(0deg, #0a0a0a 0%, transparent 100%); height: 140px;
+  }
+  .s3-hero-badge {
+    position: absolute; top: 14px; left: 14px;
+    background: var(--red); color: white;
+    font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+    border-radius: 6px; padding: 3px 8px;
+  }
+  .s3-hero-content { position: absolute; bottom: 16px; left: 16px; right: 16px; }
+  .s3-hero-genre { font-size: 10px; color: var(--text-muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .s3-hero-title { font-size: 24px; font-weight: 900; color: white; margin-bottom: 6px; line-height: 1.1; }
+  .s3-hero-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .s3-hero-rating { color: var(--gold); font-size: 12px; font-weight: 700; }
+  .s3-hero-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-muted); }
+  .s3-hero-year { font-size: 12px; color: var(--text-sec); }
+  .s3-hero-btns { display: flex; gap: 8px; }
+  .s3-hero-btn-primary {
+    background: var(--white); color: #000;
+    font-size: 12px; font-weight: 700; border-radius: 8px; padding: 8px 16px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .s3-hero-btn-secondary {
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
+    color: var(--white); font-size: 12px; font-weight: 600;
+    border-radius: 8px; padding: 8px 14px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .s3-section { padding: 14px 16px 4px; flex-shrink: 0; }
+  .s3-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .s3-section-title { font-size: 14px; font-weight: 700; color: var(--white); }
+  .s3-section-more { font-size: 11px; color: var(--red); font-weight: 600; }
+  .s3-poster-row { display: flex; gap: 10px; overflow-x: hidden; padding-bottom: 4px; }
+  .s3-poster {
+    width: 90px; height: 135px; border-radius: 10px;
+    flex-shrink: 0; position: relative; overflow: hidden;
+  }
+  .s3-poster-label {
+    position: absolute; bottom: 6px; left: 6px; right: 6px;
+    font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.9);
+    line-height: 1.2; text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+  .s3-poster-rating {
+    position: absolute; top: 5px; right: 5px;
+    background: rgba(0,0,0,0.7); color: var(--gold);
+    font-size: 8px; font-weight: 700; border-radius: 4px; padding: 2px 4px;
+  }
+  .s3-tab-bar {
+    height: 64px; background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px 8px;
+    flex-shrink: 0; margin-top: auto;
+  }
+  .s3-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .s3-tab-icon { font-size: 19px; }
+  .s3-tab-text { font-size: 9px; font-weight: 600; }
+
+  /* ════════════════════════════════
+     SCREEN 4 — SEARCH
+  ════════════════════════════════ */
+  .s4-content { flex: 1; padding: 12px 20px 0; overflow: hidden; display: flex; flex-direction: column; }
+  .s4-title { font-size: 28px; font-weight: 800; color: var(--white); margin-bottom: 14px; }
+  .s4-search-wrap {
+    background: var(--surface-el); border: 1.5px solid var(--border);
+    border-radius: 14px; padding: 12px 14px;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 22px;
+  }
+  .s4-search-icon { font-size: 16px; }
+  .s4-search-placeholder { font-size: 14px; color: var(--text-muted); }
+  .s4-section-label {
+    font-size: 11px; font-weight: 700; color: var(--text-sec);
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px;
+  }
+  .s4-genres { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+  .s4-genre {
+    padding: 7px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; border: 1.5px solid transparent;
+  }
+  .s4-recent { display: flex; flex-direction: column; gap: 2px; }
+  .s4-recent-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
+  .s4-recent-icon { font-size: 15px; color: var(--text-muted); }
+  .s4-recent-text { flex: 1; font-size: 13px; color: var(--text-sec); }
+  .s4-trending-pill {
+    background: var(--surface-el); border: 1px solid var(--border);
+    border-radius: 20px; padding: 6px 12px;
+    font-size: 11.5px; color: var(--text-sec);
   }
 
+  /* ════════════════════════════════
+     SCREEN 5 — TITLE DETAIL
+  ════════════════════════════════ */
+  .s5-backdrop {
+    height: 220px;
+    background: linear-gradient(160deg, #0f1a2e 0%, #162038 40%, #0a0a0a 100%);
+    position: relative; flex-shrink: 0; overflow: hidden;
+  }
+  .s5-backdrop-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(0deg, #0a0a0a 0%, rgba(0,0,0,0.2) 100%);
+  }
+  .s5-back {
+    position: absolute; top: 54px; left: 14px;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: var(--white); z-index: 2;
+  }
+  .s5-bookmark {
+    position: absolute; top: 54px; right: 14px;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; z-index: 2;
+  }
+  .s5-info {
+    flex-shrink: 0; padding: 0 16px;
+    margin-top: -24px;
+    display: flex; gap: 14px; align-items: flex-end;
+    position: relative; z-index: 2; margin-bottom: 14px;
+  }
+  .s5-poster {
+    width: 80px; height: 120px; border-radius: 10px;
+    background: linear-gradient(135deg, #1a3a5c 0%, #0d2040 100%);
+    flex-shrink: 0;
+    border: 2px solid var(--surface-el);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+  }
+  .s5-meta { flex: 1; padding-bottom: 4px; }
+  .s5-meta-title { font-size: 18px; font-weight: 800; color: var(--white); margin-bottom: 5px; line-height: 1.2; }
+  .s5-meta-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .s5-badge {
+    background: var(--surface-el); border: 1px solid var(--border);
+    color: var(--text-sec); font-size: 9.5px; font-weight: 600;
+    border-radius: 5px; padding: 2px 6px;
+  }
+  .s5-rating-badge { color: var(--gold); font-size: 11px; font-weight: 700; }
+  .s5-actions { display: flex; gap: 8px; padding: 0 16px 14px; flex-shrink: 0; }
+  .s5-action-btn {
+    flex: 1; border-radius: 10px; padding: 10px 6px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    font-size: 9.5px; font-weight: 600;
+  }
+  .s5-action-icon { font-size: 18px; }
+  .s5-section { padding: 0 16px 14px; flex-shrink: 0; }
+  .s5-section-title { font-size: 13px; font-weight: 700; color: var(--white); margin-bottom: 8px; }
+  .s5-overview { font-size: 11.5px; color: var(--text-sec); line-height: 1.6; }
+  .s5-ai-card {
+    background: rgba(229,9,20,0.08); border: 1px solid rgba(229,9,20,0.2);
+    border-radius: 12px; padding: 12px 14px;
+    margin: 0 16px 14px; flex-shrink: 0;
+  }
+  .s5-ai-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .s5-ai-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+  .s5-ai-label { font-size: 10px; font-weight: 700; color: var(--red); letter-spacing: 0.08em; text-transform: uppercase; }
+  .s5-ai-text { font-size: 11px; color: var(--text-sec); line-height: 1.55; }
+  .s5-ai-bold { color: var(--white); font-weight: 600; }
+  .s5-cast-row { display: flex; gap: 14px; padding: 0 16px; overflow-x: hidden; flex-shrink: 0; }
+  .s5-cast-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .s5-cast-avatar {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .s5-cast-name { font-size: 9px; font-weight: 600; color: var(--text-sec); text-align: center; max-width: 52px; line-height: 1.2; }
+
+  /* ════════════════════════════════
+     SCREEN 6 — AI ASSISTANT
+  ════════════════════════════════ */
+  .s6-header {
+    height: 56px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .s6-close { font-size: 18px; color: var(--text-sec); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+  .s6-title { font-size: 14px; font-weight: 700; color: var(--white); display: flex; align-items: center; gap: 6px; }
+  .s6-title-spark { color: var(--red); font-size: 16px; }
+  .s6-status { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--green); font-weight: 600; }
+  .s6-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .s6-messages { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .s6-bubble-wrap { display: flex; gap: 8px; align-items: flex-end; }
+  .s6-bubble-wrap.user { flex-direction: row-reverse; }
+  .s6-avatar {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+  }
+  .s6-bubble {
+    max-width: 76%; border-radius: 16px; padding: 10px 13px;
+    font-size: 12.5px; line-height: 1.5;
+  }
+  .s6-bubble.ai { background: var(--surface-el); color: var(--white); border-radius: 4px 16px 16px 16px; }
+  .s6-bubble.user { background: var(--red); color: var(--white); border-radius: 16px 4px 16px 16px; }
+  .s6-bubble-time { font-size: 9px; color: var(--text-muted); margin-top: 3px; }
+  .s6-recs { display: flex; gap: 8px; margin-top: 8px; }
+  .s6-rec-card { flex: 1; border-radius: 8px; overflow: hidden; }
+  .s6-rec-img { height: 70px; }
+  .s6-rec-title { font-size: 9px; font-weight: 700; color: var(--white); padding: 5px 5px 2px; background: var(--surface); }
+  .s6-rec-rating { font-size: 8px; color: var(--gold); padding: 0 5px 5px; background: var(--surface); }
+  .s6-typing {
+    display: flex; gap: 4px; align-items: center; padding: 10px 14px;
+    background: var(--surface-el); border-radius: 4px 16px 16px 16px; width: fit-content;
+  }
+  .s6-typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+  .s6-input-bar {
+    height: 68px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    border-top: 1px solid var(--border); background: var(--surface);
+  }
+  .s6-input {
+    flex: 1; background: var(--app-bg); border: 1.5px solid var(--border);
+    border-radius: 22px; padding: 10px 16px;
+    color: var(--text-muted); font-size: 12.5px;
+  }
+  .s6-send {
+    width: 38px; height: 38px; border-radius: 50%; background: var(--red);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0; color: white;
+    box-shadow: 0 4px 12px rgba(229,9,20,0.4);
+  }
+
+  /* ════════════════════════════════
+     SCREEN 7 — SETTINGS
+  ════════════════════════════════ */
+  .s7-header {
+    height: 54px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px; padding: 0 16px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .s7-back { font-size: 12px; color: var(--red); font-weight: 600; }
+  .s7-header-title { font-size: 15px; font-weight: 700; color: var(--white); }
+  .s7-content { flex: 1; padding: 16px; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+  .s7-info-bar {
+    background: rgba(245,197,24,0.08); border: 1px solid rgba(245,197,24,0.2);
+    border-radius: 10px; padding: 10px 12px;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .s7-info-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+  .s7-info-text { font-size: 10.5px; color: var(--gold); line-height: 1.5; }
+  .s7-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .s7-card-header {
+    padding: 12px 14px 10px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .s7-card-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .s7-card-info { flex: 1; }
+  .s7-card-name { font-size: 13px; font-weight: 700; color: var(--white); }
+  .s7-card-desc { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+  .s7-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .s7-card-body { padding: 12px 14px; }
+  .s7-field-label { font-size: 10px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+  .s7-field-input {
+    background: var(--surface-el); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 12px;
+    color: var(--text-sec); font-size: 11px;
+    font-family: 'SF Mono', monospace; letter-spacing: 0.04em;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .s7-btns { display: flex; gap: 10px; margin-top: auto; }
+  .s7-btn-save {
+    flex: 2; background: var(--red); color: var(--white);
+    font-size: 13px; font-weight: 700; border-radius: 12px;
+    padding: 13px; text-align: center;
+    box-shadow: 0 4px 16px rgba(229,9,20,0.3);
+  }
+  .s7-btn-reset {
+    flex: 1; background: var(--surface-el); border: 1px solid var(--border);
+    color: var(--text-sec); font-size: 13px; font-weight: 600;
+    border-radius: 12px; padding: 13px; text-align: center;
+  }
 </style>
 </head>
 <body>
 
-<div class="page-header">
-  <h1>App Preview</h1>
-  <div class="logo">CINE<span>AI</span></div>
-  <div class="sub">Dark Cinema Theme · 7 Screens</div>
+<h1 class="page-title">CineAI — Mobile App</h1>
+<h2 class="page-sub"><span>Screen</span> Mockups</h2>
+
+<div class="scroll-track">
+
+  <!-- ═══════════════════════════
+       SCREEN 1 — WELCOME
+  ═══════════════════════════ -->
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-notch"><div class="notch-bar"></div><div class="notch-cam"></div></div>
+      <div class="phone-screen">
+        <div class="status-bar" style="background:linear-gradient(160deg,#1a0005,#0a0a0a);">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <div style="display:flex;gap:1.5px;align-items:flex-end;">
+              <div class="sig-bar" style="height:4px;opacity:0.4"></div>
+              <div class="sig-bar" style="height:6px;opacity:0.6"></div>
+              <div class="sig-bar" style="height:9px;opacity:0.8"></div>
+              <div class="sig-bar" style="height:12px"></div>
+            </div>
+            <div class="batt"><div class="batt-fill"></div></div>
+          </div>
+        </div>
+        <div class="s1-bg">
+          <div class="s1-hero">
+            <div class="s1-logo-ring">🎬</div>
+            <div class="s1-brand"><span class="brand-cine">CINE</span><span class="brand-ai">AI</span></div>
+            <div class="s1-tagline">Discover · Track · Experience</div>
+            <div class="s1-divider"></div>
+          </div>
+          <div class="s1-features">
+            <div class="s1-feat">
+              <div class="s1-feat-icon" style="background:rgba(229,9,20,0.15)">🤖</div>
+              <div class="s1-feat-text">
+                <div class="s1-feat-title">AI-Powered Recommendations</div>
+                <div class="s1-feat-desc">Personalized picks that learn your taste</div>
+              </div>
+            </div>
+            <div class="s1-feat">
+              <div class="s1-feat-icon" style="background:rgba(245,197,24,0.12)">⭐</div>
+              <div class="s1-feat-text">
+                <div class="s1-feat-title">Track Your Watchlist</div>
+                <div class="s1-feat-desc">Movies &amp; shows, ratings, and history</div>
+              </div>
+            </div>
+            <div class="s1-feat">
+              <div class="s1-feat-icon" style="background:rgba(70,211,105,0.12)">📅</div>
+              <div class="s1-feat-text">
+                <div class="s1-feat-title">Release Calendar</div>
+                <div class="s1-feat-desc">Never miss a premiere again</div>
+              </div>
+            </div>
+          </div>
+          <div class="s1-disclaimer">
+            <div style="font-size:12px;flex-shrink:0;margin-top:1px;">ℹ️</div>
+            <div class="s1-disclaimer-text">Requires a free TMDB API key. CineAI uses TMDB data but is not endorsed by TMDB.</div>
+          </div>
+          <div class="s1-btn">Get Started →</div>
+          <div class="s1-terms">By continuing you agree to our Terms &amp; Privacy Policy</div>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">01 — Welcome</span>
+  </div>
+
+  <!-- ═══════════════════════════
+       SCREEN 2 — TMDB SETUP
+  ═══════════════════════════ -->
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-notch"><div class="notch-bar"></div><div class="notch-cam"></div></div>
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <div style="display:flex;gap:1.5px;align-items:flex-end;">
+              <div class="sig-bar" style="height:4px;opacity:0.4"></div>
+              <div class="sig-bar" style="height:6px;opacity:0.6"></div>
+              <div class="sig-bar" style="height:9px;opacity:0.8"></div>
+              <div class="sig-bar" style="height:12px"></div>
+            </div>
+            <div class="batt"><div class="batt-fill"></div></div>
+          </div>
+        </div>
+        <div class="s2-content">
+          <div class="s2-step-badge">✦ Step 1 of 2</div>
+          <div class="s2-title">TMDB<br>API Key</div>
+          <div class="s2-subtitle">Connect to The Movie Database to unlock full access</div>
+          <div class="s2-progress">
+            <div class="s2-dot" style="background:var(--red)"></div>
+            <div class="s2-dot" style="background:var(--border)"></div>
+          </div>
+          <div class="s2-card">
+            <div class="s2-card-title">How to get your key</div>
+            <div class="s2-step">
+              <div class="s2-step-num">1</div>
+              <div class="s2-step-text">Visit <span class="s2-step-link">themoviedb.org</span> and create a free account</div>
+            </div>
+            <div class="s2-step">
+              <div class="s2-step-num">2</div>
+              <div class="s2-step-text">Go to Settings → API and request an API key</div>
+            </div>
+            <div class="s2-step">
+              <div class="s2-step-num">3</div>
+              <div class="s2-step-text">Copy your <strong style="color:var(--white)">API Key (v3 auth)</strong> and paste it below</div>
+            </div>
+          </div>
+          <div class="s2-label">API KEY</div>
+          <div class="s2-input">Enter your TMDB API key…</div>
+          <div class="s2-hint">🔒 Your key is stored locally and never shared</div>
+          <div class="s2-unlock-card">
+            <div class="s2-unlock-header">
+              <div class="s2-unlock-icon">✓</div>
+              <div class="s2-unlock-title">What you'll unlock</div>
+            </div>
+            <div class="s2-unlock-body">· Millions of movies &amp; TV shows<br>· High-res posters &amp; backdrops<br>· Ratings, cast, and full metadata</div>
+          </div>
+          <div class="s2-btn">Continue →</div>
+          <div class="s2-skip">Skip for now — use limited mode</div>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">02 — TMDB Setup</span>
+  </div>
+
+  <!-- ═══════════════════════════
+       SCREEN 3 — HOME FEED
+  ═══════════════════════════ -->
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-notch"><div class="notch-bar"></div><div class="notch-cam"></div></div>
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <div style="display:flex;gap:1.5px;align-items:flex-end;">
+              <div class="sig-bar" style="height:4px;opacity:0.4"></div>
+              <div class="sig-bar" style="height:6px;opacity:0.6"></div>
+              <div class="sig-bar" style="height:9px;opacity:0.8"></div>
+              <div class="sig-bar" style="height:12px"></div>
+            </div>
+            <div class="batt"><div class="batt-fill"></div></div>
+          </div>
+        </div>
+        <div class="s3-header">
+          <div class="s3-logo">CINE<span class="ai">AI</span></div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="font-size:17px;">🔔</div>
+            <div class="s3-ai-pill">✦ Ask AI</div>
+          </div>
+        </div>
+        <div class="s3-hero">
+          <div style="position:absolute;top:-10px;right:-30px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(123,45,139,0.45),transparent 70%);"></div>
+          <div style="position:absolute;top:-30px;left:40px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(229,9,20,0.18),transparent 70%);"></div>
+          <div style="position:absolute;bottom:40px;right:20px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(14,40,100,0.5),transparent 70%);"></div>
+          <div class="s3-hero-overlay"></div>
+          <div class="s3-hero-badge">Featured</div>
+          <div class="s3-hero-content">
+            <div class="s3-hero-genre">Sci-Fi · Epic</div>
+            <div class="s3-hero-title">Dune: Part Two</div>
+            <div class="s3-hero-meta">
+              <div class="s3-hero-rating">★ 8.5</div>
+              <div class="s3-hero-dot"></div>
+              <div class="s3-hero-year">2024 · 2h 46m</div>
+              <div class="s3-hero-dot"></div>
+              <div style="font-size:12px;color:var(--text-sec)">PG-13</div>
+            </div>
+            <div class="s3-hero-btns">
+              <div class="s3-hero-btn-primary">▶ Watch Now</div>
+              <div class="s3-hero-btn-secondary">+ Watchlist</div>
+            </div>
+          </div>
+        </div>
+        <div class="s3-section">
+          <div class="s3-section-header">
+            <div class="s3-section-title">Trending This Week</div>
+            <div class="s3-section-more">See All</div>
+          </div>
+          <div class="s3-poster-row">
+            <div class="s3-poster" style="background:linear-gradient(145deg,#1a0a2e,#3d1a6e)">
+              <div class="s3-poster-rating">★ 8.2</div>
+              <div class="s3-poster-label">Oppenheimer</div>
+            </div>
+            <div class="s3-poster" style="background:linear-gradient(145deg,#0d2414,#1a4a2a)">
+              <div class="s3-poster-rating">★ 7.9</div>
+              <div class="s3-poster-label">Poor Things</div>
+            </div>
+            <div class="s3-poster" style="background:linear-gradient(145deg,#2a1000,#5a2000)">
+              <div class="s3-poster-rating">★ 7.6</div>
+              <div class="s3-poster-label">Killers of the Flower Moon</div>
+            </div>
+            <div class="s3-poster" style="background:linear-gradient(145deg,#001a2a,#003a5a)">
+              <div class="s3-poster-rating">★ 8.0</div>
+              <div class="s3-poster-label">Zone of Interest</div>
+            </div>
+          </div>
+        </div>
+        <div class="s3-section" style="padding-top:10px;">
+          <div class="s3-section-header">
+            <div class="s3-section-title">New Episodes Tonight</div>
+            <div class="s3-section-more">See All</div>
+          </div>
+          <div class="s3-poster-row">
+            <div class="s3-poster" style="background:linear-gradient(145deg,#1a0a0e,#4a1020)">
+              <div class="s3-poster-rating">★ 9.2</div>
+              <div class="s3-poster-label">The Bear S3</div>
+            </div>
+            <div class="s3-poster" style="background:linear-gradient(145deg,#0a1428,#1a2848)">
+              <div class="s3-poster-rating">★ 8.7</div>
+              <div class="s3-poster-label">Shogun</div>
+            </div>
+            <div class="s3-poster" style="background:linear-gradient(145deg,#1a1400,#3a2a00)">
+              <div class="s3-poster-rating">★ 8.4</div>
+              <div class="s3-poster-label">Fallout</div>
+            </div>
+            <div class="s3-poster" style="background:linear-gradient(145deg,#0a1a10,#143020)">
+              <div class="s3-poster-rating">★ 7.8</div>
+              <div class="s3-poster-label">Presumed Innocent</div>
+            </div>
+          </div>
+        </div>
+        <div class="s3-tab-bar">
+          <div class="s3-tab"><div class="s3-tab-icon">🏠</div><div class="s3-tab-text" style="color:var(--red)">Home</div></div>
+          <div class="s3-tab"><div class="s3-tab-icon" style="opacity:0.5">🔍</div><div class="s3-tab-text" style="color:var(--text-muted)">Search</div></div>
+          <div class="s3-tab"><div class="s3-tab-icon" style="opacity:0.5">📅</div><div class="s3-tab-text" style="color:var(--text-muted)">Calendar</div></div>
+          <div class="s3-tab"><div class="s3-tab-icon" style="opacity:0.5">👤</div><div class="s3-tab-text" style="color:var(--text-muted)">Profile</div></div>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">03 — Home Feed</span>
+  </div>
+
+  <!-- ═══════════════════════════
+       SCREEN 4 — SEARCH
+  ═══════════════════════════ -->
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-notch"><div class="notch-bar"></div><div class="notch-cam"></div></div>
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <div style="display:flex;gap:1.5px;align-items:flex-end;">
+              <div class="sig-bar" style="height:4px;opacity:0.4"></div>
+              <div class="sig-bar" style="height:6px;opacity:0.6"></div>
+              <div class="sig-bar" style="height:9px;opacity:0.8"></div>
+              <div class="sig-bar" style="height:12px"></div>
+            </div>
+            <div class="batt"><div class="batt-fill"></div></div>
+          </div>
+        </div>
+        <div class="s4-content">
+          <div class="s4-title">Search</div>
+          <div class="s4-search-wrap">
+            <div class="s4-search-icon">🔍</div>
+            <div class="s4-search-placeholder">Movies, shows, people…</div>
+          </div>
+          <div class="s4-section-label">Browse by Genre</div>
+          <div class="s4-genres">
+            <div class="s4-genre" style="background:rgba(229,9,20,0.15);border-color:rgba(229,9,20,0.4);color:var(--red)">Action</div>
+            <div class="s4-genre" style="background:rgba(245,197,24,0.1);border-color:rgba(245,197,24,0.3);color:var(--gold)">Comedy</div>
+            <div class="s4-genre" style="background:rgba(123,45,139,0.15);border-color:rgba(123,45,139,0.4);color:#b85cc8">Horror</div>
+            <div class="s4-genre" style="background:rgba(70,211,105,0.1);border-color:rgba(70,211,105,0.3);color:var(--green)">Drama</div>
+            <div class="s4-genre" style="background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.3);color:#60a5fa">Sci-Fi</div>
+            <div class="s4-genre" style="background:rgba(244,114,182,0.1);border-color:rgba(244,114,182,0.3);color:#f472b6">Romance</div>
+            <div class="s4-genre" style="background:rgba(251,146,60,0.1);border-color:rgba(251,146,60,0.3);color:#fb923c">Thriller</div>
+            <div class="s4-genre" style="background:rgba(163,163,163,0.1);border-color:var(--border);color:var(--text-sec)">Animation</div>
+          </div>
+          <div class="s4-section-label">Recent Searches</div>
+          <div class="s4-recent">
+            <div class="s4-recent-item">
+              <div class="s4-recent-icon">🕐</div>
+              <div class="s4-recent-text">Christopher Nolan films</div>
+              <div style="font-size:14px;color:var(--text-muted)">↗</div>
+            </div>
+            <div class="s4-recent-item">
+              <div class="s4-recent-icon">🕐</div>
+              <div class="s4-recent-text">mind-bending sci-fi</div>
+              <div style="font-size:14px;color:var(--text-muted)">↗</div>
+            </div>
+            <div class="s4-recent-item">
+              <div class="s4-recent-icon">🕐</div>
+              <div class="s4-recent-text">Succession</div>
+              <div style="font-size:14px;color:var(--text-muted)">↗</div>
+            </div>
+            <div class="s4-recent-item">
+              <div class="s4-recent-icon">🕐</div>
+              <div class="s4-recent-text">best movies 2024</div>
+              <div style="font-size:14px;color:var(--text-muted)">↗</div>
+            </div>
+          </div>
+          <div style="margin-top:18px;">
+            <div class="s4-section-label" style="margin-bottom:12px;">Trending Searches</div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;">
+              <div class="s4-trending-pill">#Oscars2025</div>
+              <div class="s4-trending-pill">#NewOnNetflix</div>
+              <div class="s4-trending-pill">#Gladiator2</div>
+              <div class="s4-trending-pill">#StreetFighter</div>
+            </div>
+          </div>
+        </div>
+        <div class="s3-tab-bar">
+          <div class="s3-tab"><div class="s3-tab-icon" style="opacity:0.5">🏠</div><div class="s3-tab-text" style="color:var(--text-muted)">Home</div></div>
+          <div class="s3-tab"><div class="s3-tab-icon">🔍</div><div class="s3-tab-text" style="color:var(--red)">Search</div></div>
+          <div class="s3-tab"><div class="s3-tab-icon" style="opacity:0.5">📅</div><div class="s3-tab-text" style="color:var(--text-muted)">Calendar</div></div>
+          <div class="s3-tab"><div class="s3-tab-icon" style="opacity:0.5">👤</div><div class="s3-tab-text" style="color:var(--text-muted)">Profile</div></div>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">04 — Search</span>
+  </div>
+
+  <!-- ═══════════════════════════
+       SCREEN 5 — TITLE DETAIL
+  ═══════════════════════════ -->
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-notch"><div class="notch-bar"></div><div class="notch-cam"></div></div>
+      <div class="phone-screen">
+        <div class="status-bar" style="position:absolute;top:0;left:0;right:0;z-index:15;">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <div style="display:flex;gap:1.5px;align-items:flex-end;">
+              <div class="sig-bar" style="height:4px;opacity:0.4"></div>
+              <div class="sig-bar" style="height:6px;opacity:0.6"></div>
+              <div class="sig-bar" style="height:9px;opacity:0.8"></div>
+              <div class="sig-bar" style="height:12px"></div>
+            </div>
+            <div class="batt"><div class="batt-fill"></div></div>
+          </div>
+        </div>
+        <div class="s5-backdrop">
+          <div class="s5-backdrop-overlay"></div>
+          <div style="position:absolute;top:10px;right:-20px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(14,40,80,0.8),transparent 70%);"></div>
+          <div style="position:absolute;top:30px;left:60px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(59,100,200,0.3),transparent 70%);"></div>
+          <div class="s5-back">←</div>
+          <div class="s5-bookmark">🔖</div>
+        </div>
+        <div class="s5-info">
+          <div class="s5-poster">🚀</div>
+          <div class="s5-meta">
+            <div class="s5-meta-title">Interstellar</div>
+            <div class="s5-meta-row" style="margin-bottom:5px;">
+              <div class="s5-badge">2014</div>
+              <div class="s5-badge">2h 49m</div>
+              <div class="s5-badge">PG-13</div>
+            </div>
+            <div class="s5-meta-row">
+              <div class="s5-rating-badge">★ 8.7</div>
+              <div style="font-size:9.5px;color:var(--text-muted)">TMDB · 34K reviews</div>
+            </div>
+          </div>
+        </div>
+        <div class="s5-actions">
+          <div class="s5-action-btn" style="background:var(--red);color:var(--white);">
+            <div class="s5-action-icon">▶</div>
+            <div>Watch</div>
+          </div>
+          <div class="s5-action-btn" style="background:var(--surface-el);border:1px solid var(--border);color:var(--text-sec);">
+            <div class="s5-action-icon">＋</div>
+            <div>List</div>
+          </div>
+          <div class="s5-action-btn" style="background:var(--surface-el);border:1px solid var(--border);color:var(--text-sec);">
+            <div class="s5-action-icon">★</div>
+            <div>Rate</div>
+          </div>
+          <div class="s5-action-btn" style="background:var(--surface-el);border:1px solid var(--border);color:var(--text-sec);">
+            <div class="s5-action-icon">↗</div>
+            <div>Share</div>
+          </div>
+        </div>
+        <div class="s5-section">
+          <div class="s5-section-title">Overview</div>
+          <div class="s5-overview">A team of explorers travel through a wormhole in space in an attempt to ensure humanity's survival. When Earth becomes uninhabitable, astronaut Cooper must leave his family behind on a daring mission…</div>
+        </div>
+        <div class="s5-ai-card">
+          <div class="s5-ai-header">
+            <div class="s5-ai-dot"></div>
+            <div class="s5-ai-label">✦ AI Insight</div>
+          </div>
+          <div class="s5-ai-text">Fans of Nolan's time-bending narratives will be captivated. If you loved <span class="s5-ai-bold">Inception</span> or <span class="s5-ai-bold">2001: A Space Odyssey</span>, this is essential viewing.</div>
+        </div>
+        <div style="padding:0 16px;margin-bottom:10px;flex-shrink:0;">
+          <div class="s5-section-title">Cast</div>
+        </div>
+        <div class="s5-cast-row">
+          <div class="s5-cast-item">
+            <div class="s5-cast-avatar" style="background:linear-gradient(135deg,#2a3a50,#1a2a40)">🧑</div>
+            <div class="s5-cast-name">Matthew McConaughey</div>
+          </div>
+          <div class="s5-cast-item">
+            <div class="s5-cast-avatar" style="background:linear-gradient(135deg,#3a2a40,#2a1a30)">👩</div>
+            <div class="s5-cast-name">Anne Hathaway</div>
+          </div>
+          <div class="s5-cast-item">
+            <div class="s5-cast-avatar" style="background:linear-gradient(135deg,#402a2a,#301a1a)">👩</div>
+            <div class="s5-cast-name">Jessica Chastain</div>
+          </div>
+          <div class="s5-cast-item">
+            <div class="s5-cast-avatar" style="background:linear-gradient(135deg,#2a402a,#1a301a)">🧓</div>
+            <div class="s5-cast-name">Michael Caine</div>
+          </div>
+          <div class="s5-cast-item">
+            <div class="s5-cast-avatar" style="background:linear-gradient(135deg,#403a2a,#302a1a)">👨</div>
+            <div class="s5-cast-name">Matt Damon</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">05 — Title Detail</span>
+  </div>
+
+  <!-- ═══════════════════════════
+       SCREEN 6 — AI ASSISTANT
+  ═══════════════════════════ -->
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-notch"><div class="notch-bar"></div><div class="notch-cam"></div></div>
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <div style="display:flex;gap:1.5px;align-items:flex-end;">
+              <div class="sig-bar" style="height:4px;opacity:0.4"></div>
+              <div class="sig-bar" style="height:6px;opacity:0.6"></div>
+              <div class="sig-bar" style="height:9px;opacity:0.8"></div>
+              <div class="sig-bar" style="height:12px"></div>
+            </div>
+            <div class="batt"><div class="batt-fill"></div></div>
+          </div>
+        </div>
+        <div class="s6-header">
+          <div class="s6-close">✕</div>
+          <div class="s6-title"><span class="s6-title-spark">✦</span> AI Assistant</div>
+          <div class="s6-status"><div class="s6-status-dot"></div>Online</div>
+        </div>
+        <div class="s6-messages">
+          <!-- AI greeting -->
+          <div class="s6-bubble-wrap">
+            <div class="s6-avatar" style="background:linear-gradient(135deg,#e50914,#8b0000)">✦</div>
+            <div>
+              <div class="s6-bubble ai">Hey! I'm your CineAI assistant. Tell me what you're in the mood for and I'll find the perfect watch for tonight. 🎬</div>
+              <div class="s6-bubble-time">9:38 AM</div>
+            </div>
+          </div>
+          <!-- User message -->
+          <div class="s6-bubble-wrap user">
+            <div class="s6-avatar" style="background:linear-gradient(135deg,#2a2a2a,#1a1a1a)">🧑</div>
+            <div>
+              <div class="s6-bubble user">Something mind-bending sci-fi, like Inception but maybe newer?</div>
+              <div class="s6-bubble-time" style="text-align:right">9:39 AM</div>
+            </div>
+          </div>
+          <!-- AI response with rec cards -->
+          <div class="s6-bubble-wrap">
+            <div class="s6-avatar" style="background:linear-gradient(135deg,#e50914,#8b0000)">✦</div>
+            <div style="max-width:82%">
+              <div class="s6-bubble ai">
+                <div style="margin-bottom:8px;">Great taste! Here are 3 mind-bending picks you'll love:</div>
+                <div class="s6-recs">
+                  <div class="s6-rec-card">
+                    <div class="s6-rec-img" style="background:linear-gradient(145deg,#1a0a2e,#3d1a6e)"></div>
+                    <div class="s6-rec-title">Everything Everywhere All at Once</div>
+                    <div class="s6-rec-rating">★ 7.8</div>
+                  </div>
+                  <div class="s6-rec-card">
+                    <div class="s6-rec-img" style="background:linear-gradient(145deg,#0d1a2e,#1a3060)"></div>
+                    <div class="s6-rec-title">Arrival</div>
+                    <div class="s6-rec-rating">★ 7.9</div>
+                  </div>
+                  <div class="s6-rec-card">
+                    <div class="s6-rec-img" style="background:linear-gradient(145deg,#1a1400,#3a2800)"></div>
+                    <div class="s6-rec-title">Tenet</div>
+                    <div class="s6-rec-rating">★ 7.4</div>
+                  </div>
+                </div>
+              </div>
+              <div class="s6-bubble-time">9:39 AM</div>
+            </div>
+          </div>
+          <!-- Typing indicator -->
+          <div class="s6-bubble-wrap">
+            <div class="s6-avatar" style="background:linear-gradient(135deg,#e50914,#8b0000)">✦</div>
+            <div class="s6-typing">
+              <div class="s6-typing-dot" style="opacity:0.4"></div>
+              <div class="s6-typing-dot" style="opacity:0.65"></div>
+              <div class="s6-typing-dot" style="opacity:1"></div>
+            </div>
+          </div>
+        </div>
+        <div class="s6-input-bar">
+          <div class="s6-input">Ask me anything…</div>
+          <div class="s6-send">↑</div>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">06 — AI Assistant</span>
+  </div>
+
+  <!-- ═══════════════════════════
+       SCREEN 7 — API SETTINGS
+  ═══════════════════════════ -->
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="phone-notch"><div class="notch-bar"></div><div class="notch-cam"></div></div>
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <div style="display:flex;gap:1.5px;align-items:flex-end;">
+              <div class="sig-bar" style="height:4px;opacity:0.4"></div>
+              <div class="sig-bar" style="height:6px;opacity:0.6"></div>
+              <div class="sig-bar" style="height:9px;opacity:0.8"></div>
+              <div class="sig-bar" style="height:12px"></div>
+            </div>
+            <div class="batt"><div class="batt-fill"></div></div>
+          </div>
+        </div>
+        <div class="s7-header">
+          <div class="s7-back">‹ Back</div>
+          <div style="flex:1;text-align:center;"><div class="s7-header-title">API Settings</div></div>
+          <div style="width:44px;"></div>
+        </div>
+        <div class="s7-content">
+          <div class="s7-info-bar">
+            <div class="s7-info-icon">⚠️</div>
+            <div class="s7-info-text">API keys are stored locally on your device and never sent to our servers.</div>
+          </div>
+
+          <!-- TMDB -->
+          <div class="s7-card">
+            <div class="s7-card-header">
+              <div class="s7-card-icon" style="background:rgba(1,180,228,0.12)">🎬</div>
+              <div class="s7-card-info">
+                <div class="s7-card-name">TMDB</div>
+                <div class="s7-card-desc">The Movie Database · Required</div>
+              </div>
+              <div class="s7-status-dot" style="background:var(--green);box-shadow:0 0 6px rgba(70,211,105,0.5)"></div>
+            </div>
+            <div class="s7-card-body">
+              <div class="s7-field-label">API Key (v3)</div>
+              <div class="s7-field-input">
+                <span>eyJhbGci••••••••••••</span>
+                <span style="font-size:14px;color:var(--text-muted)">👁</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Backend -->
+          <div class="s7-card">
+            <div class="s7-card-header">
+              <div class="s7-card-icon" style="background:rgba(229,9,20,0.12)">⚙️</div>
+              <div class="s7-card-info">
+                <div class="s7-card-name">Backend API</div>
+                <div class="s7-card-desc">CineAI Server · Optional</div>
+              </div>
+              <div class="s7-status-dot" style="background:var(--text-muted)"></div>
+            </div>
+            <div class="s7-card-body">
+              <div class="s7-field-label">Base URL</div>
+              <div class="s7-field-input" style="color:var(--text-muted);">
+                <span>https://api.example.com</span>
+                <span style="font-size:12px;color:var(--text-muted)">✏️</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Supabase -->
+          <div class="s7-card">
+            <div class="s7-card-header">
+              <div class="s7-card-icon" style="background:rgba(62,207,142,0.12)">🗄️</div>
+              <div class="s7-card-info">
+                <div class="s7-card-name">Supabase</div>
+                <div class="s7-card-desc">Database sync · Optional</div>
+              </div>
+              <div class="s7-status-dot" style="background:var(--text-muted)"></div>
+            </div>
+            <div class="s7-card-body">
+              <div class="s7-field-label">Anon Key</div>
+              <div class="s7-field-input" style="color:var(--text-muted);">
+                <span>Not configured</span>
+                <span style="font-size:12px;color:var(--text-muted)">✏️</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Connection status -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-size:11.5px;font-weight:600;color:var(--white)">Connection Status</span>
+              <span style="font-size:10px;color:var(--green);font-weight:600;">● TMDB Active</span>
+            </div>
+            <div style="height:3px;background:var(--surface-el);border-radius:2px;">
+              <div style="height:100%;width:33%;background:var(--green);border-radius:2px;"></div>
+            </div>
+            <div style="font-size:9.5px;color:var(--text-muted);margin-top:5px;">1 of 3 services connected</div>
+          </div>
+
+          <div class="s7-btns">
+            <div class="s7-btn-save">Save Changes</div>
+            <div class="s7-btn-reset">Reset</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <span class="screen-label">07 — API Settings</span>
+  </div>
+
 </div>
 
-<div class="stage">
-
-  <!-- ═══════════════════════════════════════════
-       SCREEN 1: Welcome / Onboarding
-  ═══════════════════════════════════════════ -->
-  <div class="phone-wrap">
-    <div class="phone">
-      <div class="screen" id="s1">
-        <div class="bg-grad"></div>
-        <div class="notch"><div class="notch-cam"></div><div class="notch-pill"></div></div>
-        <div class="status-bar">
-          <span class="status-time">9:41</span>
-          <div class="status-icons">
-            <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="4" width="3" height="7" rx="1" opacity="0.4"/><rect x="4" y="3" width="3" height="8" rx="1" opacity="0.6"/><rect x="8" y="1" width="3" height="10" rx="1" opacity="0.8"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
-            <svg width="12" height="11" viewBox="0 0 12 11"><path d="M6 2C8.3 2 10.3 3.1 11.6 4.8L13 3.4C11.3 1.3 8.8 0 6 0S.7 1.3-1 3.4L.4 4.8C1.7 3.1 3.7 2 6 2z" opacity="0.4"/><path d="M6 5c1.4 0 2.6.6 3.5 1.5l1.4-1.4C9.5 3.8 7.8 3 6 3s-3.5.8-4.9 2.1l1.4 1.4C3.4 5.6 4.6 5 6 5z" opacity="0.7"/><circle cx="6" cy="9" r="1.5"/></svg>
-            <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1.5" y="2.5" width="16" height="7" rx="1" fill="white"/><rect x="22.5" y="4" width="2" height="4" rx="1" fill="white" opacity="0.4"/></svg>
-          </div>
-        </div>
-        <div class="inner">
-          <div class="big-logo">CINE<span class="ai">AI</span></div>
-          <div class="tagline">DISCOVER · TRACK · EXPERIENCE</div>
-          <div class="feature-list">
-            <div class="feature-row"><span class="feature-icon">🎬</span><span class="feature-label">Netflix-style home feed</span></div>
-            <div class="feature-row"><span class="feature-icon">🔍</span><span class="feature-label">Search movies, shows &amp; actors</span></div>
-            <div class="feature-row"><span class="feature-icon">✦</span><span class="feature-label">AI-powered recommendations</span></div>
-            <div class="feature-row"><span class="feature-icon">📅</span><span class="feature-label">Release calendar</span></div>
-            <div class="feature-row"><span class="feature-icon">⚡</span><span class="feature-label">Launch in Stremio</span></div>
-          </div>
-          <div class="disclaimer">
-            CineAI uses free third-party APIs.<br/>
-            You'll need a free TMDB API key to get started.
-          </div>
-          <div class="step-indicator">
-            <div class="dot active"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
-          </div>
-          <button class="btn-red">Get Started →</button>
-        </div>
-      </div>
-    </div>
-    <div class="phone-label">1 — Welcome</div>
+<!-- Design token legend -->
+<div style="display:flex;justify-content:center;gap:24px;margin-top:36px;flex-wrap:wrap;">
+  <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#666">
+    <div style="width:10px;height:10px;border-radius:2px;background:#e50914"></div>Primary Red
   </div>
-
-  <!-- ═══════════════════════════════════════════
-       SCREEN 2: TMDB API Key Setup
-  ═══════════════════════════════════════════ -->
-  <div class="phone-wrap">
-    <div class="phone">
-      <div class="screen" id="s2">
-        <div class="bg-grad"></div>
-        <div class="notch"><div class="notch-cam"></div><div class="notch-pill"></div></div>
-        <div class="status-bar" style="position:relative;z-index:1;">
-          <span class="status-time">9:41</span>
-          <div class="status-icons">
-            <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="4" width="3" height="7" rx="1" opacity="0.4"/><rect x="4" y="3" width="3" height="8" rx="1" opacity="0.6"/><rect x="8" y="1" width="3" height="10" rx="1" opacity="0.8"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
-            <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1.5" y="2.5" width="16" height="7" rx="1" fill="white"/><rect x="22.5" y="4" width="2" height="4" rx="1" fill="white" opacity="0.4"/></svg>
-          </div>
-        </div>
-        <div class="inner">
-          <div class="step-num">Step 1 of 2</div>
-          <div class="step-title">TMDB API Key</div>
-          <div class="step-desc">The Movie Database (TMDB) powers all movie &amp; TV data. It's <span class="hi">completely free</span> to register.</div>
-          <div class="instruction-card">
-            <div class="instr-title">How to get your key:</div>
-            <div class="instr-row"><div class="num-circle">1</div><div class="instr-text">Go to themoviedb.org</div></div>
-            <div class="instr-row"><div class="num-circle">2</div><div class="instr-text">Create a free account</div></div>
-            <div class="instr-row"><div class="num-circle">3</div><div class="instr-text">Settings → API → Request an API key</div></div>
-            <div class="instr-row"><div class="num-circle">4</div><div class="instr-text">Choose "Developer" and fill the form</div></div>
-            <div class="instr-row"><div class="num-circle">5</div><div class="instr-text">Copy your API Key (v3 auth)</div></div>
-            <div class="tmdb-link">Open TMDB Settings ↗</div>
-          </div>
-          <div>
-            <div class="input-label">API Key (v3 auth)</div>
-            <div class="fake-input">e.g. a1b2c3d4e5f6...</div>
-          </div>
-          <button class="btn-red">Continue →</button>
-          <div style="text-align:center;">
-            <div class="step-indicator" style="justify-content:center;">
-              <div class="dot"></div>
-              <div class="dot active"></div>
-              <div class="dot"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="phone-label">2 — API Setup</div>
+  <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#666">
+    <div style="width:10px;height:10px;border-radius:2px;background:#f5c518"></div>Gold Accent
   </div>
-
-  <!-- ═══════════════════════════════════════════
-       SCREEN 3: Home Feed
-  ═══════════════════════════════════════════ -->
-  <div class="phone-wrap">
-    <div class="phone">
-      <div class="screen" id="s3">
-        <div class="notch"><div class="notch-cam"></div><div class="notch-pill"></div></div>
-        <div class="status-bar">
-          <span class="status-time">9:41</span>
-          <div class="status-icons">
-            <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="4" width="3" height="7" rx="1" opacity="0.4"/><rect x="4" y="3" width="3" height="8" rx="1" opacity="0.6"/><rect x="8" y="1" width="3" height="10" rx="1" opacity="0.8"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
-            <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1.5" y="2.5" width="18" height="7" rx="1" fill="white"/><rect x="22.5" y="4" width="2" height="4" rx="1" fill="white" opacity="0.4"/></svg>
-          </div>
-        </div>
-        <!-- Scrollable feed -->
-        <div class="scrollable">
-          <!-- Top bar -->
-          <div class="top-bar">
-            <div class="logo-text">CINE<span class="ai">AI</span></div>
-            <div class="ai-pill">✦ Ask AI</div>
-          </div>
-          <!-- Hero -->
-          <div class="hero">
-            <div class="hero-bg"></div>
-            <div class="hero-grain"></div>
-            <!-- Film strip effect lines -->
-            <div style="position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent,transparent 98px,rgba(0,0,0,0.15) 98px,rgba(0,0,0,0.15) 100px);pointer-events:none;"></div>
-            <div class="hero-overlay"></div>
-            <div class="hero-content">
-              <div class="hero-label">✦ Featured Tonight</div>
-              <div class="hero-title">Blade Runner<br/>2049</div>
-              <div class="hero-meta">
-                <span>2017</span>
-                <span style="color:var(--border)">·</span>
-                <span>2h 44m</span>
-                <span style="color:var(--border)">·</span>
-                <span class="star">★</span>
-                <span>8.0</span>
-              </div>
-              <div class="hero-btns">
-                <div class="btn-white">▶ More Info</div>
-                <div class="btn-ghost">+ Watchlist</div>
-              </div>
-            </div>
-          </div>
-          <!-- Trending Row -->
-          <div class="row-section">
-            <div class="row-header">
-              <span class="row-title">Trending This Week</span>
-              <span class="row-more">See all</span>
-            </div>
-            <div class="poster-row">
-              <!-- Poster 1 -->
-              <div class="poster g-red" style="width:90px;height:133px;">
-                <div class="poster-text">Oppenheimer</div>
-              </div>
-              <!-- Poster 2 -->
-              <div class="poster g-blue" style="width:90px;height:133px;">
-                <div class="poster-text">Dune: Part Two</div>
-              </div>
-              <!-- Poster 3 -->
-              <div class="poster g-green" style="width:90px;height:133px;">
-                <div class="poster-text">The Bear</div>
-              </div>
-              <!-- Poster 4 -->
-              <div class="poster g-purple" style="width:90px;height:133px;">
-                <div class="poster-text">Poor Things</div>
-              </div>
-            </div>
-          </div>
-          <!-- New Episodes Row -->
-          <div class="row-section" style="padding-bottom:16px;">
-            <div class="row-header">
-              <span class="row-title">New Episodes Tonight</span>
-              <span class="row-more">See all</span>
-            </div>
-            <div class="poster-row">
-              <div class="poster g-teal" style="width:90px;height:133px;">
-                <div class="poster-text">The Last of Us</div>
-              </div>
-              <div class="poster g-orange" style="width:90px;height:133px;">
-                <div class="poster-text">Succession</div>
-              </div>
-              <div class="poster g-warm" style="width:90px;height:133px;">
-                <div class="poster-text">White Lotus</div>
-              </div>
-              <div class="poster g-dark" style="width:90px;height:133px;">
-                <div class="poster-text">Shogun</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <!-- Tab bar -->
-        <div class="tab-bar">
-          <div class="tab-item active"><span class="tab-icon">🏠</span>Home</div>
-          <div class="tab-item"><span class="tab-icon">🔍</span>Search</div>
-          <div class="tab-item"><span class="tab-icon">📅</span>Calendar</div>
-          <div class="tab-item"><span class="tab-icon">👤</span>Profile</div>
-        </div>
-      </div>
-    </div>
-    <div class="phone-label">3 — Home Feed</div>
+  <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#666">
+    <div style="width:10px;height:10px;border-radius:2px;background:#46d369"></div>Success Green
   </div>
-
-  <!-- ═══════════════════════════════════════════
-       SCREEN 4: Search
-  ═══════════════════════════════════════════ -->
-  <div class="phone-wrap">
-    <div class="phone">
-      <div class="screen" id="s4">
-        <div class="notch"><div class="notch-cam"></div><div class="notch-pill"></div></div>
-        <div class="status-bar">
-          <span class="status-time">9:41</span>
-          <div class="status-icons">
-            <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="4" width="3" height="7" rx="1" opacity="0.4"/><rect x="4" y="3" width="3" height="8" rx="1" opacity="0.6"/><rect x="8" y="1" width="3" height="10" rx="1" opacity="0.8"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
-            <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1.5" y="2.5" width="14" height="7" rx="1" fill="white"/><rect x="22.5" y="4" width="2" height="4" rx="1" fill="white" opacity="0.4"/></svg>
-          </div>
-        </div>
-        <div class="inner">
-          <div class="page-title">Search</div>
-          <div class="search-bar">
-            <span class="search-icon">🔍</span>
-            <span class="search-placeholder">Movies, shows, people...</span>
-          </div>
-          <div class="scrollable" style="padding-right:4px;">
-            <div class="section-label">Browse by Genre</div>
-            <div class="genre-wrap">
-              <div class="genre-pill">Action</div>
-              <div class="genre-pill">Comedy</div>
-              <div class="genre-pill">Horror</div>
-              <div class="genre-pill">Drama</div>
-              <div class="genre-pill">Sci-Fi</div>
-              <div class="genre-pill">Romance</div>
-              <div class="genre-pill">Thriller</div>
-              <div class="genre-pill">Animation</div>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-              <div class="section-label" style="margin-bottom:0;">Recent</div>
-              <span style="font-size:11px;color:var(--primary);font-weight:600;">Clear</span>
-            </div>
-            <div class="recent-item">
-              <span class="recent-icon">🕐</span>
-              <span class="recent-text">Christopher Nolan films</span>
-            </div>
-            <div class="recent-item">
-              <span class="recent-icon">🕐</span>
-              <span class="recent-text">mind-bending sci-fi</span>
-            </div>
-            <div class="recent-item">
-              <span class="recent-icon">🕐</span>
-              <span class="recent-text">best horror 2024</span>
-            </div>
-            <div class="recent-item">
-              <span class="recent-icon">🕐</span>
-              <span class="recent-text">Pedro Pascal</span>
-            </div>
-          </div>
-        </div>
-        <div class="tab-bar">
-          <div class="tab-item"><span class="tab-icon">🏠</span>Home</div>
-          <div class="tab-item active"><span class="tab-icon">🔍</span>Search</div>
-          <div class="tab-item"><span class="tab-icon">📅</span>Calendar</div>
-          <div class="tab-item"><span class="tab-icon">👤</span>Profile</div>
-        </div>
-      </div>
-    </div>
-    <div class="phone-label">4 — Search</div>
+  <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#666">
+    <div style="width:10px;height:10px;border-radius:2px;background:#7b2d8b"></div>Purple (Stremio)
   </div>
-
-  <!-- ═══════════════════════════════════════════
-       SCREEN 5: Title Detail
-  ═══════════════════════════════════════════ -->
-  <div class="phone-wrap">
-    <div class="phone">
-      <div class="screen" id="s5">
-        <div class="notch"><div class="notch-cam"></div><div class="notch-pill"></div></div>
-        <div class="status-bar" style="position:absolute;top:0;left:0;right:0;z-index:20;">
-          <span class="status-time">9:41</span>
-          <div class="status-icons">
-            <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="4" width="3" height="7" rx="1"/><rect x="4" y="3" width="3" height="8" rx="1"/><rect x="8" y="1" width="3" height="10" rx="1"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
-            <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1.5" y="2.5" width="19" height="7" rx="1" fill="white"/><rect x="22.5" y="4" width="2" height="4" rx="1" fill="white" opacity="0.4"/></svg>
-          </div>
-        </div>
-        <div class="scrollable">
-          <!-- Hero backdrop -->
-          <div class="hero-area">
-            <div class="hero-bg"></div>
-            <!-- Stars scattered in bg -->
-            <svg style="position:absolute;inset:0;width:100%;height:100%;opacity:0.3;" viewBox="0 0 393 260">
-              <circle cx="40" cy="30" r="1" fill="white"/><circle cx="120" cy="50" r="1.5" fill="white"/>
-              <circle cx="200" cy="20" r="1" fill="white"/><circle cx="310" cy="40" r="1" fill="white"/>
-              <circle cx="360" cy="80" r="1.5" fill="white"/><circle cx="80" cy="100" r="1" fill="white"/>
-              <circle cx="250" cy="70" r="1" fill="white"/><circle cx="340" cy="130" r="1.5" fill="white"/>
-              <circle cx="150" cy="140" r="1" fill="white"/><circle cx="60" cy="170" r="1" fill="white"/>
-            </svg>
-            <div class="hero-overlay"></div>
-            <!-- Back btn -->
-            <div class="back-btn">←</div>
-            <!-- Mini poster -->
-            <div class="mini-poster g-blue">
-              <div style="position:absolute;bottom:5px;left:0;right:0;text-align:center;font-size:7px;font-weight:800;color:rgba(255,255,255,0.8);text-shadow:0 1px 2px rgba(0,0,0,0.8);">INCEPTION</div>
-            </div>
-          </div>
-          <!-- Detail body -->
-          <div class="detail-body">
-            <div>
-              <div class="detail-title">Inception</div>
-              <div class="detail-tagline">Your mind is the scene of the crime.</div>
-            </div>
-            <div class="badges">
-              <div class="badge">2010</div>
-              <div class="badge">2h 28m</div>
-              <div class="badge">PG-13</div>
-              <div class="badge star">★ 8.8</div>
-            </div>
-            <div class="genre-pills">
-              <div class="gpill">Action</div>
-              <div class="gpill">Sci-Fi</div>
-              <div class="gpill">Thriller</div>
-            </div>
-            <div class="action-btns">
-              <div class="btn-trailer">▶ Trailer</div>
-              <div class="btn-wl">+ Watchlist</div>
-              <div class="btn-stremio">⚡ Stremio</div>
-            </div>
-            <div class="overview-text">
-              A thief who steals corporate secrets through the use of dream-sharing technology is given the inverse task of planting an idea into the mind of a C.E.O., but his tragic past may doom the project.
-            </div>
-            <!-- AI card -->
-            <div class="ai-card">
-              <div class="ai-icon">✦</div>
-              <div>
-                <div class="ai-card-title">Why you'll love this</div>
-                <div class="ai-card-text">Based on your love of mind-bending narratives — Inception's layered dreamscapes and moral ambiguity perfectly match your taste for cerebral cinema.</div>
-              </div>
-            </div>
-            <!-- Where to Watch -->
-            <div>
-              <div class="section-heading">Where to Watch</div>
-              <div class="providers-row">
-                <div class="provider-box p-netflix">N</div>
-                <div class="provider-box p-prime">Prime</div>
-                <div class="provider-box p-disney">D+</div>
-                <div class="provider-box p-hbo">HBO</div>
-              </div>
-            </div>
-            <!-- Cast -->
-            <div>
-              <div class="section-heading">Cast</div>
-              <div class="cast-row">
-                <div class="cast-item">
-                  <div class="cast-avatar g-blue"></div>
-                  <div class="cast-name">Leonardo DiCaprio</div>
-                </div>
-                <div class="cast-item">
-                  <div class="cast-avatar g-warm"></div>
-                  <div class="cast-name">Joseph Gordon-Levitt</div>
-                </div>
-                <div class="cast-item">
-                  <div class="cast-avatar g-green"></div>
-                  <div class="cast-name">Elliot Page</div>
-                </div>
-                <div class="cast-item">
-                  <div class="cast-avatar g-purple"></div>
-                  <div class="cast-name">Tom Hardy</div>
-                </div>
-                <div class="cast-item">
-                  <div class="cast-avatar g-red"></div>
-                  <div class="cast-name">Marion Cotillard</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="phone-label">5 — Title Detail</div>
+  <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#666">
+    <div style="width:10px;height:10px;border-radius:2px;background:#1f1f1f;border:1px solid #2a2a2a"></div>Surface Elevated
   </div>
-
-  <!-- ═══════════════════════════════════════════
-       SCREEN 6: AI Assistant
-  ═══════════════════════════════════════════ -->
-  <div class="phone-wrap">
-    <div class="phone">
-      <div class="screen" id="s6">
-        <div class="notch"><div class="notch-cam"></div><div class="notch-pill"></div></div>
-        <div class="status-bar">
-          <span class="status-time">9:41</span>
-          <div class="status-icons">
-            <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="4" width="3" height="7" rx="1" opacity="0.4"/><rect x="4" y="3" width="3" height="8" rx="1" opacity="0.6"/><rect x="8" y="1" width="3" height="10" rx="1" opacity="0.8"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
-            <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1.5" y="2.5" width="20" height="7" rx="1" fill="white"/><rect x="22.5" y="4" width="2" height="4" rx="1" fill="white" opacity="0.4"/></svg>
-          </div>
-        </div>
-        <!-- Header -->
-        <div class="ai-header">
-          <span class="close-btn">✕</span>
-          <div class="ai-header-title">
-            <span class="ai-star">✦</span>
-            <span>AI Assistant</span>
-          </div>
-          <div style="width:24px;"></div>
-        </div>
-        <!-- Messages -->
-        <div class="messages">
-          <!-- AI msg 1 -->
-          <div class="bubble-row">
-            <div class="bubble ai">
-              Hi! I'm your AI movie guide. Tell me what you're in the mood for — a genre, feeling, or theme — and I'll find the perfect watch for you. ✦
-            </div>
-          </div>
-          <!-- User msg -->
-          <div class="bubble-row user">
-            <div class="bubble user">mind-bending sci-fi</div>
-          </div>
-          <!-- AI response -->
-          <div class="bubble-row">
-            <div class="bubble ai">
-              <div style="margin-bottom:8px;">Great pick — here are three mind-benders I think you'll love:</div>
-              <div class="rec-posters">
-                <div class="rec-poster g-blue">
-                  <div style="position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:7px;font-weight:800;color:rgba(255,255,255,0.8);">ARRIVAL</div>
-                </div>
-                <div class="rec-poster g-purple" style="position:relative;">
-                  <div style="position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:7px;font-weight:800;color:rgba(255,255,255,0.8);">EX MACHINA</div>
-                </div>
-                <div class="rec-poster g-teal" style="position:relative;">
-                  <div style="position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:7px;font-weight:800;color:rgba(255,255,255,0.8);">ANNIHILATION</div>
-                </div>
-              </div>
-              <div style="margin-top:8px;font-size:11px;color:var(--textMuted);">Tap any to see details →</div>
-            </div>
-          </div>
-        </div>
-        <!-- Suggestion chips -->
-        <div class="chips-area">
-          <div class="chip">Mind-bending sci-fi 🚀</div>
-          <div class="chip">Comforting movies 🛋️</div>
-          <div class="chip">Best thrillers ⏱️</div>
-          <div class="chip">Underrated horror 👻</div>
-        </div>
-        <!-- Input -->
-        <div class="input-area">
-          <div class="ai-input">What are you in the mood for?</div>
-          <div class="send-btn">↑</div>
-        </div>
-      </div>
-    </div>
-    <div class="phone-label">6 — AI Assistant</div>
+  <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#666">
+    <div style="width:10px;height:10px;border-radius:2px;background:#141414;border:1px solid #2a2a2a"></div>Surface
   </div>
-
-  <!-- ═══════════════════════════════════════════
-       SCREEN 7: Settings / API Keys
-  ═══════════════════════════════════════════ -->
-  <div class="phone-wrap">
-    <div class="phone">
-      <div class="screen" id="s7">
-        <div class="notch"><div class="notch-cam"></div><div class="notch-pill"></div></div>
-        <div class="status-bar">
-          <span class="status-time">9:41</span>
-          <div class="status-icons">
-            <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="4" width="3" height="7" rx="1" opacity="0.4"/><rect x="4" y="3" width="3" height="8" rx="1" opacity="0.6"/><rect x="8" y="1" width="3" height="10" rx="1" opacity="0.8"/><rect x="12" y="0" width="3" height="11" rx="1"/></svg>
-            <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1.5" y="2.5" width="18" height="7" rx="1" fill="white"/><rect x="22.5" y="4" width="2" height="4" rx="1" fill="white" opacity="0.4"/></svg>
-          </div>
-        </div>
-        <!-- Header -->
-        <div class="settings-header">
-          <span class="back-link">← Back</span>
-          <span class="settings-title">API Settings</span>
-          <div style="width:60px;"></div>
-        </div>
-        <!-- Info bar -->
-        <div class="info-bar">
-          All keys are stored securely on your device. They are <span class="green">never sent to anyone</span> except the respective API provider.
-        </div>
-        <!-- Scrollable settings -->
-        <div class="settings-scroll">
-
-          <!-- TMDB Card -->
-          <div class="api-card">
-            <div class="card-header">
-              <span class="card-icon">🎬</span>
-              <div>
-                <div class="card-title">TMDB API Key</div>
-                <div class="card-desc">Required · Powers all movie &amp; TV data, images, and search.</div>
-              </div>
-            </div>
-            <div>
-              <div class="field-label">
-                <span>API Key (v3 auth)</span>
-                <span class="field-link">Get key ↗</span>
-              </div>
-              <div class="fake-input">
-                <span class="dots">••••••••••••••••</span>
-                <span class="eye-icon">👁</span>
-              </div>
-              <div class="hint green-hint">Free at themoviedb.org → Settings → API</div>
-            </div>
-          </div>
-
-          <!-- AI Backend Card -->
-          <div class="api-card">
-            <div class="card-header">
-              <span class="card-icon">✦</span>
-              <div>
-                <div class="card-title">AI Backend</div>
-                <div class="card-desc">Optional · Self-hosted server for Gemini AI and Trakt calls.</div>
-              </div>
-            </div>
-            <div>
-              <div class="field-label">
-                <span>Backend URL</span>
-                <span class="field-link">Deploy guide ↗</span>
-              </div>
-              <div class="fake-input" style="font-family:monospace;font-size:11px;">https://your-backend.railway.app</div>
-              <div class="hint">See backend/ folder in the repo.</div>
-            </div>
-          </div>
-
-          <!-- Supabase Card -->
-          <div class="api-card">
-            <div class="card-header">
-              <span class="card-icon">🔑</span>
-              <div>
-                <div class="card-title">Supabase</div>
-                <div class="card-desc">Optional · Cloud watchlist sync and Trakt OAuth.</div>
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:10px;">
-              <div>
-                <div class="field-label">
-                  <span>Project URL</span>
-                  <span class="field-link">supabase.com ↗</span>
-                </div>
-                <div class="fake-input" style="font-size:11px;">https://xxxx.supabase.co</div>
-              </div>
-              <div>
-                <div class="field-label">Anon / Public Key</div>
-                <div class="fake-input">
-                  <span class="dots">••••••••••••</span>
-                  <span class="eye-icon">👁</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Action buttons -->
-          <div class="save-btn">Save Keys</div>
-          <div class="reset-btn">Reset All Keys</div>
-
-        </div>
-      </div>
-    </div>
-    <div class="phone-label">7 — API Settings</div>
-  </div>
-
 </div>
-
-<!-- Footer -->
-<div style="text-align:center;margin-top:32px;font-size:11px;color:#333;letter-spacing:1px;text-transform:uppercase;">
-  CineAI · Dark Cinema Theme · 375 × 812 inner canvas
+<div style="text-align:center;margin-top:20px;font-size:10px;color:#444;letter-spacing:0.1em;padding-bottom:20px;">
+  CINEAI · MOBILE APP MOCKUPS · 375 × 812 VIEWPORT
 </div>
-
-<script>
-  // Subtle parallax shimmer on phone frames
-  document.querySelectorAll('.phone').forEach(phone => {
-    phone.addEventListener('mousemove', (e) => {
-      const rect = phone.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width - 0.5;
-      const y = (e.clientY - rect.top) / rect.height - 0.5;
-      phone.style.transform = `perspective(1200px) rotateY(${x * 6}deg) rotateX(${-y * 6}deg) scale(1.02)`;
-      phone.style.transition = 'transform 0.1s ease';
-    });
-    phone.addEventListener('mouseleave', () => {
-      phone.style.transform = 'perspective(1200px) rotateY(0deg) rotateX(0deg) scale(1)';
-      phone.style.transition = 'transform 0.4s ease';
-    });
-  });
-</script>
 
 </body>
 </html>
