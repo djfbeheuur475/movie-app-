@@ -54,11 +54,6 @@ export default function TitleDetailScreen() {
   };
 
   const detailAny = detail as any;
-  const recommendations: ContentItem[] = (detailAny?.recommendations?.results ?? [])
-    .slice(0, 12)
-    .map((item: any) =>
-      mediaType === 'movie' ? normalizeMovie(item) : normalizeTVShow(item)
-    );
 
   const similar: ContentItem[] = (detailAny?.similar?.results ?? [])
     .slice(0, 12)
@@ -104,12 +99,6 @@ export default function TitleDetailScreen() {
           cast={detailAny.credits?.cast ?? []}
           crew={detailAny.credits?.crew ?? []}
         />
-
-        {recommendations.length > 0 && (
-          <View style={{ marginTop: Spacing.xl }}>
-            <ContentRow title="Recommended" items={recommendations} showRating />
-          </View>
-        )}
 
         {similar.length > 0 && (
           <View style={{ marginTop: Spacing.sm }}>

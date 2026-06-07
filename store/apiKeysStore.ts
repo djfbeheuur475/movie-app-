@@ -3,48 +3,56 @@ import * as SecureStore from 'expo-secure-store';
 
 const KEYS = {
   tmdb: 'nextup_tmdb_api_key',
-  backendUrl: 'nextup_backend_url',
-  supabaseUrl: 'nextup_supabase_url',
-  supabaseAnon: 'nextup_supabase_anon_key',
+  traktClientId: 'nextup_trakt_client_id',
+  traktUsername: 'nextup_trakt_username',
+  traktAccessToken: 'nextup_trakt_access_token',
+  geminiKey: 'nextup_gemini_api_key',
   setupDone: 'nextup_setup_done',
 } as const;
 
 interface ApiKeysState {
   tmdbKey: string;
-  backendUrl: string;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
+  traktClientId: string;
+  traktUsername: string;
+  traktAccessToken: string;
+  geminiKey: string;
   isSetupDone: boolean;
   isLoaded: boolean;
 
   loadKeys: () => Promise<void>;
-  saveKeys: (keys: Partial<Omit<ApiKeysState, 'isSetupDone' | 'isLoaded' | 'loadKeys' | 'saveKeys' | 'markSetupDone' | 'clearKeys'>>) => Promise<void>;
+  saveKeys: (keys: Partial<Pick<ApiKeysState,
+    'tmdbKey' | 'traktClientId' | 'traktUsername' | 'traktAccessToken' | 'geminiKey'
+  >>) => Promise<void>;
   markSetupDone: () => Promise<void>;
   clearKeys: () => Promise<void>;
 }
 
 export const useApiKeysStore = create<ApiKeysState>((set, get) => ({
   tmdbKey: process.env.EXPO_PUBLIC_TMDB_API_KEY ?? '',
-  backendUrl: process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:3001',
-  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
-  supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+  traktClientId: '',
+  traktUsername: '',
+  traktAccessToken: '',
+  geminiKey: '',
   isSetupDone: false,
   isLoaded: false,
 
   loadKeys: async () => {
-    const [tmdbKey, backendUrl, supabaseUrl, supabaseAnonKey, setupDone] = await Promise.all([
-      SecureStore.getItemAsync(KEYS.tmdb),
-      SecureStore.getItemAsync(KEYS.backendUrl),
-      SecureStore.getItemAsync(KEYS.supabaseUrl),
-      SecureStore.getItemAsync(KEYS.supabaseAnon),
-      SecureStore.getItemAsync(KEYS.setupDone),
-    ]);
+    const [tmdbKey, traktClientId, traktUsername, traktAccessToken, geminiKey, setupDone] =
+      await Promise.all([
+        SecureStore.getItemAsync(KEYS.tmdb),
+        SecureStore.getItemAsync(KEYS.traktClientId),
+        SecureStore.getItemAsync(KEYS.traktUsername),
+        SecureStore.getItemAsync(KEYS.traktAccessToken),
+        SecureStore.getItemAsync(KEYS.geminiKey),
+        SecureStore.getItemAsync(KEYS.setupDone),
+      ]);
 
     set({
       tmdbKey: tmdbKey ?? process.env.EXPO_PUBLIC_TMDB_API_KEY ?? '',
-      backendUrl: backendUrl ?? process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:3001',
-      supabaseUrl: supabaseUrl ?? process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
-      supabaseAnonKey: supabaseAnonKey ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+      traktClientId: traktClientId ?? '',
+      traktUsername: traktUsername ?? '',
+      traktAccessToken: traktAccessToken ?? '',
+      geminiKey: geminiKey ?? '',
       isSetupDone: setupDone === 'true' || !!process.env.EXPO_PUBLIC_TMDB_API_KEY,
       isLoaded: true,
     });
@@ -52,10 +60,16 @@ export const useApiKeysStore = create<ApiKeysState>((set, get) => ({
 
   saveKeys: async (keys) => {
     const writes: Promise<void>[] = [];
-    if (keys.tmdbKey !== undefined) writes.push(SecureStore.setItemAsync(KEYS.tmdb, keys.tmdbKey));
-    if (keys.backendUrl !== undefined) writes.push(SecureStore.setItemAsync(KEYS.backendUrl, keys.backendUrl));
-    if (keys.supabaseUrl !== undefined) writes.push(SecureStore.setItemAsync(KEYS.supabaseUrl, keys.supabaseUrl));
-    if (keys.supabaseAnonKey !== undefined) writes.push(SecureStore.setItemAsync(KEYS.supabaseAnon, keys.supabaseAnonKey));
+    if (keys.tmdbKey !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.tmdb, keys.tmdbKey));
+    if (keys.traktClientId !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.traktClientId, keys.traktClientId));
+    if (keys.traktUsername !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.traktUsername, keys.traktUsername));
+    if (keys.traktAccessToken !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.traktAccessToken, keys.traktAccessToken));
+    if (keys.geminiKey !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.geminiKey, keys.geminiKey));
     await Promise.all(writes);
     set((s) => ({ ...s, ...keys }));
   },
@@ -69,9 +83,10 @@ export const useApiKeysStore = create<ApiKeysState>((set, get) => ({
     await Promise.all(Object.values(KEYS).map((k) => SecureStore.deleteItemAsync(k)));
     set({
       tmdbKey: '',
-      backendUrl: 'http://localhost:3001',
-      supabaseUrl: '',
-      supabaseAnonKey: '',
+      traktClientId: '',
+      traktUsername: '',
+      traktAccessToken: '',
+      geminiKey: '',
       isSetupDone: false,
     });
   },

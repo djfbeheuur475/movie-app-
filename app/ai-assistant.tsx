@@ -68,18 +68,11 @@ export default function AIAssistantScreen() {
         content: m.content,
       }));
 
-      const { reply, recommendations: tmdbIds } = await backendApi.askGemini(history);
+      throw new Error('Use the AI tab instead of this legacy modal.');
 
-      // Fetch actual TMDB data for recommendations
-      let recItems: ContentItem[] = [];
-      if (tmdbIds && tmdbIds.length > 0) {
-        const fetched = await Promise.allSettled(
-          tmdbIds.slice(0, 5).map((id) => tmdbApi.getMovieDetail(id))
-        );
-        recItems = fetched
-          .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
-          .map((r) => normalizeMovie(r.value));
-      }
+      // eslint-disable-next-line no-unreachable
+      const reply = '';
+      const recItems: ContentItem[] = [];
 
       const assistantMsg: ChatMessage = {
         id: newId(),

@@ -56,7 +56,7 @@ function WatchlistCard({ item, onRemove }: { item: WatchlistItem; onRemove: () =
 export default function WatchlistScreen() {
   const router = useRouter();
   const { items, removeFromWatchlist } = useWatchlistStore();
-  const { isAuthenticated, user, profile } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
 
@@ -130,11 +130,11 @@ export default function WatchlistScreen() {
           <View style={styles.accountCardInner}>
             <View style={styles.accountAvatar}>
               <Text style={styles.accountAvatarText}>
-                {(profile?.display_name ?? user?.email ?? '?')[0].toUpperCase()}
+                {(user?.displayName ?? user?.email ?? '?')[0].toUpperCase()}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.accountName}>{profile?.display_name ?? 'User'}</Text>
+              <Text style={styles.accountName}>{user?.displayName ?? 'User'}</Text>
               <Text style={styles.accountEmail}>{user?.email ?? ''}</Text>
             </View>
             <TouchableOpacity

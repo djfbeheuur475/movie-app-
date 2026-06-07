@@ -16,13 +16,11 @@ function PersonCard({
   profilePath,
   name,
   sub,
-  role,
 }: {
   id: number;
   profilePath: string | null;
   name: string;
   sub: string;
-  role?: 'director' | 'cast';
 }) {
   const router = useRouter();
   return (
@@ -31,18 +29,11 @@ function PersonCard({
       onPress={() => router.push(`/person/${id}`)}
       activeOpacity={0.75}
     >
-      <View style={styles.photoWrap}>
-        <Image
-          source={{ uri: getProfileUrl(profilePath) ?? '' }}
-          style={styles.photo}
-          contentFit="cover"
-        />
-        {role === 'director' && (
-          <View style={styles.directorBadge}>
-            <Text style={styles.directorBadgeText}>DIR</Text>
-          </View>
-        )}
-      </View>
+      <Image
+        source={{ uri: getProfileUrl(profilePath) ?? '' }}
+        style={styles.photo}
+        contentFit="cover"
+      />
       <Text style={styles.name} numberOfLines={2}>{name}</Text>
       <Text style={styles.sub} numberOfLines={1}>{sub}</Text>
     </TouchableOpacity>
@@ -54,29 +45,14 @@ export default function CastList({ cast, crew = [] }: Props) {
   const writers = crew.filter((c) => c.job === 'Screenplay' || c.job === 'Writer').slice(0, 2);
   const visibleCast = cast.slice(0, 15);
 
-  // Directors + writers pinned at front
-  const pinnedCrew: { id: number; profilePath: string | null; name: string; sub: string; role: 'director' | 'cast' }[] = [
-    ...directors.map((d) => ({ id: d.id, profilePath: d.profile_path, name: d.name, sub: 'Director', role: 'director' as const })),
-    ...writers.map((w) => ({ id: w.id, profilePath: w.profile_path, name: w.name, sub: w.job, role: 'cast' as const })),
-  ];
-
-  if (!visibleCast.length && !pinnedCrew.length) return null;
+  if (!visibleCast.length && !directors.length) return null;
 
   return (
     <View style={styles.container}>
-      {/* Directors / key crew pinned row */}
-      {pinnedCrew.length > 0 && (
-        <View style={styles.crewRow}>
-          {pinnedCrew.map((p) => (
-            <PersonCard key={`crew-${p.id}-${p.sub}`} {...p} />
-          ))}
-        </View>
-      )}
-
-      {/* Cast horizontal scroll */}
+      {/* Cast — horizontal scroll, shown first */}
       {visibleCast.length > 0 && (
-        <>
-          <Text style={styles.title}>Cast</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Cast</Text>
           <FlatList
             data={visibleCast}
             horizontal
@@ -89,11 +65,37 @@ export default function CastList({ cast, crew = [] }: Props) {
                 profilePath={item.profile_path}
                 name={item.name}
                 sub={item.character}
-                role="cast"
               />
             )}
           />
-        </>
+        </View>
+      )}
+
+      {/* Direction — shown after cast */}
+      {(directors.length > 0 || writers.length > 0) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Direction</Text>
+          <View style={styles.crewRow}>
+            {directors.map((d) => (
+              <PersonCard
+                key={`dir-${d.id}`}
+                id={d.id}
+                profilePath={d.profile_path}
+                name={d.name}
+                sub="Director"
+              />
+            ))}
+            {writers.map((w) => (
+              <PersonCard
+                key={`writer-${w.id}`}
+                id={w.id}
+                profilePath={w.profile_path}
+                name={w.name}
+                sub={w.job}
+              />
+            ))}
+          </View>
+        </View>
       )}
     </View>
   );
@@ -102,51 +104,33 @@ export default function CastList({ cast, crew = [] }: Props) {
 const styles = StyleSheet.create({
   container: {
     marginTop: Spacing.xl,
+  },
+  section: {
+    marginBottom: Spacing.xl,
     paddingHorizontal: Spacing.lg,
   },
-  crewRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-    paddingBottom: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  title: {
+  sectionTitle: {
     ...Typography.subheading,
     color: Colors.text,
     marginBottom: Spacing.md,
   },
   list: {
     gap: Spacing.md,
+    paddingRight: Spacing.lg,
+  },
+  crewRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
   },
   card: {
     width: 76,
     alignItems: 'center',
-  },
-  photoWrap: {
-    position: 'relative',
   },
   photo: {
     width: 64,
     height: 64,
     borderRadius: 32,
     backgroundColor: Colors.surfaceElevated,
-  },
-  directorBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -4,
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  directorBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: 0.5,
   },
   name: {
     ...Typography.caption,
@@ -159,5 +143,6 @@ const styles = StyleSheet.create({
     ...Typography.label,
     color: Colors.textMuted,
     textAlign: 'center',
+    marginTop: 2,
   },
 });

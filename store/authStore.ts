@@ -1,53 +1,50 @@
 import { create } from 'zustand';
-import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import type { UserProfile } from '../types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface AuthState {
-  session: Session | null;
-  user: User | null;
-  profile: UserProfile | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
+const STORAGE_KEY = 'nextup_user_profile';
 
-  setSession: (session: Session | null) => void;
-  setProfile: (profile: UserProfile | null) => void;
-  signOut: () => Promise<void>;
-  fetchProfile: () => Promise<void>;
+interface LocalUser {
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  session: null,
-  user: null,
-  profile: null,
-  isLoading: true,
-  isAuthenticated: false,
+interface AuthState {
+  user: LocalUser | null;
+  isAuthenticated: boolean;
+  isLoaded: boolean;
 
-  setSession: (session) => {
-    set({
-      session,
-      user: session?.user ?? null,
-      isAuthenticated: !!session,
-      isLoading: false,
-    });
-    if (session) get().fetchProfile();
+  loadUser: () => Promise<void>;
+  setUser: (user: LocalUser) => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  isAuthenticated: false,
+  isLoaded: false,
+
+  loadUser: async () => {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const user = JSON.parse(raw) as LocalUser;
+        set({ user, isAuthenticated: true, isLoaded: true });
+      } else {
+        set({ isLoaded: true });
+      }
+    } catch {
+      set({ isLoaded: true });
+    }
   },
 
-  setProfile: (profile) => set({ profile }),
+  setUser: async (user) => {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    set({ user, isAuthenticated: true });
+  },
 
   signOut: async () => {
-    await supabase.auth.signOut();
-    set({ session: null, user: null, profile: null, isAuthenticated: false });
-  },
-
-  fetchProfile: async () => {
-    const { user } = get();
-    if (!user) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-    if (data) set({ profile: data as UserProfile });
+    await AsyncStorage.removeItem(STORAGE_KEY);
+    set({ user: null, isAuthenticated: false });
   },
 }));

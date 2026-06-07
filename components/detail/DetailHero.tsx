@@ -5,14 +5,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  ScrollView,
   Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import { getBackdropUrl, getPosterUrl } from '../../lib/tmdb';
-import type { TMDBMovieDetail, TMDBTVDetail, Provider } from '../../types';
+import type { TMDBMovieDetail, TMDBTVDetail } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BACKDROP_HEIGHT = 280;
@@ -48,9 +47,6 @@ export default function DetailHero({
 
   const backdropUrl = getBackdropUrl(detail.backdrop_path, 'large');
   const posterUrl = getPosterUrl(detail.poster_path, 'large');
-
-  const providers = detail['watch/providers']?.results?.US;
-  const streamingProviders = providers?.flatrate ?? [];
 
   const openStremio = () => {
     let imdbId: string | null = null;
@@ -120,15 +116,19 @@ export default function DetailHero({
               <Text style={styles.ratingText}>★ {detail.vote_average?.toFixed(1)}</Text>
             </View>
           </View>
-          <View style={styles.genres}>
-            {detail.genres?.slice(0, 3).map((g) => (
-              <View key={g.id} style={styles.genrePill}>
-                <Text style={styles.genreText}>{g.name}</Text>
-              </View>
-            ))}
-          </View>
         </View>
       </View>
+
+      {/* Genres — full-width row below the poster+meta to avoid overlap */}
+      {detail.genres && detail.genres.length > 0 && (
+        <View style={styles.genresRow}>
+          {detail.genres.slice(0, 4).map((g) => (
+            <View key={g.id} style={styles.genrePill}>
+              <Text style={styles.genreText}>{g.name}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Actions */}
       <View style={styles.actions}>
@@ -166,24 +166,6 @@ export default function DetailHero({
         </View>
       )}
 
-      {/* Streaming Providers */}
-      {streamingProviders.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Where to Watch</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.providerRow}>
-            {streamingProviders.map((p: Provider) => (
-              <View key={p.provider_id} style={styles.providerItem}>
-                <Image
-                  source={{ uri: `https://image.tmdb.org/t/p/w92${p.logo_path}` }}
-                  style={styles.providerLogo}
-                  contentFit="contain"
-                />
-                <Text style={styles.providerName} numberOfLines={1}>{p.provider_name}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      )}
     </View>
   );
 }
@@ -253,11 +235,12 @@ const styles = StyleSheet.create({
     color: Colors.accent,
     fontWeight: '700',
   },
-  genres: {
+  genresRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 6,
+    gap: 6,
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.sm,
   },
   genrePill: {
     borderWidth: 1,
@@ -351,25 +334,5 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.text,
     lineHeight: 20,
-  },
-  providerRow: {
-    marginTop: Spacing.sm,
-  },
-  providerItem: {
-    alignItems: 'center',
-    marginRight: Spacing.md,
-    width: 64,
-  },
-  providerLogo: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surfaceElevated,
-  },
-  providerName: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    textAlign: 'center',
   },
 });

@@ -37,7 +37,7 @@ function SettingRow({ icon, label, value, onPress }: {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, profile, isAuthenticated, signOut } = useAuthStore();
+  const { user, isAuthenticated, signOut } = useAuthStore();
   const { items: watchlistItems } = useWatchlistStore();
 
   const handleSignOut = () => {
@@ -64,16 +64,16 @@ export default function ProfileScreen() {
         {/* Profile header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatar}>
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} contentFit="cover" />
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} contentFit="cover" />
             ) : (
               <Text style={styles.avatarInitial}>
-                {(profile?.display_name ?? user?.email ?? '?')[0].toUpperCase()}
+                {(user?.displayName ?? user?.email ?? '?')[0].toUpperCase()}
               </Text>
             )}
           </View>
           <Text style={styles.displayName}>
-            {profile?.display_name ?? user?.email ?? 'Guest'}
+            {user?.displayName ?? user?.email ?? 'Guest'}
           </Text>
           {!isAuthenticated && (
             <TouchableOpacity
@@ -122,7 +122,7 @@ export default function ProfileScreen() {
             <SettingRow
               icon="🔑"
               label="Manage API Keys"
-              value="TMDB · Backend · Supabase"
+              value="TMDB · Trakt · Gemini"
               onPress={() => router.push('/settings')}
             />
           </View>
@@ -135,8 +135,8 @@ export default function ProfileScreen() {
             <SettingRow
               icon="⚡"
               label="Connect Trakt"
-              value={profile?.trakt_connected ? profile.trakt_username ?? 'Connected' : 'Not connected'}
-              onPress={() => {}}
+              value="Configure in Settings"
+              onPress={() => router.push('/settings')}
             />
             <SettingRow icon="🔔" label="Notifications" onPress={() => {}} />
             <SettingRow icon="🌍" label="Region" value="US" onPress={() => {}} />

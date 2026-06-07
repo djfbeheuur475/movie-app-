@@ -1,396 +1,334 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  FlatList,
   SafeAreaView,
   Dimensions,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
-import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
-import { useWatchlistStore } from '../../store/watchlistStore';
-import SwipeCard, { SwipeCardRef } from '../../components/swipe/SwipeCard';
+import { tmdbApi, normalizeMovie, normalizeTVShow, getPosterUrl } from '../../lib/tmdb';
 import type { ContentItem } from '../../types';
 
 const { width: SW } = Dimensions.get('window');
+const CARD_GAP = 12;
+const CARD_WIDTH = (SW - Spacing.lg * 2 - CARD_GAP) / 2;
 
-type Category = 'trending' | 'movies' | 'shows' | 'top';
+type MediaTab = 'movies' | 'shows';
+type SortKey = 'popular' | 'top' | 'newest' | 'revenue';
+type GenreId = number | null;
 
-const CATEGORIES: { key: Category; label: string; icon: string }[] = [
-  { key: 'trending', label: 'Trending', icon: '🔥' },
-  { key: 'movies', label: 'Movies', icon: '🎬' },
-  { key: 'shows', label: 'TV Shows', icon: '📺' },
-  { key: 'top', label: 'Top Rated', icon: '⭐' },
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'popular', label: 'Most Popular' },
+  { key: 'top', label: 'Highest Rated' },
+  { key: 'newest', label: 'Newest' },
+  { key: 'revenue', label: 'Box Office' },
 ];
+
+const MOVIE_GENRES: { id: number; name: string }[] = [
+  { id: 28, name: 'Action' }, { id: 12, name: 'Adventure' }, { id: 16, name: 'Animation' },
+  { id: 35, name: 'Comedy' }, { id: 80, name: 'Crime' }, { id: 18, name: 'Drama' },
+  { id: 14, name: 'Fantasy' }, { id: 27, name: 'Horror' }, { id: 9648, name: 'Mystery' },
+  { id: 10749, name: 'Romance' }, { id: 878, name: 'Sci-Fi' }, { id: 53, name: 'Thriller' },
+];
+
+const TV_GENRES: { id: number; name: string }[] = [
+  { id: 10759, name: 'Action' }, { id: 16, name: 'Animation' }, { id: 35, name: 'Comedy' },
+  { id: 80, name: 'Crime' }, { id: 99, name: 'Documentary' }, { id: 18, name: 'Drama' },
+  { id: 10765, name: 'Sci-Fi' }, { id: 9648, name: 'Mystery' }, { id: 10766, name: 'Soap' },
+  { id: 10767, name: 'Talk' }, { id: 10768, name: 'War & Politics' }, { id: 37, name: 'Western' },
+];
+
+function sortToParams(sort: SortKey, media: MediaTab): Record<string, string> {
+  if (sort === 'popular') return { sort_by: 'popularity.desc' };
+  if (sort === 'top') return { sort_by: 'vote_average.desc', 'vote_count.gte': '200' };
+  if (sort === 'newest') return {
+    sort_by: 'primary_release_date.desc',
+    ...(media === 'movies' ? { 'release_date.lte': new Date().toISOString().slice(0, 10) } : {}),
+  };
+  if (sort === 'revenue') return media === 'movies'
+    ? { sort_by: 'revenue.desc' }
+    : { sort_by: 'popularity.desc' };
+  return {};
+}
+
+function PosterCard({ item, onPress }: { item: ContentItem; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+      <Image
+        source={{ uri: getPosterUrl(item.posterPath, 'medium') ?? '' }}
+        style={styles.cardImage}
+        contentFit="cover"
+        transition={200}
+      />
+      {item.rating > 0 && (
+        <View style={styles.ratingBadge}>
+          <Text style={styles.ratingText}>★ {item.rating.toFixed(1)}</Text>
+        </View>
+      )}
+      <View style={styles.cardInfo}>
+        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.cardYear}>{item.releaseDate?.slice(0, 4) ?? ''}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 export default function DiscoverScreen() {
   const router = useRouter();
-  const { addToWatchlist } = useWatchlistStore();
-  const topCardRef = useRef<SwipeCardRef>(null);
+  const [media, setMedia] = useState<MediaTab>('movies');
+  const [sort, setSort] = useState<SortKey>('popular');
+  const [genre, setGenre] = useState<GenreId>(null);
 
-  const [category, setCategory] = useState<Category>('trending');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [savedCount, setSavedCount] = useState(0);
+  const genres = media === 'movies' ? MOVIE_GENRES : TV_GENRES;
 
-  const { data: trending, isLoading: loadingTrending } = useQuery({
-    queryKey: ['swipe-trending'],
+  const queryParams = useMemo(() => ({
+    ...sortToParams(sort, media),
+    ...(genre ? { with_genres: String(genre) } : {}),
+    page: 1,
+  }), [sort, genre, media]);
+
+  const { data: items, isLoading } = useQuery<ContentItem[]>({
+    queryKey: ['discover', media, sort, genre],
     queryFn: async (): Promise<ContentItem[]> => {
-      const data = await tmdbApi.getTrending('all', 'week');
-      return data.map((item: any) =>
-        'title' in item ? normalizeMovie(item) : normalizeTVShow(item)
-      );
+      if (media === 'movies') {
+        const results = await tmdbApi.discoverMovies(queryParams);
+        return results.map(normalizeMovie);
+      } else {
+        const results = await tmdbApi.discoverTV(queryParams);
+        return results.map(normalizeTVShow);
+      }
     },
   });
 
-  const { data: movies, isLoading: loadingMovies } = useQuery({
-    queryKey: ['swipe-movies'],
-    queryFn: async (): Promise<ContentItem[]> => {
-      const data = await tmdbApi.getPopularMovies();
-      return data.map(normalizeMovie);
-    },
-  });
-
-  const { data: shows, isLoading: loadingShows } = useQuery({
-    queryKey: ['swipe-shows'],
-    queryFn: async (): Promise<ContentItem[]> => {
-      const data = await tmdbApi.getPopularShows();
-      return data.map(normalizeTVShow);
-    },
-  });
-
-  const { data: topRated, isLoading: loadingTop } = useQuery({
-    queryKey: ['swipe-top'],
-    queryFn: async (): Promise<ContentItem[]> => {
-      const data = await tmdbApi.getTopRatedMovies();
-      return data.map(normalizeMovie);
-    },
-  });
-
-  const items = useMemo<ContentItem[]>(() => {
-    const map: Record<Category, ContentItem[] | undefined> = {
-      trending,
-      movies,
-      shows,
-      top: topRated,
-    };
-    return map[category] ?? [];
-  }, [category, trending, movies, shows, topRated]);
-
-  const isLoading =
-    (category === 'trending' && loadingTrending) ||
-    (category === 'movies' && loadingMovies) ||
-    (category === 'shows' && loadingShows) ||
-    (category === 'top' && loadingTop);
-
-  const visibleCards = items.slice(currentIndex, currentIndex + 3);
-  const remaining = items.length - currentIndex;
-  const isDone = !isLoading && items.length > 0 && currentIndex >= items.length;
-
-  const handleSwipeLeft = useCallback(() => {
-    setCurrentIndex((i) => i + 1);
-  }, []);
-
-  const handleSwipeRight = useCallback(() => {
-    const item = items[currentIndex];
-    if (item) {
-      addToWatchlist({
-        tmdb_id: item.id,
-        media_type: item.mediaType,
-        title: item.title,
-        poster_path: item.posterPath,
-      });
-      setSavedCount((c) => c + 1);
-    }
-    setCurrentIndex((i) => i + 1);
-  }, [items, currentIndex, addToWatchlist]);
-
-  const handlePress = useCallback(
-    (item: ContentItem) => {
-      router.push(`/title/${item.id}?type=${item.mediaType}`);
-    },
-    [router]
-  );
-
-  const handleCategoryChange = useCallback((cat: Category) => {
-    setCategory(cat);
-    setCurrentIndex(0);
-    setSavedCount(0);
-  }, []);
-
-  const handleReset = useCallback(() => {
-    setCurrentIndex(0);
-    setSavedCount(0);
+  const handleMediaChange = useCallback((m: MediaTab) => {
+    setMedia(m);
+    setGenre(null);
   }, []);
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Discover</Text>
-          {savedCount > 0 && (
-            <Text style={styles.savedLabel}>{savedCount} saved to watchlist</Text>
-          )}
-        </View>
-        {!isLoading && !isDone && remaining > 0 && (
-          <View style={styles.progressPill}>
-            <Text style={styles.progressText}>{remaining} left</Text>
-          </View>
-        )}
+        <Text style={styles.headerTitle}>Discover</Text>
+        <Text style={styles.headerSub}>Browse by genre, popularity, and more</Text>
       </View>
 
-      {/* Category pills */}
-      <View style={styles.pills}>
-        {CATEGORIES.map((c) => (
+      {/* Movies / TV Shows toggle */}
+      <View style={styles.mediaToggle}>
+        <TouchableOpacity
+          style={[styles.mediaBtn, media === 'movies' && styles.mediaBtnActive]}
+          onPress={() => handleMediaChange('movies')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.mediaBtnIcon}>🎬</Text>
+          <Text style={[styles.mediaBtnText, media === 'movies' && styles.mediaBtnTextActive]}>
+            Movies
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.mediaBtn, media === 'shows' && styles.mediaBtnActive]}
+          onPress={() => handleMediaChange('shows')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.mediaBtnIcon}>📺</Text>
+          <Text style={[styles.mediaBtnText, media === 'shows' && styles.mediaBtnTextActive]}>
+            TV Shows
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Sort pills */}
+      <View style={styles.filterRow}>
+        <Text style={styles.filterLabel}>Sort by</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+          {SORT_OPTIONS.map((s) => (
+            <TouchableOpacity
+              key={s.key}
+              style={[styles.pill, sort === s.key && styles.pillActive]}
+              onPress={() => setSort(s.key)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.pillText, sort === s.key && styles.pillTextActive]}>
+                {s.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Genre pills */}
+      <View style={styles.filterRow}>
+        <Text style={styles.filterLabel}>Genre</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
           <TouchableOpacity
-            key={c.key}
-            style={[styles.pill, category === c.key && styles.pillActive]}
-            onPress={() => handleCategoryChange(c.key)}
+            style={[styles.pill, genre === null && styles.pillActive]}
+            onPress={() => setGenre(null)}
             activeOpacity={0.75}
           >
-            <Text style={styles.pillIcon}>{c.icon}</Text>
-            <Text style={[styles.pillText, category === c.key && styles.pillTextActive]}>
-              {c.label}
-            </Text>
+            <Text style={[styles.pillText, genre === null && styles.pillTextActive]}>All</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Deck area */}
-      <View style={styles.deck}>
-        {isLoading ? (
-          <ActivityIndicator color={Colors.primary} size="large" />
-        ) : isDone ? (
-          <View style={styles.doneState}>
-            <Text style={styles.doneEmoji}>🎉</Text>
-            <Text style={styles.doneTitle}>You've seen them all!</Text>
-            <Text style={styles.doneSub}>
-              {savedCount > 0
-                ? `${savedCount} title${savedCount > 1 ? 's' : ''} saved to your watchlist.`
-                : 'Try a different category.'}
-            </Text>
-            <TouchableOpacity style={styles.resetBtn} onPress={handleReset} activeOpacity={0.82}>
-              <Text style={styles.resetBtnText}>Start Over</Text>
+          {genres.map((g) => (
+            <TouchableOpacity
+              key={g.id}
+              style={[styles.pill, genre === g.id && styles.pillActive]}
+              onPress={() => setGenre(g.id)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.pillText, genre === g.id && styles.pillTextActive]}>
+                {g.name}
+              </Text>
             </TouchableOpacity>
-          </View>
-        ) : (
-          [...visibleCards].reverse().map((item, revIdx) => {
-            const stackIndex = visibleCards.length - 1 - revIdx;
-            const isTop = stackIndex === 0;
-            return (
-              <SwipeCard
-                key={`${category}-${item.id}`}
-                ref={isTop ? topCardRef : null}
-                item={item}
-                stackIndex={stackIndex}
-                isTop={isTop}
-                onSwipeLeft={handleSwipeLeft}
-                onSwipeRight={handleSwipeRight}
-                onPress={() => handlePress(item)}
-              />
-            );
-          })
-        )}
+          ))}
+        </ScrollView>
       </View>
 
-      {/* Action buttons */}
-      {!isLoading && !isDone && visibleCards.length > 0 && (
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.skipBtn]}
-            onPress={() => topCardRef.current?.swipeLeft()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.skipIcon}>✕</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.infoBtn]}
-            onPress={() => visibleCards[0] && handlePress(visibleCards[0])}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.infoIcon}>ℹ</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.saveBtn]}
-            onPress={() => topCardRef.current?.swipeRight()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.saveIcon}>♡</Text>
-          </TouchableOpacity>
+      {/* Grid */}
+      {isLoading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={Colors.primary} size="large" />
         </View>
-      )}
-
-      {/* First-time swipe hint */}
-      {!isLoading && !isDone && currentIndex === 0 && (
-        <Text style={styles.hint}>← Skip · Swipe · Save →</Text>
+      ) : (
+        <FlatList
+          data={items ?? []}
+          keyExtractor={(item) => `${item.id}-${item.mediaType}`}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.grid}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <PosterCard
+              item={item}
+              onPress={() => router.push(`/title/${item.id}?type=${item.mediaType}`)}
+            />
+          )}
+        />
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
   },
   headerTitle: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '900',
     color: Colors.text,
     letterSpacing: -0.5,
   },
-  savedLabel: {
+  headerSub: {
     ...Typography.caption,
-    color: '#22c55e',
-    marginTop: 1,
+    color: Colors.textMuted,
+    marginTop: 2,
   },
-  progressPill: {
+  mediaToggle: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 5,
+    borderRadius: BorderRadius.lg,
+    padding: 4,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  progressText: {
+  mediaBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: BorderRadius.md,
+  },
+  mediaBtnActive: { backgroundColor: Colors.primary },
+  mediaBtnIcon: { fontSize: 16 },
+  mediaBtnText: {
+    ...Typography.subheading,
+    color: Colors.textMuted,
+  },
+  mediaBtnTextActive: { color: Colors.background },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: Spacing.lg,
+    marginBottom: 8,
+    gap: Spacing.sm,
+  },
+  filterLabel: {
     ...Typography.caption,
     color: Colors.textMuted,
-    fontWeight: '600',
+    width: 44,
+    flexShrink: 0,
   },
-  pills: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
-    paddingBottom: Spacing.md,
+  pillRow: {
+    gap: 8,
+    paddingRight: Spacing.lg,
   },
   pill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.full,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  pillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+  pillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  pillText: { ...Typography.caption, color: Colors.textMuted, fontWeight: '600' },
+  pillTextActive: { color: Colors.background, fontWeight: '700' },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  grid: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: 24,
+    gap: CARD_GAP,
   },
-  pillIcon: {
-    fontSize: 12,
-  },
-  pillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.textMuted,
-  },
-  pillTextActive: {
-    color: Colors.background,
-    fontWeight: '700',
-  },
-  deck: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doneState: {
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.xxl,
-  },
-  doneEmoji: {
-    fontSize: 56,
-  },
-  doneTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.text,
-    textAlign: 'center',
-  },
-  doneSub: {
-    ...Typography.body,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  resetBtn: {
-    marginTop: Spacing.sm,
-    backgroundColor: Colors.primary,
+  row: { gap: CARD_GAP },
+  card: {
+    width: CARD_WIDTH,
     borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: 13,
-  },
-  resetBtnText: {
-    ...Typography.subheading,
-    color: Colors.background,
-    fontWeight: '700',
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xl,
-    paddingVertical: Spacing.lg,
-  },
-  actionBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 99,
-    borderWidth: 2,
-  },
-  skipBtn: {
-    width: 58,
-    height: 58,
-    borderColor: '#ef4444',
-    backgroundColor: 'rgba(239,68,68,0.1)',
-  },
-  infoBtn: {
-    width: 46,
-    height: 46,
-    borderColor: Colors.border,
+    overflow: 'hidden',
     backgroundColor: Colors.surface,
   },
-  saveBtn: {
-    width: 58,
-    height: 58,
-    borderColor: '#22c55e',
-    backgroundColor: 'rgba(34,197,94,0.1)',
+  cardImage: {
+    width: CARD_WIDTH,
+    height: CARD_WIDTH * 1.5,
   },
-  skipIcon: {
-    fontSize: 22,
-    color: '#ef4444',
-    fontWeight: '700',
+  ratingBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: Colors.primary,
   },
-  infoIcon: {
-    fontSize: 18,
+  ratingText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
+  cardInfo: {
+    padding: 8,
+    gap: 2,
+  },
+  cardTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 17,
+  },
+  cardYear: {
+    ...Typography.label,
     color: Colors.textMuted,
-  },
-  saveIcon: {
-    fontSize: 24,
-    color: '#22c55e',
-  },
-  hint: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    paddingBottom: Spacing.md,
-    letterSpacing: 1,
   },
 });
