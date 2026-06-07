@@ -61,11 +61,14 @@ export async function askGemini(
     systemInstruction: buildSystemPrompt(watchedMovies, watchedShows),
   });
 
-  // Convert message history to Gemini format
-  const history = messages.slice(0, -1).map((m) => ({
+  // Convert message history to Gemini format.
+  // Gemini requires history to start with 'user', so drop any leading assistant messages.
+  const allHistory = messages.slice(0, -1).map((m) => ({
     role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
     parts: [{ text: m.content }],
   }));
+  const firstUserIdx = allHistory.findIndex((m) => m.role === 'user');
+  const history = firstUserIdx >= 0 ? allHistory.slice(firstUserIdx) : [];
 
   const lastMessage = messages[messages.length - 1];
 

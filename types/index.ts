@@ -65,6 +65,12 @@ export interface TMDBTVDetail extends TMDBTVShow {
   episode_run_time: number[];
   networks: Network[];
   external_ids?: { imdb_id: string | null; tvdb_id: number | null };
+  next_episode_to_air?: {
+    air_date: string;
+    season_number: number;
+    episode_number: number;
+    name: string | null;
+  } | null;
 }
 
 export interface Genre {

@@ -1,25 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  SafeAreaView,
-  ActivityIndicator,
-  ScrollView,
-  SectionList,
+  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
+  ActivityIndicator, SectionList, TextInput, FlatList,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { format, addDays, startOfToday, isSameDay, parseISO, isAfter, isBefore, addMonths } from 'date-fns';
+import {
+  format, addDays, startOfWeek, endOfWeek, startOfToday,
+  isSameDay, parseISO, isAfter, isBefore, addWeeks,
+} from 'date-fns';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
-import { tmdbApi, getPosterUrl, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
+import { tmdbApi, getPosterUrl } from '../../lib/tmdb';
 import { useWatchlistStore } from '../../store/watchlistStore';
-import type { ContentItem } from '../../types';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface CalendarEntry {
   id: string;
@@ -28,7 +23,7 @@ interface CalendarEntry {
   title: string;
   posterPath: string | null;
   airDate: Date;
-  note: string; // e.g. "Season 3 premiere" or "In cinemas"
+  note: string;
   isFromWatchlist: boolean;
 }
 
@@ -37,10 +32,8 @@ interface CalendarEntry {
 function groupByDate(entries: CalendarEntry[]): { title: string; data: CalendarEntry[] }[] {
   const map = new Map<string, CalendarEntry[]>();
   const today = startOfToday();
-  const cutoff = addMonths(today, 3);
 
   entries
-    .filter((e) => isAfter(e.airDate, addDays(today, -1)) && isBefore(e.airDate, cutoff))
     .sort((a, b) => a.airDate.getTime() - b.airDate.getTime())
     .forEach((entry) => {
       const key = format(entry.airDate, 'yyyy-MM-dd');
@@ -57,56 +50,33 @@ function groupByDate(entries: CalendarEntry[]): { title: string; data: CalendarE
   });
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
-function DateStrip({
-  days,
-  selected,
-  onSelect,
-  highlightedDates,
-}: {
-  days: Date[];
-  selected: Date | null;
-  onSelect: (d: Date | null) => void;
-  highlightedDates: Set<string>;
-}) {
+function WeekNav({ weekOffset, onPrev, onNext }: { weekOffset: number; onPrev: () => void; onNext: () => void }) {
+  const today = startOfToday();
+  const weekStart = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
+  const label = weekOffset === 0 ? 'This Week' : weekOffset === 1 ? 'Next Week' : format(weekStart, 'MMM d') + ' – ' + format(weekEnd, 'MMM d');
+
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.dateStrip}
-    >
+    <View style={styles.weekNav}>
       <TouchableOpacity
-        style={[styles.dayButton, !selected && styles.dayButtonActive]}
-        onPress={() => onSelect(null)}
+        style={[styles.weekArrow, weekOffset === 0 && styles.weekArrowDisabled]}
+        onPress={onPrev}
+        disabled={weekOffset === 0}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={[styles.dayName, !selected && styles.dayTextActive]}>All</Text>
-        <Text style={[styles.dayNumber, !selected && styles.dayTextActive]}>▼</Text>
+        <Text style={[styles.weekArrowText, weekOffset === 0 && styles.weekArrowTextDisabled]}>‹</Text>
       </TouchableOpacity>
-
-      {days.map((day) => {
-        const key = format(day, 'yyyy-MM-dd');
-        const isSelected = selected ? isSameDay(day, selected) : false;
-        const hasEvents = highlightedDates.has(key);
-        const isToday = isSameDay(day, startOfToday());
-        return (
-          <TouchableOpacity
-            key={key}
-            style={[styles.dayButton, isSelected && styles.dayButtonActive]}
-            onPress={() => onSelect(isSelected ? null : day)}
-          >
-            <Text style={[styles.dayName, isSelected && styles.dayTextActive]}>
-              {format(day, 'EEE')}
-            </Text>
-            <Text style={[styles.dayNumber, isSelected && styles.dayTextActive]}>
-              {format(day, 'd')}
-            </Text>
-            {hasEvents && <View style={[styles.dot, isSelected && styles.dotActive]} />}
-            {isToday && !hasEvents && <View style={styles.todayDot} />}
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+      <Text style={styles.weekLabel}>{label}</Text>
+      <TouchableOpacity
+        style={styles.weekArrow}
+        onPress={onNext}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Text style={styles.weekArrowText}>›</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -127,44 +97,66 @@ function CalendarCard({ entry }: { entry: CalendarEntry }) {
         <View style={styles.cardTitleRow}>
           <Text style={styles.cardTitle} numberOfLines={1}>{entry.title}</Text>
           {entry.isFromWatchlist && (
-            <View style={styles.watchlistPip}>
-              <Text style={styles.watchlistPipText}>✓ Saved</Text>
+            <View style={styles.savedPip}>
+              <Text style={styles.savedPipText}>✓</Text>
             </View>
           )}
         </View>
         <Text style={styles.cardNote}>{entry.note}</Text>
-        <Text style={styles.cardDate}>{format(entry.airDate, 'EEEE, MMM d · h:mm a')}</Text>
+        <Text style={styles.cardDate}>{format(entry.airDate, 'EEE, MMM d')}</Text>
       </View>
       <Text style={styles.cardType}>{entry.mediaType === 'movie' ? '🎬' : '📺'}</Text>
     </TouchableOpacity>
   );
 }
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
+// ─── Show search result card ──────────────────────────────────────────────────
+
+function ShowSearchResult({ show, onPress }: { show: any; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.searchResult} onPress={onPress} activeOpacity={0.75}>
+      <Image
+        source={{ uri: getPosterUrl(show.poster_path, 'thumb') ?? '' }}
+        style={styles.searchResultPoster}
+        contentFit="cover"
+      />
+      <View style={styles.searchResultInfo}>
+        <Text style={styles.searchResultTitle} numberOfLines={1}>{show.name}</Text>
+        <Text style={styles.searchResultYear}>{show.first_air_date?.slice(0, 4) ?? ''}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function CalendarScreen() {
   const today = startOfToday();
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const router = useRouter();
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchActive, setSearchActive] = useState(false);
+  const [pinnedShow, setPinnedShow] = useState<{ id: number; name: string } | null>(null);
   const { items: watchlist } = useWatchlistStore();
 
-  const days = useMemo(() => Array.from({ length: 30 }, (_, i) => addDays(today, i)), []);
+  const weekStart = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
 
-  // Upcoming movies (global)
+  // TMDB upcoming movies
   const { data: upcomingMovies, isLoading: moviesLoading } = useQuery({
     queryKey: ['upcoming-movies-cal'],
     queryFn: () => tmdbApi.getUpcomingMovies(),
     staleTime: 1000 * 60 * 60,
   });
 
-  // On-the-air shows (global)
+  // TMDB on-air shows
   const { data: onAirShows, isLoading: showsLoading } = useQuery({
     queryKey: ['on-air-cal'],
     queryFn: () => tmdbApi.getOnTheAir(),
     staleTime: 1000 * 60 * 60,
   });
 
-  // Fetch details for watchlist TV shows to get next_episode_to_air
+  // Watchlist TV show details for next_episode_to_air
   const watchlistShowIds = watchlist.filter((w) => w.media_type === 'tv').map((w) => w.tmdb_id);
   const { data: watchlistShowDetails } = useQuery({
     queryKey: ['watchlist-show-details', watchlistShowIds],
@@ -180,50 +172,64 @@ export default function CalendarScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  // Fetch upcoming movies for watchlist movie entries
-  const watchlistMovieIds = new Set(watchlist.filter((w) => w.media_type === 'movie').map((w) => w.tmdb_id));
+  // TV show search
+  const { data: searchResults, isLoading: searchLoading } = useQuery({
+    queryKey: ['tv-search', searchQuery],
+    queryFn: () => tmdbApi.searchTVShows(searchQuery),
+    enabled: searchQuery.length > 1,
+    staleTime: 1000 * 60 * 5,
+  });
 
-  // Build unified CalendarEntry list
+  // Pinned show details (next episode)
+  const { data: pinnedShowDetail, isLoading: pinnedLoading } = useQuery({
+    queryKey: ['pinned-show', pinnedShow?.id],
+    queryFn: () => tmdbApi.getTVDetail(pinnedShow!.id),
+    enabled: !!pinnedShow,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const watchlistMovieIds = useMemo(
+    () => new Set(watchlist.filter((w) => w.media_type === 'movie').map((w) => w.tmdb_id)),
+    [watchlist]
+  );
+
   const allEntries: CalendarEntry[] = useMemo(() => {
     const entries: CalendarEntry[] = [];
 
-    // Watchlist shows with known next episode
+    // Watchlist shows — use next_episode_to_air
     (watchlistShowDetails ?? []).forEach((show: any) => {
       const next = show.next_episode_to_air;
       if (!next?.air_date) return;
-      const airDate = parseISO(next.air_date);
       entries.push({
         id: `show-next-${show.id}`,
         tmdbId: show.id,
         mediaType: 'tv',
         title: show.name,
         posterPath: show.poster_path,
-        airDate,
+        airDate: parseISO(next.air_date),
         note: `S${String(next.season_number).padStart(2, '0')}E${String(next.episode_number).padStart(2, '0')} — ${next.name ?? 'New episode'}`,
         isFromWatchlist: true,
       });
     });
 
-    // Global upcoming movies
+    // Upcoming movies
     (upcomingMovies ?? []).forEach((m) => {
       if (!m.release_date) return;
       try {
-        const airDate = parseISO(m.release_date);
         entries.push({
           id: `movie-${m.id}`,
           tmdbId: m.id,
           mediaType: 'movie',
           title: m.title,
           posterPath: m.poster_path,
-          airDate,
+          airDate: parseISO(m.release_date),
           note: 'In cinemas',
           isFromWatchlist: watchlistMovieIds.has(m.id),
         });
       } catch {}
     });
 
-    // Global on-air shows — first_air_date is when the show launched, not the next episode.
-    // Pin them to today so they appear in the calendar as "Currently airing".
+    // On-air shows — show as airing today (we don't know exact episode date without details)
     (onAirShows ?? []).slice(0, 20).forEach((s) => {
       if (watchlistShowIds.includes(s.id)) return;
       entries.push({
@@ -233,28 +239,31 @@ export default function CalendarScreen() {
         title: s.name,
         posterPath: s.poster_path,
         airDate: today,
-        note: 'Currently airing 📺',
+        note: 'Currently airing',
         isFromWatchlist: false,
       });
     });
 
     return entries;
-  }, [watchlistShowDetails, upcomingMovies, onAirShows, watchlistMovieIds, watchlistShowIds]);
+  }, [watchlistShowDetails, upcomingMovies, onAirShows, watchlistMovieIds, watchlistShowIds, today]);
 
-  const filteredEntries = useMemo(() => {
-    if (!selectedDate) return allEntries;
-    return allEntries.filter((e) => isSameDay(e.airDate, selectedDate));
-  }, [allEntries, selectedDate]);
+  // Filter to the selected week
+  const weekEntries = useMemo(() =>
+    allEntries.filter((e) =>
+      (isAfter(e.airDate, addDays(weekStart, -1)) || isSameDay(e.airDate, weekStart)) &&
+      (isBefore(e.airDate, addDays(weekEnd, 1)) || isSameDay(e.airDate, weekEnd))
+    ),
+    [allEntries, weekStart, weekEnd]
+  );
 
-  const sections = useMemo(() => groupByDate(filteredEntries), [filteredEntries]);
+  const sections = useMemo(() => groupByDate(weekEntries), [weekEntries]);
 
-  const highlightedDates = useMemo(() => {
-    const s = new Set<string>();
-    allEntries.forEach((e) => s.add(format(e.airDate, 'yyyy-MM-dd')));
-    return s;
-  }, [allEntries]);
+  const handleShowSelect = useCallback((show: any) => {
+    setPinnedShow({ id: show.id, name: show.name });
+    setSearchQuery('');
+    setSearchActive(false);
+  }, []);
 
-  const watchlistEntries = allEntries.filter((e) => e.isFromWatchlist);
   const isLoading = moviesLoading || showsLoading;
 
   return (
@@ -263,42 +272,87 @@ export default function CalendarScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Calendar</Text>
-          <Text style={styles.subtitle}>
-            {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : format(today, 'MMMM yyyy')}
-          </Text>
+          <Text style={styles.subtitle}>{format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}</Text>
         </View>
-        <View style={styles.headerActions}>
-          {watchlistEntries.length > 0 && (
-            <View style={styles.headerBadge}>
-              <Text style={styles.headerBadgeText}>{watchlistEntries.length} saved upcoming</Text>
-            </View>
-          )}
-          <TouchableOpacity
-            style={styles.settingsBtn}
-            onPress={() => router.push('/settings')}
-            activeOpacity={0.8}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.settingsIcon}>⚙</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          onPress={() => router.push('/settings')}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.settingsIcon}>⚙</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Date strip */}
-      <DateStrip
-        days={days}
-        selected={selectedDate}
-        onSelect={setSelectedDate}
-        highlightedDates={highlightedDates}
+      {/* Week navigation */}
+      <WeekNav
+        weekOffset={weekOffset}
+        onPrev={() => setWeekOffset((w) => Math.max(0, w - 1))}
+        onNext={() => setWeekOffset((w) => w + 1)}
       />
 
-      {/* Watchlist upcoming banner */}
-      {watchlistEntries.length > 0 && !selectedDate && (
-        <View style={styles.watchlistBanner}>
-          <Text style={styles.bannerIcon}>✓</Text>
-          <Text style={styles.bannerText}>
-            {watchlistEntries.length} upcoming release{watchlistEntries.length > 1 ? 's' : ''} from your watchlist
-          </Text>
+      {/* Show search */}
+      <View style={styles.searchWrap}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={(t) => { setSearchQuery(t); setSearchActive(true); }}
+            onFocus={() => setSearchActive(true)}
+            placeholder="Search a TV show for episode dates..."
+            placeholderTextColor={Colors.textMuted}
+            selectionColor={Colors.primary}
+            returnKeyType="search"
+          />
+          {(searchQuery.length > 0 || pinnedShow) && (
+            <TouchableOpacity onPress={() => { setSearchQuery(''); setPinnedShow(null); setSearchActive(false); }}>
+              <Text style={styles.clearBtn}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Search results dropdown */}
+        {searchActive && searchQuery.length > 1 && (
+          <View style={styles.searchDropdown}>
+            {searchLoading ? (
+              <ActivityIndicator color={Colors.primary} style={{ padding: 12 }} />
+            ) : (
+              <FlatList
+                data={(searchResults ?? []).slice(0, 6)}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={({ item }) => (
+                  <ShowSearchResult show={item} onPress={() => handleShowSelect(item)} />
+                )}
+                keyboardShouldPersistTaps="handled"
+              />
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Pinned show next episode */}
+      {pinnedShow && (
+        <View style={styles.pinnedCard}>
+          {pinnedLoading ? (
+            <ActivityIndicator color={Colors.primary} />
+          ) : pinnedShowDetail?.next_episode_to_air ? (
+            <>
+              <Text style={styles.pinnedTitle}>{pinnedShow.name}</Text>
+              <Text style={styles.pinnedEp}>
+                S{String(pinnedShowDetail.next_episode_to_air.season_number).padStart(2, '0')}
+                E{String(pinnedShowDetail.next_episode_to_air.episode_number).padStart(2, '0')}
+                {' — '}{pinnedShowDetail.next_episode_to_air.name ?? 'New episode'}
+              </Text>
+              <Text style={styles.pinnedDate}>
+                {format(parseISO(pinnedShowDetail.next_episode_to_air.air_date), 'EEEE, MMMM d, yyyy')}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.pinnedTitle}>{pinnedShow.name}</Text>
+              <Text style={styles.pinnedEp}>No upcoming episodes scheduled</Text>
+            </>
+          )}
         </View>
       )}
 
@@ -308,17 +362,8 @@ export default function CalendarScreen() {
       ) : sections.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>📅</Text>
-          <Text style={styles.emptyTitle}>Nothing scheduled</Text>
-          <Text style={styles.emptyText}>
-            {selectedDate
-              ? 'No releases on this date.'
-              : 'Add shows and movies to your watchlist to see upcoming episodes and releases here.'}
-          </Text>
-          {!watchlist.length && (
-            <TouchableOpacity style={styles.discoverBtn} onPress={() => router.push('/(tabs)')}>
-              <Text style={styles.discoverBtnText}>Browse &amp; Save Titles →</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={styles.emptyTitle}>Nothing this week</Text>
+          <Text style={styles.emptyText}>Try the next week, or search for a show above.</Text>
         </View>
       ) : (
         <SectionList
@@ -327,6 +372,7 @@ export default function CalendarScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.list}
           stickySectionHeadersEnabled={false}
+          keyboardShouldPersistTaps="handled"
           renderSectionHeader={({ section: { title } }) => (
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionHeaderText}>{title}</Text>
@@ -340,228 +386,96 @@ export default function CalendarScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xs,
   },
-  title: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  headerBadge: {
-    backgroundColor: Colors.success + '22',
-    borderWidth: 1,
-    borderColor: Colors.success,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  headerBadgeText: {
-    ...Typography.label,
-    color: Colors.success,
-  },
+  title: { fontSize: 28, fontWeight: '800', color: Colors.text, letterSpacing: -0.5 },
+  subtitle: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
   settingsBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface,
+    borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
-  settingsIcon: {
-    fontSize: 17,
-    color: Colors.textMuted,
+  settingsIcon: { fontSize: 17, color: Colors.textMuted },
+  weekNav: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
-  dateStrip: {
+  weekArrow: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface,
+    borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
+  },
+  weekArrowDisabled: { opacity: 0.3 },
+  weekArrowText: { fontSize: 22, color: Colors.text, lineHeight: 26 },
+  weekArrowTextDisabled: { color: Colors.textMuted },
+  weekLabel: { ...Typography.subheading, color: Colors.text, fontWeight: '700' },
+  searchWrap: {
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.sm,
-  },
-  dayButton: {
-    alignItems: 'center',
-    width: 50,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  dayButtonActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  dayName: {
-    ...Typography.label,
-    color: Colors.textMuted,
-  },
-  dayNumber: {
-    ...Typography.subheading,
-    color: Colors.text,
-  },
-  dayTextActive: {
-    color: Colors.text,
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-    marginTop: 2,
-  },
-  dotActive: {
-    backgroundColor: Colors.text,
-  },
-  todayDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.accent,
-    marginTop: 2,
-  },
-  watchlistBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    backgroundColor: Colors.success + '15',
-    borderWidth: 1,
-    borderColor: Colors.success + '40',
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 10,
-  },
-  bannerIcon: {
-    color: Colors.success,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  bannerText: {
-    ...Typography.body,
-    color: Colors.success,
-  },
-  list: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 32,
-  },
-  sectionHeader: {
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.sm,
-  },
-  sectionHeaderText: {
-    ...Typography.heading,
-    color: Colors.text,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
     marginBottom: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-    ...Shadow.sm,
+    zIndex: 10,
   },
-  cardHighlighted: {
-    borderColor: Colors.success + '60',
-    backgroundColor: Colors.success + '08',
-  },
-  cardPoster: {
-    width: 64,
-    height: 88,
-    backgroundColor: Colors.surfaceElevated,
-  },
-  cardInfo: {
-    flex: 1,
-    padding: Spacing.md,
-    gap: 4,
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  searchBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: Spacing.md, paddingVertical: 10,
     gap: Spacing.sm,
-    flexWrap: 'wrap',
   },
-  cardTitle: {
-    ...Typography.subheading,
-    color: Colors.text,
-    flex: 1,
+  searchIcon: { fontSize: 14 },
+  searchInput: {
+    flex: 1, ...Typography.body, color: Colors.text,
   },
-  watchlistPip: {
-    backgroundColor: Colors.success + '22',
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+  clearBtn: { fontSize: 14, color: Colors.textMuted, paddingHorizontal: 4 },
+  searchDropdown: {
+    backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg,
+    borderWidth: 1, borderColor: Colors.border, marginTop: 4,
+    maxHeight: 280, overflow: 'hidden',
   },
-  watchlistPipText: {
-    ...Typography.label,
-    color: Colors.success,
+  searchResult: {
+    flexDirection: 'row', alignItems: 'center', padding: Spacing.sm,
+    gap: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  cardNote: {
-    ...Typography.caption,
-    color: Colors.primary,
-    fontWeight: '600',
+  searchResultPoster: { width: 40, height: 56, borderRadius: 4, backgroundColor: Colors.surfaceElevated },
+  searchResultInfo: { flex: 1 },
+  searchResultTitle: { ...Typography.body, color: Colors.text, fontWeight: '600' },
+  searchResultYear: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
+  pinnedCard: {
+    marginHorizontal: Spacing.lg, marginBottom: Spacing.sm,
+    backgroundColor: Colors.primary + '15', borderRadius: BorderRadius.lg,
+    borderWidth: 1, borderColor: Colors.primary + '40',
+    padding: Spacing.md, gap: 4,
   },
-  cardDate: {
-    ...Typography.caption,
-    color: Colors.textMuted,
+  pinnedTitle: { ...Typography.subheading, color: Colors.primary, fontWeight: '700' },
+  pinnedEp: { ...Typography.body, color: Colors.text },
+  pinnedDate: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
+  list: { paddingHorizontal: Spacing.lg, paddingBottom: 32 },
+  sectionHeader: { paddingTop: Spacing.lg, paddingBottom: Spacing.sm },
+  sectionHeaderText: { ...Typography.heading, color: Colors.text },
+  card: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg, marginBottom: Spacing.sm,
+    borderWidth: 1, borderColor: Colors.border, overflow: 'hidden', ...Shadow.sm,
   },
-  cardType: {
-    fontSize: 18,
-    paddingRight: Spacing.md,
+  cardHighlighted: { borderColor: Colors.primary + '50', backgroundColor: Colors.primary + '08' },
+  cardPoster: { width: 60, height: 84, backgroundColor: Colors.surfaceElevated },
+  cardInfo: { flex: 1, padding: Spacing.md, gap: 3 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  cardTitle: { ...Typography.subheading, color: Colors.text, flex: 1 },
+  savedPip: {
+    backgroundColor: Colors.primary + '22', borderRadius: BorderRadius.sm,
+    paddingHorizontal: 5, paddingVertical: 1,
   },
+  savedPipText: { ...Typography.label, color: Colors.primary },
+  cardNote: { ...Typography.caption, color: Colors.primary, fontWeight: '600' },
+  cardDate: { ...Typography.caption, color: Colors.textMuted },
+  cardType: { fontSize: 18, paddingRight: Spacing.md },
   empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.md,
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: Spacing.xl, gap: Spacing.md,
   },
-  emptyIcon: {
-    fontSize: 52,
-  },
-  emptyTitle: {
-    ...Typography.heading,
-    color: Colors.textSecondary,
-  },
-  emptyText: {
-    ...Typography.body,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  discoverBtn: {
-    marginTop: Spacing.sm,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: 12,
-    borderRadius: BorderRadius.md,
-  },
-  discoverBtnText: {
-    ...Typography.subheading,
-    color: Colors.text,
-  },
+  emptyIcon: { fontSize: 48 },
+  emptyTitle: { ...Typography.heading, color: Colors.textSecondary },
+  emptyText: { ...Typography.body, color: Colors.textMuted, textAlign: 'center', lineHeight: 22 },
 });
