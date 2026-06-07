@@ -53,10 +53,24 @@ export default function DetailHero({
   const streamingProviders = providers?.flatrate ?? [];
 
   const openStremio = () => {
-    const imdbId = isMovie(detail) ? detail.imdb_id : null;
+    let imdbId: string | null = null;
+    let stremioType: 'movie' | 'series' = 'movie';
+
+    if (isMovie(detail)) {
+      imdbId = detail.imdb_id ?? null;
+      stremioType = 'movie';
+    } else {
+      const tv = detail as TMDBTVDetail;
+      imdbId = tv.external_ids?.imdb_id ?? null;
+      stremioType = 'series';
+    }
+
+    // Deep-link directly into the title inside the Stremio app.
+    // Falls back to the Stremio website if the app isn't installed.
     const url = imdbId
-      ? `stremio:///detail/movie/${imdbId}`
+      ? `stremio:///detail/${stremioType}/${imdbId}`
       : `stremio:///`;
+
     Linking.openURL(url).catch(() => {
       Linking.openURL('https://www.stremio.com');
     });

@@ -118,7 +118,7 @@ export const tmdbApi = {
   getTVDetail: async (id: number): Promise<TMDBTVDetail> => {
     const { data } = await tmdb.get(`/tv/${id}`, {
       params: {
-        append_to_response: 'credits,videos,watch/providers,similar,recommendations',
+        append_to_response: 'credits,videos,watch/providers,similar,recommendations,external_ids',
       },
     });
     return data;
