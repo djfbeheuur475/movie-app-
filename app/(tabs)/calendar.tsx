@@ -222,26 +222,20 @@ export default function CalendarScreen() {
       } catch {}
     });
 
-    // Global on-air shows (only those with a first_air_date in upcoming window)
-    (onAirShows ?? []).forEach((s) => {
-      if (!s.first_air_date) return;
-      // Only add if not already in watchlist section
+    // Global on-air shows — first_air_date is when the show launched, not the next episode.
+    // Pin them to today so they appear in the calendar as "Currently airing".
+    (onAirShows ?? []).slice(0, 20).forEach((s) => {
       if (watchlistShowIds.includes(s.id)) return;
-      try {
-        const airDate = parseISO(s.first_air_date);
-        if (isAfter(airDate, addDays(today, -7))) {
-          entries.push({
-            id: `show-${s.id}`,
-            tmdbId: s.id,
-            mediaType: 'tv',
-            title: s.name,
-            posterPath: s.poster_path,
-            airDate,
-            note: 'Airing now',
-            isFromWatchlist: false,
-          });
-        }
-      } catch {}
+      entries.push({
+        id: `show-${s.id}`,
+        tmdbId: s.id,
+        mediaType: 'tv',
+        title: s.name,
+        posterPath: s.poster_path,
+        airDate: today,
+        note: 'Currently airing 📺',
+        isFromWatchlist: false,
+      });
     });
 
     return entries;
@@ -273,11 +267,21 @@ export default function CalendarScreen() {
             {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : format(today, 'MMMM yyyy')}
           </Text>
         </View>
-        {watchlistEntries.length > 0 && (
-          <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>{watchlistEntries.length} saved upcoming</Text>
-          </View>
-        )}
+        <View style={styles.headerActions}>
+          {watchlistEntries.length > 0 && (
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>{watchlistEntries.length} saved upcoming</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.settingsIcon}>⚙</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Date strip */}
@@ -359,6 +363,11 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 2,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
   headerBadge: {
     backgroundColor: Colors.success + '22',
     borderWidth: 1,
@@ -370,6 +379,20 @@ const styles = StyleSheet.create({
   headerBadgeText: {
     ...Typography.label,
     color: Colors.success,
+  },
+  settingsBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsIcon: {
+    fontSize: 17,
+    color: Colors.textMuted,
   },
   dateStrip: {
     paddingHorizontal: Spacing.lg,

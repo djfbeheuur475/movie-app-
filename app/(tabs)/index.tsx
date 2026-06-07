@@ -115,13 +115,23 @@ export default function HomeScreen() {
             />
             <Text style={styles.logoText}>Next<Text style={styles.logoAccent}>Up</Text></Text>
           </View>
-          <TouchableOpacity
-            style={styles.aiButton}
-            onPress={() => router.push('/(tabs)/ai')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.aiButtonText}>✦ Ask AI</Text>
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => router.push('/settings')}
+              activeOpacity={0.8}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.settingsIcon}>⚙</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.aiButton}
+              onPress={() => router.push('/(tabs)/ai')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.aiButtonText}>✦ Ask AI</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Hero */}
@@ -185,6 +195,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  settingsBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsIcon: {
+    fontSize: 17,
+    color: Colors.textMuted,
   },
   logoWrap: {
     flexDirection: 'row',
