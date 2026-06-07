@@ -4,37 +4,77 @@ import type { TraktWatchedMovie, TraktWatchedShow } from './trakt';
 export interface GeminiReply {
   reply: string;
   tmdbIds: number[];
+  modelUsed: string;
 }
 
-// Tried in order. The first model that responds successfully is used.
+// Model preference order. First model that responds successfully wins.
+// Add newer models to the top; remove deprecated ones from the bottom.
 const MODEL_CASCADE = [
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-1.5-flash-latest',
-];
+] as const;
 
-// Returns a clean, trimmed key and throws a user-friendly error if it's malformed.
+// ─── Key validation ───────────────────────────────────────────────────────────
+
 function validateKey(raw: string): string {
   const key = raw.trim().replace(/[\n\r\t]/g, '');
-  if (!key) throw new Error('No Gemini API key configured. Add one in Settings.');
+  if (!key) {
+    throw new Error('No Gemini API key configured. Add one in Settings.');
+  }
   if (!key.startsWith('AIza')) {
-    throw new Error('Invalid API key format — Gemini keys start with "AIza". Check Settings.');
+    throw new Error(
+      'Invalid API key format — Gemini keys start with "AIza". Check Settings.'
+    );
   }
   return key;
 }
+
+// ─── Diagnostics ─────────────────────────────────────────────────────────────
+
+// Call this to print all models the key can access. Useful for debugging.
+export async function logAvailableModels(apiKey: string): Promise<void> {
+  try {
+    const key = validateKey(apiKey);
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
+    );
+    const data: any = await res.json();
+    if (data.error) {
+      console.warn('[Gemini:listModels] Error:', data.error.status, data.error.message);
+      return;
+    }
+    const names: string[] = (data.models ?? []).map((m: any) => m.name as string);
+    console.log('[Gemini:listModels] All available models:', names);
+    console.log(
+      '[Gemini:listModels] Flash models:',
+      names.filter((n) => n.toLowerCase().includes('flash'))
+    );
+  } catch (e) {
+    console.warn('[Gemini:listModels] Failed to fetch model list:', e);
+  }
+}
+
+// ─── System prompt ────────────────────────────────────────────────────────────
 
 function buildSystemPrompt(
   watchedMovies: TraktWatchedMovie[],
   watchedShows: TraktWatchedShow[]
 ): string {
   const recentMovies = watchedMovies
-    .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
+    .sort(
+      (a, b) =>
+        new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime()
+    )
     .slice(0, 30)
     .map((m) => `${m.movie.title} (${m.movie.year})`)
     .join(', ');
 
   const recentShows = watchedShows
-    .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
+    .sort(
+      (a, b) =>
+        new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime()
+    )
     .slice(0, 20)
     .map((s) => `${s.show.title} (${s.show.year})`)
     .join(', ');
@@ -66,12 +106,17 @@ Respond in JSON with this exact format:
 { "reply": "your message here", "tmdbIds": [12345, 67890] }`;
 }
 
-function parseResponse(text: string): GeminiReply {
+// ─── Response parsing ─────────────────────────────────────────────────────────
+
+function parseResponse(text: string): Omit<GeminiReply, 'modelUsed'> {
   try {
-    const jsonStr = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+    const jsonStr = text
+      .replace(/^```json\n?/, '')
+      .replace(/\n?```$/, '')
+      .trim();
     const parsed = JSON.parse(jsonStr);
     return {
-      reply: parsed.reply ?? text,
+      reply: typeof parsed.reply === 'string' ? parsed.reply : text,
       tmdbIds: Array.isArray(parsed.tmdbIds) ? parsed.tmdbIds : [],
     };
   } catch {
@@ -79,17 +124,22 @@ function parseResponse(text: string): GeminiReply {
   }
 }
 
+// ─── Model fallback detection ─────────────────────────────────────────────────
+
 function isModelUnavailableError(e: unknown): boolean {
-  const msg = (e as any)?.message ?? '';
+  const msg = String((e as any)?.message ?? '');
   return (
     msg.includes('404') ||
     msg.includes('not found') ||
+    msg.includes('NOT_FOUND') ||
     msg.includes('MODEL_NOT_FOUND') ||
     msg.includes('not supported') ||
     msg.includes('deprecated') ||
     msg.includes('INVALID_ARGUMENT')
   );
 }
+
+// ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function askGemini(
   apiKey: string,
@@ -101,7 +151,7 @@ export async function askGemini(
   const genAI = new GoogleGenerativeAI(key);
   const systemInstruction = buildSystemPrompt(watchedMovies, watchedShows);
 
-  // Gemini requires history to start with 'user', so drop any leading assistant messages.
+  // Gemini requires chat history to start with 'user'. Drop any leading assistant messages.
   const allHistory = messages.slice(0, -1).map((m) => ({
     role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
     parts: [{ text: m.content }],
@@ -114,15 +164,23 @@ export async function askGemini(
 
   for (let i = 0; i < MODEL_CASCADE.length; i++) {
     const modelId = MODEL_CASCADE[i];
+    console.log(`[Gemini] Trying model ${i + 1}/${MODEL_CASCADE.length}: ${modelId}`);
+
     try {
       const model = genAI.getGenerativeModel({ model: modelId, systemInstruction });
       const chat = model.startChat({ history });
       const result = await chat.sendMessage(lastMessage.content);
-      return parseResponse(result.response.text().trim());
+      const parsed = parseResponse(result.response.text().trim());
+      console.log(`[Gemini] Success with model: ${modelId}`);
+      return { ...parsed, modelUsed: modelId };
     } catch (e) {
       lastError = e;
+      const errMsg = String((e as any)?.message ?? '').slice(0, 120);
+      console.warn(`[Gemini] Model ${modelId} failed: ${errMsg}`);
+
       const isLast = i === MODEL_CASCADE.length - 1;
       if (!isLast && isModelUnavailableError(e)) {
+        console.log(`[Gemini] Model unavailable — trying next fallback...`);
         continue;
       }
       throw e;
