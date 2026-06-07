@@ -2,7 +2,15 @@ import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Config } from '../constants/config';
 
-export const supabase = createClient(Config.SUPABASE_URL, Config.SUPABASE_ANON_KEY, {
+// createClient throws if URL is empty string, which crashes the entire import
+// chain (authStore, watchlistStore, _layout) before React even mounts.
+// Use safe placeholder values so the client initialises without credentials;
+// all auth/DB calls will fail gracefully with network errors until the user
+// enters real credentials via the welcome screen or settings.
+const supabaseUrl = Config.SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = Config.SUPABASE_ANON_KEY || 'placeholder-anon-key';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,

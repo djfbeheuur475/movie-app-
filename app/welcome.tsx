@@ -71,7 +71,7 @@ export default function WelcomeScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient
-        colors={['#1a0000', '#0d0d0d', Colors.background]}
+        colors={['#1a0e00', '#0d0d0d', Colors.background]}
         locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFill}
       />
