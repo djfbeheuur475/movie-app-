@@ -34,7 +34,6 @@
     "expo-web-browser": "^56.0.5",
     "express": "^5.2.1",
     "helmet": "^8.2.0",
-    "nativewind": "^4.2.4",
     "node-fetch": "^3.3.2",
     "react": "19.2.3",
     "react-native": "0.85.3",
@@ -45,7 +44,7 @@
     "react-native-screens": "^4.25.2",
     "react-native-svg": "^15.15.5",
     "react-native-webview": "^13.16.1",
-    "tailwindcss": "^4.3.0",
+    "react-native-worklets": "^0.9.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
