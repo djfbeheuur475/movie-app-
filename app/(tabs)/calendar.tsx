@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  ActivityIndicator, SectionList, TextInput, FlatList, ScrollView,
+  ActivityIndicator, SectionList, TextInput, FlatList,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
@@ -113,6 +114,7 @@ export default function CalendarScreen() {
   const today = startOfToday();
   const router = useRouter();
   const [weekOffset, setWeekOffset] = useState(0);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [pinnedShow, setPinnedShow] = useState<{ id: number; name: string } | null>(null);
@@ -262,25 +264,45 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Week toggle pills */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.weekPills}
-      >
-        {Array.from({ length: WEEK_COUNT }, (_, i) => (
-          <TouchableOpacity
-            key={i}
-            style={[styles.weekPill, weekOffset === i && styles.weekPillActive]}
-            onPress={() => setWeekOffset(i)}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.weekPillText, weekOffset === i && styles.weekPillTextActive]}>
-              {weekLabel(i, today)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Week dropdown */}
+      <View style={styles.weekDropdownWrap}>
+        <TouchableOpacity
+          style={styles.weekDropdownTrigger}
+          onPress={() => setDropdownOpen((v) => !v)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.weekDropdownLabel}>{weekLabel(weekOffset, today)}</Text>
+          <Ionicons
+            name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={Colors.textMuted}
+          />
+        </TouchableOpacity>
+
+        {dropdownOpen && (
+          <View style={styles.weekDropdownList}>
+            {Array.from({ length: WEEK_COUNT }, (_, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[
+                  styles.weekDropdownItem,
+                  i === WEEK_COUNT - 1 && styles.weekDropdownItemLast,
+                  weekOffset === i && styles.weekDropdownItemActive,
+                ]}
+                onPress={() => { setWeekOffset(i); setDropdownOpen(false); }}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.weekDropdownItemText, weekOffset === i && styles.weekDropdownItemTextActive]}>
+                  {weekLabel(i, today)}
+                </Text>
+                {weekOffset === i && (
+                  <Ionicons name="checkmark" size={16} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
 
       {/* Show search */}
       <View style={styles.searchWrap}>
@@ -390,26 +412,59 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
   settingsIcon: { fontSize: 17, color: Colors.textMuted },
-  weekPills: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    gap: 8,
+  weekDropdownWrap: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+    zIndex: 20,
   },
-  weekPill: {
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: BorderRadius.full,
+  weekDropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: Colors.surface,
-    borderWidth: 1, borderColor: Colors.border,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
   },
-  weekPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+  weekDropdownLabel: {
+    ...Typography.subheading,
+    color: Colors.text,
+    fontWeight: '600',
   },
-  weekPillText: {
-    ...Typography.caption, color: Colors.textMuted, fontWeight: '600',
+  weekDropdownList: {
+    marginTop: 4,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    ...Shadow.sm,
   },
-  weekPillTextActive: {
-    color: Colors.background, fontWeight: '700',
+  weekDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  weekDropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  weekDropdownItemActive: {
+    backgroundColor: Colors.primary + '18',
+  },
+  weekDropdownItemText: {
+    ...Typography.body,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  weekDropdownItemTextActive: {
+    color: Colors.primary,
+    fontWeight: '700',
   },
   searchWrap: {
     paddingHorizontal: Spacing.lg,
