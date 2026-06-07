@@ -15,7 +15,7 @@ interface PreferencesState {
   loadFromStorage: () => Promise<void>;
 }
 
-const STORAGE_KEY = 'cineai_preferences';
+const STORAGE_KEY = 'nextup_preferences';
 
 export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   favoriteGenres: [],

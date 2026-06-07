@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "CineAI",
-    "slug": "cineai",
+    "name": "NextUp",
+    "slug": "nextup",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "cineai",
+    "scheme": "nextup",
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#0a0a0a"
       },
-      "package": "com.cineai.app",
+      "package": "com.nextup.app",
       "versionCode": 1,
       "permissions": [
         "android.permission.INTERNET",
@@ -23,7 +23,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.cineai.app"
+      "bundleIdentifier": "com.nextup.app"
     },
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -42,7 +42,7 @@
       [
         "expo-notifications",
         {
-          "color": "#e50914"
+          "color": "#f59e0b"
         }
       ]
     ],

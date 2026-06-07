@@ -11,6 +11,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -53,7 +54,7 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
-      const redirectUri = AuthSession.makeRedirectUri({ scheme: 'cineai', path: 'auth/callback' });
+      const redirectUri = AuthSession.makeRedirectUri({ scheme: 'nextup', path: 'auth/callback' });
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -109,7 +110,12 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Logo */}
         <View style={styles.logoArea}>
-          <Text style={styles.logoText}>CINE<Text style={styles.logoAccent}>AI</Text></Text>
+          <Image
+            source={require('../../assets/icon.png')}
+            style={styles.logoImage}
+            contentFit="contain"
+          />
+          <Text style={styles.logoText}>Next<Text style={styles.logoAccent}>Up</Text></Text>
           <Text style={styles.logoTagline}>DISCOVER · TRACK · EXPERIENCE</Text>
         </View>
 
@@ -224,6 +230,12 @@ const styles = StyleSheet.create({
   },
   logoAccent: {
     color: Colors.primary,
+  },
+  logoImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    marginBottom: 12,
   },
   logoTagline: {
     ...Typography.caption,
