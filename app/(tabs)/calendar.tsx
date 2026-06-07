@@ -13,7 +13,9 @@ import {
 } from 'date-fns';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { tmdbApi, getPosterUrl } from '../../lib/tmdb';
+import { traktApi } from '../../lib/trakt';
 import { useWatchlistStore } from '../../store/watchlistStore';
+import { useApiKeysStore } from '../../store/apiKeysStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -51,14 +53,13 @@ function groupByDate(entries: CalendarEntry[]): { title: string; data: CalendarE
   });
 }
 
-const WEEK_COUNT = 6;
+const PERIOD_OPTIONS = [
+  { offset: 0, label: 'This Week' },
+  { offset: 1, label: 'Next Week' },
+  { offset: 2, label: 'Upcoming' },
+] as const;
 
-function weekLabel(offset: number, today: Date): string {
-  if (offset === 0) return 'This Week';
-  if (offset === 1) return 'Next Week';
-  const start = startOfWeek(addWeeks(today, offset), { weekStartsOn: 1 });
-  return format(start, 'MMM d');
-}
+type PeriodOffset = 0 | 1 | 2;
 
 function CalendarCard({ entry }: { entry: CalendarEntry }) {
   const router = useRouter();
@@ -85,12 +86,15 @@ function CalendarCard({ entry }: { entry: CalendarEntry }) {
         <Text style={styles.cardNote}>{entry.note}</Text>
         <Text style={styles.cardDate}>{format(entry.airDate, 'EEE, MMM d')}</Text>
       </View>
-      <Text style={styles.cardType}>{entry.mediaType === 'movie' ? '🎬' : '📺'}</Text>
+      <Ionicons
+        name={entry.mediaType === 'movie' ? 'film-outline' : 'tv-outline'}
+        size={18}
+        color={Colors.textMuted}
+        style={styles.cardTypeIcon}
+      />
     </TouchableOpacity>
   );
 }
-
-// ─── Show search result card ──────────────────────────────────────────────────
 
 function ShowSearchResult({ show, onPress }: { show: any; onPress: () => void }) {
   return (
@@ -113,32 +117,32 @@ function ShowSearchResult({ show, onPress }: { show: any; onPress: () => void })
 export default function CalendarScreen() {
   const today = startOfToday();
   const router = useRouter();
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState<PeriodOffset>(0);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [pinnedShow, setPinnedShow] = useState<{ id: number; name: string } | null>(null);
+
   const { items: watchlist } = useWatchlistStore();
+  const { traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
+  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
 
   const weekStart = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
   const weekEnd = endOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
+  const currentPeriodLabel = PERIOD_OPTIONS.find((o) => o.offset === weekOffset)?.label ?? 'This Week';
 
-  // TMDB upcoming movies
+  // ── TMDB upcoming movies ──────────────────────────────────────────────────
+
   const { data: upcomingMovies, isLoading: moviesLoading } = useQuery({
     queryKey: ['upcoming-movies-cal'],
     queryFn: () => tmdbApi.getUpcomingMovies(),
     staleTime: 1000 * 60 * 60,
   });
 
-  // TMDB on-air shows
-  const { data: onAirShows, isLoading: showsLoading } = useQuery({
-    queryKey: ['on-air-cal'],
-    queryFn: () => tmdbApi.getOnTheAir(),
-    staleTime: 1000 * 60 * 60,
-  });
+  // ── Watchlist TV shows → next_episode_to_air ──────────────────────────────
 
-  // Watchlist TV show details for next_episode_to_air
   const watchlistShowIds = watchlist.filter((w) => w.media_type === 'tv').map((w) => w.tmdb_id);
+
   const { data: watchlistShowDetails } = useQuery({
     queryKey: ['watchlist-show-details', watchlistShowIds],
     queryFn: async () => {
@@ -153,7 +157,43 @@ export default function CalendarScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  // TV show search
+  // ── Trakt history → top shows not already in watchlist ───────────────────
+
+  const { data: traktWatchedShows } = useQuery({
+    queryKey: ['trakt-cal-shows', traktClientId, traktUsername, traktAccessToken],
+    queryFn: () =>
+      traktAccessToken
+        ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
+        : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+    enabled: hasTrakt,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const traktShowTmdbIds = useMemo(() => {
+    if (!traktWatchedShows?.length) return [];
+    return traktWatchedShows
+      .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
+      .map((s) => s.show.ids.tmdb)
+      .filter((id) => id && !watchlistShowIds.includes(id))
+      .slice(0, 12);
+  }, [traktWatchedShows, watchlistShowIds]);
+
+  const { data: traktShowDetails, isLoading: traktShowsLoading } = useQuery({
+    queryKey: ['trakt-show-details-cal', traktShowTmdbIds],
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        traktShowTmdbIds.map((id) => tmdbApi.getTVDetail(id))
+      );
+      return results
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .map((r) => r.value);
+    },
+    enabled: traktShowTmdbIds.length > 0,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  // ── TV show search ────────────────────────────────────────────────────────
+
   const { data: searchResults, isLoading: searchLoading } = useQuery({
     queryKey: ['tv-search', searchQuery],
     queryFn: () => tmdbApi.searchTVShows(searchQuery),
@@ -161,13 +201,16 @@ export default function CalendarScreen() {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Pinned show details (next episode)
+  // ── Pinned show next episode ──────────────────────────────────────────────
+
   const { data: pinnedShowDetail, isLoading: pinnedLoading } = useQuery({
     queryKey: ['pinned-show', pinnedShow?.id],
     queryFn: () => tmdbApi.getTVDetail(pinnedShow!.id),
     enabled: !!pinnedShow,
     staleTime: 1000 * 60 * 30,
   });
+
+  // ── Build entries ─────────────────────────────────────────────────────────
 
   const watchlistMovieIds = useMemo(
     () => new Set(watchlist.filter((w) => w.media_type === 'movie').map((w) => w.tmdb_id)),
@@ -193,6 +236,22 @@ export default function CalendarScreen() {
       });
     });
 
+    // Trakt history shows — use next_episode_to_air
+    (traktShowDetails ?? []).forEach((show: any) => {
+      const next = show.next_episode_to_air;
+      if (!next?.air_date) return;
+      entries.push({
+        id: `trakt-show-${show.id}`,
+        tmdbId: show.id,
+        mediaType: 'tv',
+        title: show.name,
+        posterPath: show.poster_path,
+        airDate: parseISO(next.air_date),
+        note: `S${String(next.season_number).padStart(2, '0')}E${String(next.episode_number).padStart(2, '0')} — ${next.name ?? 'New episode'}`,
+        isFromWatchlist: false,
+      });
+    });
+
     // Upcoming movies
     (upcomingMovies ?? []).forEach((m) => {
       if (!m.release_date) return;
@@ -210,32 +269,24 @@ export default function CalendarScreen() {
       } catch {}
     });
 
-    // On-air shows — show as airing today (we don't know exact episode date without details)
-    (onAirShows ?? []).slice(0, 20).forEach((s) => {
-      if (watchlistShowIds.includes(s.id)) return;
-      entries.push({
-        id: `show-${s.id}`,
-        tmdbId: s.id,
-        mediaType: 'tv',
-        title: s.name,
-        posterPath: s.poster_path,
-        airDate: today,
-        note: 'Currently airing',
-        isFromWatchlist: false,
-      });
-    });
-
     return entries;
-  }, [watchlistShowDetails, upcomingMovies, onAirShows, watchlistMovieIds, watchlistShowIds, today]);
+  }, [watchlistShowDetails, traktShowDetails, upcomingMovies, watchlistMovieIds]);
 
-  // Filter to the selected week
-  const weekEntries = useMemo(() =>
-    allEntries.filter((e) =>
-      (isAfter(e.airDate, addDays(weekStart, -1)) || isSameDay(e.airDate, weekStart)) &&
-      (isBefore(e.airDate, addDays(weekEnd, 1)) || isSameDay(e.airDate, weekEnd))
-    ),
-    [allEntries, weekStart, weekEnd]
-  );
+  // ── Filter by selected period ─────────────────────────────────────────────
+
+  const weekEntries = useMemo(() => {
+    if (weekOffset === 2) {
+      // "Upcoming" — everything from today onwards, no end cap
+      return allEntries.filter(
+        (e) => isAfter(e.airDate, addDays(today, -1)) || isSameDay(e.airDate, today)
+      );
+    }
+    return allEntries.filter(
+      (e) =>
+        (isAfter(e.airDate, addDays(weekStart, -1)) || isSameDay(e.airDate, weekStart)) &&
+        (isBefore(e.airDate, addDays(weekEnd, 1)) || isSameDay(e.airDate, weekEnd))
+    );
+  }, [allEntries, weekOffset, weekStart, weekEnd, today]);
 
   const sections = useMemo(() => groupByDate(weekEntries), [weekEntries]);
 
@@ -245,7 +296,7 @@ export default function CalendarScreen() {
     setSearchActive(false);
   }, []);
 
-  const isLoading = moviesLoading || showsLoading;
+  const isLoading = moviesLoading || traktShowsLoading;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -253,25 +304,29 @@ export default function CalendarScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Calendar</Text>
-          <Text style={styles.subtitle}>{format(weekStart, 'MMMM yyyy')}</Text>
+          <Text style={styles.subtitle}>
+            {weekOffset === 2
+              ? 'All upcoming releases'
+              : format(weekStart, 'MMMM yyyy')}
+          </Text>
         </View>
         <TouchableOpacity
           style={styles.settingsBtn}
           onPress={() => router.push('/settings')}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={styles.settingsIcon}>⚙</Text>
+          <Ionicons name="settings-outline" size={18} color={Colors.textMuted} />
         </TouchableOpacity>
       </View>
 
-      {/* Week dropdown */}
+      {/* Period dropdown */}
       <View style={styles.weekDropdownWrap}>
         <TouchableOpacity
           style={styles.weekDropdownTrigger}
           onPress={() => setDropdownOpen((v) => !v)}
           activeOpacity={0.8}
         >
-          <Text style={styles.weekDropdownLabel}>{weekLabel(weekOffset, today)}</Text>
+          <Text style={styles.weekDropdownLabel}>{currentPeriodLabel}</Text>
           <Ionicons
             name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
             size={16}
@@ -281,21 +336,24 @@ export default function CalendarScreen() {
 
         {dropdownOpen && (
           <View style={styles.weekDropdownList}>
-            {Array.from({ length: WEEK_COUNT }, (_, i) => (
+            {PERIOD_OPTIONS.map((opt, i) => (
               <TouchableOpacity
-                key={i}
+                key={opt.offset}
                 style={[
                   styles.weekDropdownItem,
-                  i === WEEK_COUNT - 1 && styles.weekDropdownItemLast,
-                  weekOffset === i && styles.weekDropdownItemActive,
+                  i === PERIOD_OPTIONS.length - 1 && styles.weekDropdownItemLast,
+                  weekOffset === opt.offset && styles.weekDropdownItemActive,
                 ]}
-                onPress={() => { setWeekOffset(i); setDropdownOpen(false); }}
+                onPress={() => { setWeekOffset(opt.offset); setDropdownOpen(false); }}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.weekDropdownItemText, weekOffset === i && styles.weekDropdownItemTextActive]}>
-                  {weekLabel(i, today)}
+                <Text style={[
+                  styles.weekDropdownItemText,
+                  weekOffset === opt.offset && styles.weekDropdownItemTextActive,
+                ]}>
+                  {opt.label}
                 </Text>
-                {weekOffset === i && (
+                {weekOffset === opt.offset && (
                   <Ionicons name="checkmark" size={16} color={Colors.primary} />
                 )}
               </TouchableOpacity>
@@ -307,7 +365,7 @@ export default function CalendarScreen() {
       {/* Show search */}
       <View style={styles.searchWrap}>
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
@@ -320,12 +378,11 @@ export default function CalendarScreen() {
           />
           {(searchQuery.length > 0 || pinnedShow) && (
             <TouchableOpacity onPress={() => { setSearchQuery(''); setPinnedShow(null); setSearchActive(false); }}>
-              <Text style={styles.clearBtn}>✕</Text>
+              <Ionicons name="close" size={16} color={Colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Search results dropdown */}
         {searchActive && searchQuery.length > 1 && (
           <View style={styles.searchDropdown}>
             {searchLoading ? (
@@ -375,9 +432,15 @@ export default function CalendarScreen() {
         <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
       ) : sections.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>📅</Text>
-          <Text style={styles.emptyTitle}>Nothing this week</Text>
-          <Text style={styles.emptyText}>Try the next week, or search for a show above.</Text>
+          <Ionicons name="calendar-outline" size={48} color={Colors.textMuted} />
+          <Text style={styles.emptyTitle}>
+            {hasTrakt ? 'Nothing scheduled' : 'Connect Trakt to see your shows'}
+          </Text>
+          <Text style={styles.emptyText}>
+            {hasTrakt
+              ? 'Try "Upcoming" or search for a show above.'
+              : 'Go to Settings → Trakt to connect your account.'}
+          </Text>
         </View>
       ) : (
         <SectionList
@@ -411,82 +474,38 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface,
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
-  settingsIcon: { fontSize: 17, color: Colors.textMuted },
-  weekDropdownWrap: {
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
-    zIndex: 20,
-  },
+  weekDropdownWrap: { marginHorizontal: Spacing.lg, marginBottom: Spacing.sm, zIndex: 20 },
   weekDropdownTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
-  },
-  weekDropdownLabel: {
-    ...Typography.subheading,
-    color: Colors.text,
-    fontWeight: '600',
-  },
-  weekDropdownList: {
-    marginTop: 4,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-    ...Shadow.sm,
-  },
-  weekDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  weekDropdownItemLast: {
-    borderBottomWidth: 0,
-  },
-  weekDropdownItemActive: {
-    backgroundColor: Colors.primary + '18',
-  },
-  weekDropdownItemText: {
-    ...Typography.body,
-    color: Colors.text,
-    fontWeight: '500',
-  },
-  weekDropdownItemTextActive: {
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  searchWrap: {
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
-    zIndex: 10,
-  },
-  searchBox: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
     borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: Spacing.md, paddingVertical: 10,
-    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md, paddingVertical: 12,
   },
-  searchIcon: { fontSize: 14 },
-  searchInput: {
-    flex: 1, ...Typography.body, color: Colors.text,
+  weekDropdownLabel: { ...Typography.subheading, color: Colors.text, fontWeight: '600' },
+  weekDropdownList: {
+    marginTop: 4, backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.lg, borderWidth: 1, borderColor: Colors.border,
+    overflow: 'hidden', ...Shadow.sm,
   },
-  clearBtn: { fontSize: 14, color: Colors.textMuted, paddingHorizontal: 4 },
+  weekDropdownItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  weekDropdownItemLast: { borderBottomWidth: 0 },
+  weekDropdownItemActive: { backgroundColor: Colors.primary + '18' },
+  weekDropdownItemText: { ...Typography.body, color: Colors.text, fontWeight: '500' },
+  weekDropdownItemTextActive: { color: Colors.primary, fontWeight: '700' },
+  searchWrap: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm, zIndex: 10 },
+  searchBox: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg, borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: Spacing.md, paddingVertical: 10, gap: Spacing.sm,
+  },
+  searchInput: { flex: 1, ...Typography.body, color: Colors.text },
   searchDropdown: {
     backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg,
-    borderWidth: 1, borderColor: Colors.border, marginTop: 4,
-    maxHeight: 280, overflow: 'hidden',
+    borderWidth: 1, borderColor: Colors.border, marginTop: 4, maxHeight: 280, overflow: 'hidden',
   },
   searchResult: {
     flexDirection: 'row', alignItems: 'center', padding: Spacing.sm,
@@ -499,8 +518,7 @@ const styles = StyleSheet.create({
   pinnedCard: {
     marginHorizontal: Spacing.lg, marginBottom: Spacing.sm,
     backgroundColor: Colors.primary + '15', borderRadius: BorderRadius.lg,
-    borderWidth: 1, borderColor: Colors.primary + '40',
-    padding: Spacing.md, gap: 4,
+    borderWidth: 1, borderColor: Colors.primary + '40', padding: Spacing.md, gap: 4,
   },
   pinnedTitle: { ...Typography.subheading, color: Colors.primary, fontWeight: '700' },
   pinnedEp: { ...Typography.body, color: Colors.text },
@@ -525,12 +543,11 @@ const styles = StyleSheet.create({
   savedPipText: { ...Typography.label, color: Colors.primary },
   cardNote: { ...Typography.caption, color: Colors.primary, fontWeight: '600' },
   cardDate: { ...Typography.caption, color: Colors.textMuted },
-  cardType: { fontSize: 18, paddingRight: Spacing.md },
+  cardTypeIcon: { marginRight: Spacing.md },
   empty: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: Spacing.xl, gap: Spacing.md,
   },
-  emptyIcon: { fontSize: 48 },
   emptyTitle: { ...Typography.heading, color: Colors.textSecondary },
   emptyText: { ...Typography.body, color: Colors.textMuted, textAlign: 'center', lineHeight: 22 },
 });

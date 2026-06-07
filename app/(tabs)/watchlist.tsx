@@ -13,7 +13,6 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { useWatchlistStore } from '../../store/watchlistStore';
-import { useAuthStore } from '../../store/authStore';
 import { getPosterUrl } from '../../lib/tmdb';
 import type { WatchlistItem } from '../../types';
 
@@ -56,7 +55,6 @@ function WatchlistCard({ item, onRemove }: { item: WatchlistItem; onRemove: () =
 export default function WatchlistScreen() {
   const router = useRouter();
   const { items, removeFromWatchlist } = useWatchlistStore();
-  const { isAuthenticated, user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
 
@@ -105,47 +103,6 @@ export default function WatchlistScreen() {
           <Text style={styles.settingsIcon}>⚙</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Account card (if not signed in) */}
-      {!isAuthenticated && (
-        <TouchableOpacity
-          style={styles.accountCard}
-          onPress={() => router.push('/(auth)/login')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.accountCardInner}>
-            <View style={styles.accountAvatar}>
-              <Text style={styles.accountAvatarText}>?</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.accountName}>Guest User</Text>
-              <Text style={styles.accountEmail}>Sign in to sync across devices →</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      )}
-
-      {isAuthenticated && (
-        <View style={styles.accountCard}>
-          <View style={styles.accountCardInner}>
-            <View style={styles.accountAvatar}>
-              <Text style={styles.accountAvatarText}>
-                {(user?.displayName ?? user?.email ?? '?')[0].toUpperCase()}
-              </Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.accountName}>{user?.displayName ?? 'User'}</Text>
-              <Text style={styles.accountEmail}>{user?.email ?? ''}</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => router.push('/settings')}
-              style={styles.manageKeysBtn}
-            >
-              <Text style={styles.manageKeysBtnText}>Settings</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
       {/* Status filter tabs */}
       <View style={styles.filterTabsWrap}>
