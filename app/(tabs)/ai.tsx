@@ -130,12 +130,18 @@ export default function AITabScreen() {
       ]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (e: any) {
+      const msg = e?.message ?? '';
+      const userFacing = msg.includes('API_KEY_INVALID') || msg.includes('400')
+        ? "Your Gemini API key is invalid. Go to Settings and paste a fresh key from aistudio.google.com."
+        : msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')
+        ? "Gemini quota exceeded. Check your usage at aistudio.google.com or try again shortly."
+        : "Something went wrong reaching the AI. Check your Gemini API key in Settings.";
       setMessages((prev) => [
         ...prev,
         {
           id: newId(),
           role: 'assistant',
-          content: `Sorry, something went wrong: ${e?.message ?? 'Unknown error'}. Check your Gemini API key in Settings.`,
+          content: userFacing,
           timestamp: new Date(),
         },
       ]);

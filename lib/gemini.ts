@@ -49,6 +49,10 @@ Respond in JSON with this exact format:
 { "reply": "your message here", "tmdbIds": [12345, 67890] }`;
 }
 
+// Update this string to use a newer model when released. Aliases:
+// gemini-2.5-flash, gemini-2.5-pro, gemini-flash-latest, gemini-pro-latest
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
 export async function askGemini(
   apiKey: string,
   messages: { role: 'user' | 'assistant'; content: string }[],
@@ -57,7 +61,7 @@ export async function askGemini(
 ): Promise<GeminiReply> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: GEMINI_MODEL,
     systemInstruction: buildSystemPrompt(watchedMovies, watchedShows),
   });
 
