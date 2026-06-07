@@ -13,6 +13,7 @@ import {
   Linking,
   Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants/theme';
@@ -71,7 +72,7 @@ export default function WelcomeScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient
-        colors={['#1a0000', '#0d0d0d', Colors.background]}
+        colors={['#1a0e00', '#0d0d0d', Colors.background]}
         locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -79,7 +80,12 @@ export default function WelcomeScreen() {
       {/* Step: Intro */}
       {step === 'intro' && (
         <View style={styles.center}>
-          <Text style={styles.logo}>CINE<Text style={styles.logoAccent}>AI</Text></Text>
+          <Image
+            source={require('../assets/icon.png')}
+            style={styles.logoImage}
+            contentFit="contain"
+          />
+          <Text style={styles.logo}>Next<Text style={styles.logoAccent}>Up</Text></Text>
           <Text style={styles.tagline}>DISCOVER · TRACK · EXPERIENCE</Text>
 
           <View style={styles.featureList}>
@@ -99,7 +105,7 @@ export default function WelcomeScreen() {
 
           <View style={styles.disclaimer}>
             <Text style={styles.disclaimerText}>
-              CineAI uses free third-party APIs.{'\n'}
+              NextUp uses free third-party APIs.{'\n'}
               You'll need a free TMDB API key to get started.
             </Text>
           </View>
@@ -274,6 +280,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    marginBottom: 12,
   },
   logo: {
     fontSize: 60,

@@ -170,7 +170,7 @@ export default function AITabScreen() {
               style={styles.input}
               value={input}
               onChangeText={setInput}
-              placeholder="Message CineAI..."
+              placeholder="Message NextUp AI..."
               placeholderTextColor={Colors.textMuted}
               multiline
               maxLength={500}
@@ -219,7 +219,7 @@ export default function AITabScreen() {
               style={styles.input}
               value={input}
               onChangeText={setInput}
-              placeholder="Message CineAI..."
+              placeholder="Message NextUp AI..."
               placeholderTextColor={Colors.textMuted}
               multiline
               maxLength={500}

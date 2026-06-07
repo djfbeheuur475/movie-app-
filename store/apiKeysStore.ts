@@ -2,11 +2,11 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 
 const KEYS = {
-  tmdb: 'cineai_tmdb_api_key',
-  backendUrl: 'cineai_backend_url',
-  supabaseUrl: 'cineai_supabase_url',
-  supabaseAnon: 'cineai_supabase_anon_key',
-  setupDone: 'cineai_setup_done',
+  tmdb: 'nextup_tmdb_api_key',
+  backendUrl: 'nextup_backend_url',
+  supabaseUrl: 'nextup_supabase_url',
+  supabaseAnon: 'nextup_supabase_anon_key',
+  setupDone: 'nextup_setup_done',
 } as const;
 
 interface ApiKeysState {

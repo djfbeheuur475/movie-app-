@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   RefreshControl,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
@@ -107,10 +108,12 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoWrap}>
-            <View style={styles.logoIcon}>
-              <Text style={styles.logoIconText}>▶</Text>
-            </View>
-            <Text style={styles.logoText}>CINE<Text style={styles.logoAccent}>AI</Text></Text>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.logoImage}
+              contentFit="contain"
+            />
+            <Text style={styles.logoText}>Next<Text style={styles.logoAccent}>Up</Text></Text>
           </View>
           <TouchableOpacity
             style={styles.aiButton}
@@ -188,18 +191,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  logoIcon: {
-    width: 32,
-    height: 32,
+  logoImage: {
+    width: 34,
+    height: 34,
     borderRadius: 8,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoIconText: {
-    fontSize: 14,
-    color: Colors.background,
-    fontWeight: '900',
   },
   logoText: {
     fontSize: 22,

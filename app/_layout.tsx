@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
@@ -9,6 +10,9 @@ import { useAuthStore } from '../store/authStore';
 import { usePreferencesStore } from '../store/preferencesStore';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { Colors } from '../constants/theme';
+
+// Keep the splash screen visible while we load async resources
+SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,12 +46,24 @@ export default function RootLayout() {
   const loadKeys = useApiKeysStore((s) => s.loadKeys);
 
   useEffect(() => {
-    loadFromStorage();
-    loadKeys();
+    async function prepare() {
+      try {
+        // Load persisted data in parallel
+        await Promise.all([loadFromStorage(), loadKeys()]);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
+        // Restore auth session
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+      } catch (e) {
+        // Non-fatal: app will still render without persisted data
+        console.warn('Startup load error:', e);
+      } finally {
+        // Always hide the splash screen so the app is visible
+        await SplashScreen.hideAsync();
+      }
+    }
+
+    prepare();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
