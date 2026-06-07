@@ -48,30 +48,33 @@ export const useApiKeysStore = create<ApiKeysState>((set, get) => ({
       ]);
 
     set({
-      tmdbKey: tmdbKey ?? process.env.EXPO_PUBLIC_TMDB_API_KEY ?? '',
-      traktClientId: traktClientId ?? '',
-      traktUsername: traktUsername ?? '',
-      traktAccessToken: traktAccessToken ?? '',
-      geminiKey: geminiKey ?? '',
+      tmdbKey: (tmdbKey ?? process.env.EXPO_PUBLIC_TMDB_API_KEY ?? '').trim(),
+      traktClientId: (traktClientId ?? '').trim(),
+      traktUsername: (traktUsername ?? '').trim(),
+      traktAccessToken: (traktAccessToken ?? '').trim(),
+      geminiKey: (geminiKey ?? '').trim(),
       isSetupDone: setupDone === 'true' || !!process.env.EXPO_PUBLIC_TMDB_API_KEY,
       isLoaded: true,
     });
   },
 
   saveKeys: async (keys) => {
+    const trimmed = Object.fromEntries(
+      Object.entries(keys).map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v])
+    ) as typeof keys;
     const writes: Promise<void>[] = [];
-    if (keys.tmdbKey !== undefined)
-      writes.push(SecureStore.setItemAsync(KEYS.tmdb, keys.tmdbKey));
-    if (keys.traktClientId !== undefined)
-      writes.push(SecureStore.setItemAsync(KEYS.traktClientId, keys.traktClientId));
-    if (keys.traktUsername !== undefined)
-      writes.push(SecureStore.setItemAsync(KEYS.traktUsername, keys.traktUsername));
-    if (keys.traktAccessToken !== undefined)
-      writes.push(SecureStore.setItemAsync(KEYS.traktAccessToken, keys.traktAccessToken));
-    if (keys.geminiKey !== undefined)
-      writes.push(SecureStore.setItemAsync(KEYS.geminiKey, keys.geminiKey));
+    if (trimmed.tmdbKey !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.tmdb, trimmed.tmdbKey));
+    if (trimmed.traktClientId !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.traktClientId, trimmed.traktClientId));
+    if (trimmed.traktUsername !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.traktUsername, trimmed.traktUsername));
+    if (trimmed.traktAccessToken !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.traktAccessToken, trimmed.traktAccessToken));
+    if (trimmed.geminiKey !== undefined)
+      writes.push(SecureStore.setItemAsync(KEYS.geminiKey, trimmed.geminiKey));
     await Promise.all(writes);
-    set((s) => ({ ...s, ...keys }));
+    set((s) => ({ ...s, ...trimmed }));
   },
 
   markSetupDone: async () => {

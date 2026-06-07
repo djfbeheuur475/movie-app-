@@ -6,6 +6,23 @@ export interface GeminiReply {
   tmdbIds: number[];
 }
 
+// Tried in order. The first model that responds successfully is used.
+const MODEL_CASCADE = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash-latest',
+];
+
+// Returns a clean, trimmed key and throws a user-friendly error if it's malformed.
+function validateKey(raw: string): string {
+  const key = raw.trim().replace(/[\n\r\t]/g, '');
+  if (!key) throw new Error('No Gemini API key configured. Add one in Settings.');
+  if (!key.startsWith('AIza')) {
+    throw new Error('Invalid API key format — Gemini keys start with "AIza". Check Settings.');
+  }
+  return key;
+}
+
 function buildSystemPrompt(
   watchedMovies: TraktWatchedMovie[],
   watchedShows: TraktWatchedShow[]
@@ -49,40 +66,8 @@ Respond in JSON with this exact format:
 { "reply": "your message here", "tmdbIds": [12345, 67890] }`;
 }
 
-// Update this string to use a newer model when released. Aliases:
-// gemini-2.5-flash, gemini-2.5-pro, gemini-flash-latest, gemini-pro-latest
-const GEMINI_MODEL = 'gemini-2.5-flash';
-
-export async function askGemini(
-  apiKey: string,
-  messages: { role: 'user' | 'assistant'; content: string }[],
-  watchedMovies: TraktWatchedMovie[] = [],
-  watchedShows: TraktWatchedShow[] = []
-): Promise<GeminiReply> {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    systemInstruction: buildSystemPrompt(watchedMovies, watchedShows),
-  });
-
-  // Convert message history to Gemini format.
-  // Gemini requires history to start with 'user', so drop any leading assistant messages.
-  const allHistory = messages.slice(0, -1).map((m) => ({
-    role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
-    parts: [{ text: m.content }],
-  }));
-  const firstUserIdx = allHistory.findIndex((m) => m.role === 'user');
-  const history = firstUserIdx >= 0 ? allHistory.slice(firstUserIdx) : [];
-
-  const lastMessage = messages[messages.length - 1];
-
-  const chat = model.startChat({ history });
-  const result = await chat.sendMessage(lastMessage.content);
-  const text = result.response.text().trim();
-
-  // Parse JSON response
+function parseResponse(text: string): GeminiReply {
   try {
-    // Strip markdown code fences if present
     const jsonStr = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const parsed = JSON.parse(jsonStr);
     return {
@@ -92,4 +77,57 @@ export async function askGemini(
   } catch {
     return { reply: text, tmdbIds: [] };
   }
+}
+
+function isModelUnavailableError(e: unknown): boolean {
+  const msg = (e as any)?.message ?? '';
+  return (
+    msg.includes('404') ||
+    msg.includes('not found') ||
+    msg.includes('MODEL_NOT_FOUND') ||
+    msg.includes('not supported') ||
+    msg.includes('deprecated') ||
+    msg.includes('INVALID_ARGUMENT')
+  );
+}
+
+export async function askGemini(
+  apiKey: string,
+  messages: { role: 'user' | 'assistant'; content: string }[],
+  watchedMovies: TraktWatchedMovie[] = [],
+  watchedShows: TraktWatchedShow[] = []
+): Promise<GeminiReply> {
+  const key = validateKey(apiKey);
+  const genAI = new GoogleGenerativeAI(key);
+  const systemInstruction = buildSystemPrompt(watchedMovies, watchedShows);
+
+  // Gemini requires history to start with 'user', so drop any leading assistant messages.
+  const allHistory = messages.slice(0, -1).map((m) => ({
+    role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
+    parts: [{ text: m.content }],
+  }));
+  const firstUserIdx = allHistory.findIndex((m) => m.role === 'user');
+  const history = firstUserIdx >= 0 ? allHistory.slice(firstUserIdx) : [];
+  const lastMessage = messages[messages.length - 1];
+
+  let lastError: unknown;
+
+  for (let i = 0; i < MODEL_CASCADE.length; i++) {
+    const modelId = MODEL_CASCADE[i];
+    try {
+      const model = genAI.getGenerativeModel({ model: modelId, systemInstruction });
+      const chat = model.startChat({ history });
+      const result = await chat.sendMessage(lastMessage.content);
+      return parseResponse(result.response.text().trim());
+    } catch (e) {
+      lastError = e;
+      const isLast = i === MODEL_CASCADE.length - 1;
+      if (!isLast && isModelUnavailableError(e)) {
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  throw lastError;
 }

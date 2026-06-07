@@ -9,7 +9,7 @@ import ChatBubble from '../../components/ai/ChatBubble';
 import { askGemini } from '../../lib/gemini';
 import { traktApi } from '../../lib/trakt';
 import type { TraktWatchedMovie, TraktWatchedShow } from '../../lib/trakt';
-import { tmdbApi, normalizeMovie } from '../../lib/tmdb';
+import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import type { ChatMessage, ContentItem } from '../../types';
 
@@ -76,7 +76,8 @@ export default function AITabScreen() {
     const trimmed = text.trim();
     if (!trimmed || isLoading) return;
 
-    if (!geminiKey) {
+    const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
+    if (!cleanKey) {
       Alert.alert(
         'Gemini API key needed',
         'Add your free Gemini API key in Settings to enable AI recommendations.',
@@ -102,7 +103,7 @@ export default function AITabScreen() {
       const { movies, shows } = await fetchTraktHistory();
 
       const { reply, tmdbIds } = await askGemini(
-        geminiKey,
+        cleanKey,
         history.map((m) => ({ role: m.role, content: m.content })),
         movies,
         shows
@@ -111,11 +112,17 @@ export default function AITabScreen() {
       let recItems: ContentItem[] = [];
       if (tmdbIds.length > 0) {
         const fetched = await Promise.allSettled(
-          tmdbIds.slice(0, 5).map((id) => tmdbApi.getMovieDetail(id))
+          tmdbIds.slice(0, 5).map(async (id) => {
+            try {
+              return normalizeMovie(await tmdbApi.getMovieDetail(id));
+            } catch {
+              return normalizeTVShow(await tmdbApi.getTVDetail(id));
+            }
+          })
         );
         recItems = fetched
-          .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
-          .map((r) => normalizeMovie(r.value));
+          .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
+          .map((r) => r.value);
       }
 
       setMessages((prev) => [
@@ -131,10 +138,14 @@ export default function AITabScreen() {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (e: any) {
       const msg = e?.message ?? '';
-      const userFacing = msg.includes('API_KEY_INVALID') || msg.includes('400')
+      const userFacing = msg.includes('No Gemini API key') || msg.includes('Invalid API key format')
+        ? msg
+        : msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')
         ? "Your Gemini API key is invalid. Go to Settings and paste a fresh key from aistudio.google.com."
-        : msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')
+        : msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('credits are depleted')
         ? "Gemini quota exceeded. Check your usage at aistudio.google.com or try again shortly."
+        : msg.includes('PERMISSION_DENIED') || msg.includes('403')
+        ? "Permission denied — check your Gemini API key has the Generative Language API enabled."
         : "Something went wrong reaching the AI. Check your Gemini API key in Settings.";
       setMessages((prev) => [
         ...prev,
