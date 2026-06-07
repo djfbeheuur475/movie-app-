@@ -1,11 +1,28 @@
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 
-function TabIcon({ label, icon, focused }: { label: string; icon: string; focused: boolean }) {
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
+function TabIcon({
+  label,
+  icon,
+  iconFocused,
+  focused,
+}: {
+  label: string;
+  icon: IoniconsName;
+  iconFocused: IoniconsName;
+  focused: boolean;
+}) {
   return (
     <View style={styles.tabItem}>
-      <Text style={[styles.tabIcon, focused && styles.tabIconActive]}>{icon}</Text>
+      <Ionicons
+        name={focused ? iconFocused : icon}
+        size={22}
+        color={focused ? Colors.primary : Colors.textMuted}
+      />
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
     </View>
   );
@@ -25,43 +42,47 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon label="Home" icon="🏠" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="Home" icon="home-outline" iconFocused="home" focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="discover"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon label="Discover" icon="🔍" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="Discover" icon="compass-outline" iconFocused="compass" focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="watchlist"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon label="Watchlist" icon="🎬" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="Watchlist" icon="bookmark-outline" iconFocused="bookmark" focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon label="Calendar" icon="📅" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="Calendar" icon="calendar-outline" iconFocused="calendar" focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="ai"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon label="AI" icon="✦" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="AI" icon="sparkles-outline" iconFocused="sparkles" focused={focused} />
+          ),
         }}
       />
 
-      {/* Hidden tabs — still navigable but not in the tab bar */}
-      <Tabs.Screen
-        name="search"
-        options={{ href: null }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{ href: null }}
-      />
+      {/* Hidden tabs */}
+      <Tabs.Screen name="search" options={{ href: null }} />
+      <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -71,25 +92,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopColor: Colors.border,
     borderTopWidth: 1,
-    height: 64,
-    paddingBottom: 4,
+    height: 60,
+    paddingBottom: 6,
+    paddingTop: 4,
   },
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-  },
-  tabIcon: {
-    fontSize: 20,
-    opacity: 0.45,
-  },
-  tabIconActive: {
-    opacity: 1,
+    gap: 3,
   },
   tabLabel: {
     fontSize: 10,
     color: Colors.textMuted,
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
   tabLabelActive: {
     color: Colors.primary,

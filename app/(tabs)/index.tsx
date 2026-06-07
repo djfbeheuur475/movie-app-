@@ -115,23 +115,14 @@ export default function HomeScreen() {
             />
             <Text style={styles.logoText}>Next<Text style={styles.logoAccent}>Up</Text></Text>
           </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity
-              style={styles.settingsBtn}
-              onPress={() => router.push('/settings')}
-              activeOpacity={0.8}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.settingsIcon}>⚙</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.aiButton}
-              onPress={() => router.push('/(tabs)/ai')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.aiButtonText}>✦ Ask AI</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.settingsIcon}>⚙</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Hero */}
@@ -196,11 +187,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
   settingsBtn: {
     width: 36,
     height: 36,
@@ -233,17 +219,6 @@ const styles = StyleSheet.create({
   },
   logoAccent: {
     color: Colors.primary,
-  },
-  aiButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 7,
-    borderRadius: 20,
-  },
-  aiButtonText: {
-    ...Typography.label,
-    color: Colors.background,
-    fontWeight: '800',
   },
   rows: {
     paddingTop: Spacing.xl,
