@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  ActivityIndicator, SectionList, TextInput, FlatList,
+  ActivityIndicator, SectionList, TextInput, FlatList, ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
@@ -50,34 +50,13 @@ function groupByDate(entries: CalendarEntry[]): { title: string; data: CalendarE
   });
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+const WEEK_COUNT = 6;
 
-function WeekNav({ weekOffset, onPrev, onNext }: { weekOffset: number; onPrev: () => void; onNext: () => void }) {
-  const today = startOfToday();
-  const weekStart = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
-  const label = weekOffset === 0 ? 'This Week' : weekOffset === 1 ? 'Next Week' : format(weekStart, 'MMM d') + ' – ' + format(weekEnd, 'MMM d');
-
-  return (
-    <View style={styles.weekNav}>
-      <TouchableOpacity
-        style={[styles.weekArrow, weekOffset === 0 && styles.weekArrowDisabled]}
-        onPress={onPrev}
-        disabled={weekOffset === 0}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Text style={[styles.weekArrowText, weekOffset === 0 && styles.weekArrowTextDisabled]}>‹</Text>
-      </TouchableOpacity>
-      <Text style={styles.weekLabel}>{label}</Text>
-      <TouchableOpacity
-        style={styles.weekArrow}
-        onPress={onNext}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Text style={styles.weekArrowText}>›</Text>
-      </TouchableOpacity>
-    </View>
-  );
+function weekLabel(offset: number, today: Date): string {
+  if (offset === 0) return 'This Week';
+  if (offset === 1) return 'Next Week';
+  const start = startOfWeek(addWeeks(today, offset), { weekStartsOn: 1 });
+  return format(start, 'MMM d');
 }
 
 function CalendarCard({ entry }: { entry: CalendarEntry }) {
@@ -272,7 +251,7 @@ export default function CalendarScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Calendar</Text>
-          <Text style={styles.subtitle}>{format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}</Text>
+          <Text style={styles.subtitle}>{format(weekStart, 'MMMM yyyy')}</Text>
         </View>
         <TouchableOpacity
           style={styles.settingsBtn}
@@ -283,12 +262,25 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Week navigation */}
-      <WeekNav
-        weekOffset={weekOffset}
-        onPrev={() => setWeekOffset((w) => Math.max(0, w - 1))}
-        onNext={() => setWeekOffset((w) => w + 1)}
-      />
+      {/* Week toggle pills */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.weekPills}
+      >
+        {Array.from({ length: WEEK_COUNT }, (_, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[styles.weekPill, weekOffset === i && styles.weekPillActive]}
+            onPress={() => setWeekOffset(i)}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.weekPillText, weekOffset === i && styles.weekPillTextActive]}>
+              {weekLabel(i, today)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       {/* Show search */}
       <View style={styles.searchWrap}>
@@ -398,19 +390,27 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
   settingsIcon: { fontSize: 17, color: Colors.textMuted },
-  weekNav: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
-    marginBottom: Spacing.xs,
+  weekPills: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    gap: 8,
   },
-  weekArrow: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface,
-    borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
+  weekPill: {
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1, borderColor: Colors.border,
   },
-  weekArrowDisabled: { opacity: 0.3 },
-  weekArrowText: { fontSize: 22, color: Colors.text, lineHeight: 26 },
-  weekArrowTextDisabled: { color: Colors.textMuted },
-  weekLabel: { ...Typography.subheading, color: Colors.text, fontWeight: '700' },
+  weekPillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  weekPillText: {
+    ...Typography.caption, color: Colors.textMuted, fontWeight: '600',
+  },
+  weekPillTextActive: {
+    color: Colors.background, fontWeight: '700',
+  },
   searchWrap: {
     paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
