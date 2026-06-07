@@ -13,12 +13,16 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
+import { traktApi } from '../../lib/trakt';
+import { useApiKeysStore } from '../../store/apiKeysStore';
 import HeroSection from '../../components/home/HeroSection';
 import ContentRow from '../../components/home/ContentRow';
 import type { ContentItem } from '../../types';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
+  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
 
   const { data: trending, isLoading: trendingLoading, refetch: refetchTrending } = useQuery({
     queryKey: ['trending'],
@@ -48,6 +52,71 @@ export default function HomeScreen() {
   const { data: upcoming, isLoading: upcomingLoading } = useQuery({
     queryKey: ['upcoming-movies'],
     queryFn: () => tmdbApi.getUpcomingMovies(),
+  });
+
+  // ─── Trakt watch history ───────────────────────────────────────────────────
+
+  const { data: traktMovies } = useQuery({
+    queryKey: ['trakt-watched-movies', traktClientId, traktUsername, traktAccessToken],
+    queryFn: () =>
+      traktAccessToken
+        ? traktApi.getWatchedMovies(traktClientId, traktAccessToken)
+        : traktApi.getUserWatchedMovies(traktUsername, traktClientId),
+    enabled: hasTrakt,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const { data: traktShows } = useQuery({
+    queryKey: ['trakt-watched-shows', traktClientId, traktUsername, traktAccessToken],
+    queryFn: () =>
+      traktAccessToken
+        ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
+        : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+    enabled: hasTrakt,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  // Merge movies + shows, sort by most recently watched, deduplicate, take top 12
+  const recentIds = useMemo(() => {
+    const combined = [
+      ...(traktMovies ?? []).map((m) => ({
+        tmdbId: m.movie.ids.tmdb,
+        mediaType: 'movie' as const,
+        watchedAt: m.last_watched_at,
+      })),
+      ...(traktShows ?? []).map((s) => ({
+        tmdbId: s.show.ids.tmdb,
+        mediaType: 'tv' as const,
+        watchedAt: s.last_watched_at,
+      })),
+    ];
+    const seen = new Set<number>();
+    return combined
+      .sort((a, b) => new Date(b.watchedAt).getTime() - new Date(a.watchedAt).getTime())
+      .filter(({ tmdbId }) => {
+        if (seen.has(tmdbId)) return false;
+        seen.add(tmdbId);
+        return true;
+      })
+      .slice(0, 12);
+  }, [traktMovies, traktShows]);
+
+  const { data: historyItems, isLoading: historyLoading } = useQuery({
+    queryKey: ['home-history', recentIds.map((i) => `${i.tmdbId}-${i.mediaType}`)],
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        recentIds.map(({ tmdbId, mediaType }) =>
+          mediaType === 'movie'
+            ? tmdbApi.getMovieDetail(tmdbId).then(normalizeMovie)
+            : tmdbApi.getTVDetail(tmdbId).then(normalizeTVShow)
+        )
+      );
+      return results
+        .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
+        .map((r) => r.value);
+    },
+    enabled: recentIds.length > 0,
+    staleTime: 1000 * 60 * 30,
   });
 
   const heroItem: ContentItem | null = useMemo(() => {
@@ -165,6 +234,14 @@ export default function HomeScreen() {
             items={upcomingItems}
             isLoading={upcomingLoading}
           />
+          {hasTrakt && (
+            <ContentRow
+              title="Recently Watched"
+              items={historyItems ?? []}
+              isLoading={historyLoading}
+              showRating
+            />
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
