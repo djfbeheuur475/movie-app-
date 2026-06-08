@@ -17,6 +17,7 @@ import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { traktApi } from '../../lib/trakt';
 import { askGemini } from '../../lib/gemini';
 import { useApiKeysStore } from '../../store/apiKeysStore';
+import { useWatchlistStore } from '../../store/watchlistStore';
 import HeroSection from '../../components/home/HeroSection';
 import ContentRow from '../../components/home/ContentRow';
 import type { ContentItem } from '../../types';
@@ -24,13 +25,18 @@ import type { ContentItem } from '../../types';
 export default function HomeScreen() {
   const router = useRouter();
   const { traktClientId, traktUsername, traktAccessToken, geminiKey } = useApiKeysStore();
+  const { items: watchlistItems } = useWatchlistStore();
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
   const hasGemini = !!(geminiKey?.trim());
+
+  // ─── Trending (hero only) ──────────────────────────────────────────────────
 
   const { data: trending, isLoading: trendingLoading, refetch: refetchTrending } = useQuery({
     queryKey: ['trending'],
     queryFn: () => tmdbApi.getTrending('all', 'week'),
   });
+
+  // ─── Popular content ───────────────────────────────────────────────────────
 
   const { data: popularMovies, isLoading: moviesLoading } = useQuery({
     queryKey: ['popular-movies'],
@@ -40,21 +46,6 @@ export default function HomeScreen() {
   const { data: popularShows, isLoading: showsLoading } = useQuery({
     queryKey: ['popular-shows'],
     queryFn: () => tmdbApi.getPopularShows(),
-  });
-
-  const { data: airingToday, isLoading: airingLoading } = useQuery({
-    queryKey: ['airing-today'],
-    queryFn: () => tmdbApi.getAiringToday(),
-  });
-
-  const { data: topRated, isLoading: topRatedLoading } = useQuery({
-    queryKey: ['top-rated'],
-    queryFn: () => tmdbApi.getTopRatedMovies(),
-  });
-
-  const { data: upcoming, isLoading: upcomingLoading } = useQuery({
-    queryKey: ['upcoming-movies'],
-    queryFn: () => tmdbApi.getUpcomingMovies(),
   });
 
   // ─── Trakt watch history ───────────────────────────────────────────────────
@@ -122,24 +113,70 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  // ─── AI home recommendations ───────────────────────────────────────────────
+  // ─── New Eps This Week ─────────────────────────────────────────────────────
+  // Merges watchlist TV shows + Trakt watched shows, fetches next_episode_to_air,
+  // filters to shows with an episode airing within the next 7 days.
 
-  const { data: aiPickItems, isLoading: aiPicksLoading } = useQuery({
-    queryKey: ['home-ai-picks', geminiKey],
+  const watchlistShowIds = useMemo(
+    () => watchlistItems.filter((i) => i.media_type === 'tv').map((i) => i.tmdb_id),
+    [watchlistItems]
+  );
+
+  const newEpsShowIds = useMemo(() => {
+    const traktIds = (traktShows ?? [])
+      .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
+      .map((s) => s.show.ids.tmdb)
+      .filter((id): id is number => !!id);
+    const seen = new Set(watchlistShowIds);
+    const merged = [...watchlistShowIds];
+    traktIds.forEach((id) => {
+      if (!seen.has(id)) { seen.add(id); merged.push(id); }
+    });
+    return merged.slice(0, 24);
+  }, [watchlistShowIds, traktShows]);
+
+  const { data: newEpsShowDetails, isLoading: newEpsLoading } = useQuery({
+    queryKey: ['home-new-eps', newEpsShowIds],
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        newEpsShowIds.map((id) => tmdbApi.getTVDetail(id))
+      );
+      return results
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .map((r) => r.value);
+    },
+    enabled: newEpsShowIds.length > 0,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const newEpsThisWeek = useMemo((): ContentItem[] => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return (newEpsShowDetails ?? [])
+      .filter((show: any) => {
+        if (!show.next_episode_to_air?.air_date) return false;
+        const airDate = new Date(show.next_episode_to_air.air_date);
+        return airDate >= today && airDate <= weekFromNow;
+      })
+      .map((show: any) => normalizeTVShow(show));
+  }, [newEpsShowDetails]);
+
+  // ─── AI Picks: Movies ──────────────────────────────────────────────────────
+
+  const { data: aiMovieItems, isLoading: aiMoviesLoading } = useQuery({
+    queryKey: ['home-ai-picks-movies', geminiKey],
     queryFn: async (): Promise<ContentItem[]> => {
       const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
       const { tmdbIds } = await askGemini(
         cleanKey,
-        [{ role: 'user', content: 'Recommend exactly 10 must-watch movies and TV shows. Mix genres — thriller, comedy, drama, sci-fi, action. Include both recent hits and timeless classics.' }],
+        [{ role: 'user', content: 'Recommend exactly 20 must-watch movies across different genres — thriller, comedy, drama, sci-fi, action, horror. Mix recent releases with timeless classics. Only include movies, no TV shows.' }],
         [],
         []
       );
       if (!tmdbIds.length) return [];
       const results = await Promise.allSettled(
-        tmdbIds.slice(0, 10).map(async (id) => {
-          try { return normalizeMovie(await tmdbApi.getMovieDetail(id)); }
-          catch { return normalizeTVShow(await tmdbApi.getTVDetail(id)); }
-        })
+        tmdbIds.slice(0, 20).map((id) => tmdbApi.getMovieDetail(id).then(normalizeMovie))
       );
       return results
         .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
@@ -150,19 +187,39 @@ export default function HomeScreen() {
     retry: 0,
   });
 
+  // ─── AI Picks: TV Shows ────────────────────────────────────────────────────
+
+  const { data: aiTVItems, isLoading: aiTVLoading } = useQuery({
+    queryKey: ['home-ai-picks-tv', geminiKey],
+    queryFn: async (): Promise<ContentItem[]> => {
+      const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
+      const { tmdbIds } = await askGemini(
+        cleanKey,
+        [{ role: 'user', content: 'Recommend exactly 20 must-watch TV shows across different genres — drama, thriller, comedy, sci-fi, crime, fantasy. Mix recent hits with beloved classics. Only include TV shows, no movies.' }],
+        [],
+        []
+      );
+      if (!tmdbIds.length) return [];
+      const results = await Promise.allSettled(
+        tmdbIds.slice(0, 20).map((id) => tmdbApi.getTVDetail(id).then(normalizeTVShow))
+      );
+      return results
+        .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
+        .map((r) => r.value);
+    },
+    enabled: hasGemini,
+    staleTime: 1000 * 60 * 120,
+    retry: 0,
+  });
+
+  // ─── Derived data ──────────────────────────────────────────────────────────
+
   const heroItem: ContentItem | null = useMemo(() => {
     if (!trending?.length) return null;
     const item = trending[Math.floor(Math.random() * Math.min(5, trending.length))];
     if ('title' in item) return normalizeMovie(item as any);
     if ('name' in item) return normalizeTVShow(item as any);
     return null;
-  }, [trending]);
-
-  const trendingItems: ContentItem[] = useMemo(() => {
-    return (trending ?? []).slice(0, 20).map((item) => {
-      if ('title' in item) return normalizeMovie(item as any);
-      return normalizeTVShow(item as any);
-    });
   }, [trending]);
 
   const popularMovieItems: ContentItem[] = useMemo(
@@ -173,21 +230,6 @@ export default function HomeScreen() {
   const popularShowItems: ContentItem[] = useMemo(
     () => (popularShows ?? []).map(normalizeTVShow),
     [popularShows]
-  );
-
-  const airingItems: ContentItem[] = useMemo(
-    () => (airingToday ?? []).map(normalizeTVShow),
-    [airingToday]
-  );
-
-  const topRatedItems: ContentItem[] = useMemo(
-    () => (topRated ?? []).map(normalizeMovie),
-    [topRated]
-  );
-
-  const upcomingItems: ContentItem[] = useMemo(
-    () => (upcoming ?? []).map(normalizeMovie),
-    [upcoming]
   );
 
   const isRefreshing = trendingLoading;
@@ -241,17 +283,6 @@ export default function HomeScreen() {
         {/* Rows */}
         <View style={styles.rows}>
           <ContentRow
-            title="Trending This Week"
-            items={trendingItems}
-            isLoading={trendingLoading}
-            showRating
-          />
-          <ContentRow
-            title="New Episodes Tonight"
-            items={airingItems}
-            isLoading={airingLoading}
-          />
-          <ContentRow
             title="Popular Movies"
             items={popularMovieItems}
             isLoading={moviesLoading}
@@ -263,18 +294,6 @@ export default function HomeScreen() {
             isLoading={showsLoading}
             showRating
           />
-          <ContentRow
-            title="Hidden Gems"
-            items={topRatedItems}
-            isLoading={topRatedLoading}
-            showRating
-            cardWidth={140}
-          />
-          <ContentRow
-            title="Coming Soon"
-            items={upcomingItems}
-            isLoading={upcomingLoading}
-          />
           {hasTrakt && (
             <ContentRow
               title="Recently Watched"
@@ -285,12 +304,29 @@ export default function HomeScreen() {
           )}
           {hasGemini && (
             <ContentRow
-              title="✦ AI Picks for You"
-              items={aiPickItems ?? []}
-              isLoading={aiPicksLoading}
+              title="✦ AI Picks: Movies"
+              items={aiMovieItems ?? []}
+              isLoading={aiMoviesLoading}
               showRating
               cardWidth={130}
               accent
+            />
+          )}
+          {hasGemini && (
+            <ContentRow
+              title="✦ AI Picks: TV Shows"
+              items={aiTVItems ?? []}
+              isLoading={aiTVLoading}
+              showRating
+              cardWidth={130}
+              accent
+            />
+          )}
+          {(newEpsLoading || newEpsThisWeek.length > 0) && (
+            <ContentRow
+              title="New Eps This Week"
+              items={newEpsThisWeek}
+              isLoading={newEpsLoading}
             />
           )}
         </View>
