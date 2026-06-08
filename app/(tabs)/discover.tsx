@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
@@ -25,6 +26,7 @@ type MediaTab = 'movies' | 'shows';
 type SortKey = 'popular' | 'top' | 'newest' | 'revenue';
 type DateRange = '12m' | '24m' | '5y' | 'all';
 type GenreId = number | null;
+type ActiveFilter = 'sort' | 'date' | 'genre' | null;
 
 const DATE_OPTIONS: { key: DateRange; label: string }[] = [
   { key: 'all', label: 'Anytime' },
@@ -34,8 +36,8 @@ const DATE_OPTIONS: { key: DateRange; label: string }[] = [
 ];
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'popular', label: 'Most Popular' },
-  { key: 'top', label: 'Highest Rated' },
+  { key: 'popular', label: 'Popular' },
+  { key: 'top', label: 'Top Rated' },
   { key: 'newest', label: 'Newest' },
   { key: 'revenue', label: 'Box Office' },
 ];
@@ -51,7 +53,7 @@ const TV_GENRES: { id: number; name: string }[] = [
   { id: 10759, name: 'Action' }, { id: 16, name: 'Animation' }, { id: 35, name: 'Comedy' },
   { id: 80, name: 'Crime' }, { id: 99, name: 'Documentary' }, { id: 18, name: 'Drama' },
   { id: 10765, name: 'Sci-Fi' }, { id: 9648, name: 'Mystery' }, { id: 10766, name: 'Soap' },
-  { id: 10767, name: 'Talk' }, { id: 10768, name: 'War & Politics' }, { id: 37, name: 'Western' },
+  { id: 10768, name: 'War & Politics' }, { id: 37, name: 'Western' },
 ];
 
 function dateRangeToParam(range: DateRange, media: MediaTab): Record<string, string> {
@@ -78,6 +80,34 @@ function sortToParams(sort: SortKey, media: MediaTab): Record<string, string> {
     ? { sort_by: 'revenue.desc' }
     : { sort_by: 'popularity.desc' };
   return {};
+}
+
+function DropdownButton({
+  label, value, isOpen, isActive, onPress,
+}: {
+  label: string;
+  value: string;
+  isOpen: boolean;
+  isActive: boolean;
+  onPress: () => void;
+}) {
+  const lit = isOpen || isActive;
+  return (
+    <TouchableOpacity
+      style={[styles.dropBtn, lit && styles.dropBtnLit]}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <Text style={[styles.dropBtnLabel, lit && styles.dropBtnLabelLit]}>{label}: </Text>
+      <Text style={[styles.dropBtnValue, lit && styles.dropBtnValueLit]}>{value}</Text>
+      <Ionicons
+        name={isOpen ? 'chevron-up' : 'chevron-down'}
+        size={11}
+        color={lit ? Colors.primary : Colors.textMuted}
+        style={{ marginLeft: 3 }}
+      />
+    </TouchableOpacity>
+  );
 }
 
 function PosterCard({ item, onPress }: { item: ContentItem; onPress: () => void }) {
@@ -108,8 +138,24 @@ export default function DiscoverScreen() {
   const [sort, setSort] = useState<SortKey>('popular');
   const [genre, setGenre] = useState<GenreId>(null);
   const [dateRange, setDateRange] = useState<DateRange>('all');
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>(null);
 
   const genres = media === 'movies' ? MOVIE_GENRES : TV_GENRES;
+
+  const sortLabel = SORT_OPTIONS.find((s) => s.key === sort)?.label ?? 'Popular';
+  const dateLabel = DATE_OPTIONS.find((d) => d.key === dateRange)?.label ?? 'Anytime';
+  const genreLabel = genres.find((g) => g.id === genre)?.name ?? 'All';
+  const hasActiveFilters = sort !== 'popular' || dateRange !== 'all' || genre !== null;
+
+  const toggleFilter = (f: ActiveFilter) =>
+    setActiveFilter((prev) => (prev === f ? null : f));
+
+  const resetFilters = () => {
+    setSort('popular');
+    setDateRange('all');
+    setGenre(null);
+    setActiveFilter(null);
+  };
 
   const queryParams = useMemo(() => ({
     ...sortToParams(sort, media),
@@ -135,7 +181,34 @@ export default function DiscoverScreen() {
     setMedia(m);
     setGenre(null);
     setDateRange('all');
+    setActiveFilter(null);
   }, []);
+
+  // Options to display in the expanded dropdown row
+  const dropdownItems = useMemo(() => {
+    if (activeFilter === 'sort')
+      return SORT_OPTIONS.map((o) => ({
+        key: o.key, label: o.label,
+        selected: sort === o.key,
+        onSelect: () => { setSort(o.key); setActiveFilter(null); },
+      }));
+    if (activeFilter === 'date')
+      return DATE_OPTIONS.map((o) => ({
+        key: o.key, label: o.label,
+        selected: dateRange === o.key,
+        onSelect: () => { setDateRange(o.key); setActiveFilter(null); },
+      }));
+    if (activeFilter === 'genre')
+      return [
+        { key: 'all', label: 'All', selected: genre === null, onSelect: () => { setGenre(null); setActiveFilter(null); } },
+        ...genres.map((g) => ({
+          key: String(g.id), label: g.name,
+          selected: genre === g.id,
+          onSelect: () => { setGenre(g.id); setActiveFilter(null); },
+        })),
+      ];
+    return [];
+  }, [activeFilter, sort, dateRange, genre, genres]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -153,9 +226,7 @@ export default function DiscoverScreen() {
           activeOpacity={0.8}
         >
           <Text style={styles.mediaBtnIcon}>🎬</Text>
-          <Text style={[styles.mediaBtnText, media === 'movies' && styles.mediaBtnTextActive]}>
-            Movies
-          </Text>
+          <Text style={[styles.mediaBtnText, media === 'movies' && styles.mediaBtnTextActive]}>Movies</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.mediaBtn, media === 'shows' && styles.mediaBtnActive]}
@@ -163,77 +234,83 @@ export default function DiscoverScreen() {
           activeOpacity={0.8}
         >
           <Text style={styles.mediaBtnIcon}>📺</Text>
-          <Text style={[styles.mediaBtnText, media === 'shows' && styles.mediaBtnTextActive]}>
-            TV Shows
-          </Text>
+          <Text style={[styles.mediaBtnText, media === 'shows' && styles.mediaBtnTextActive]}>TV Shows</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Sort pills */}
-      <View style={styles.filterRow}>
-        <Text style={styles.filterLabel}>Sort by</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-          {SORT_OPTIONS.map((s) => (
+      {/* Single-row filter bar */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterBar}
+        style={styles.filterBarWrap}
+      >
+        {/* Filter icon — tapping resets all filters */}
+        <TouchableOpacity
+          style={[styles.filterIconBtn, hasActiveFilters && styles.filterIconBtnActive]}
+          onPress={resetFilters}
+          activeOpacity={0.75}
+        >
+          <Ionicons
+            name="options-outline"
+            size={16}
+            color={hasActiveFilters ? Colors.primary : Colors.textMuted}
+          />
+        </TouchableOpacity>
+
+        <DropdownButton
+          label="Sort"
+          value={sortLabel}
+          isOpen={activeFilter === 'sort'}
+          isActive={sort !== 'popular'}
+          onPress={() => toggleFilter('sort')}
+        />
+
+        {media === 'movies' && (
+          <DropdownButton
+            label="Release"
+            value={dateLabel}
+            isOpen={activeFilter === 'date'}
+            isActive={dateRange !== 'all'}
+            onPress={() => toggleFilter('date')}
+          />
+        )}
+
+        <DropdownButton
+          label="Genre"
+          value={genreLabel}
+          isOpen={activeFilter === 'genre'}
+          isActive={genre !== null}
+          onPress={() => toggleFilter('genre')}
+        />
+      </ScrollView>
+
+      {/* Expanded dropdown options row */}
+      {activeFilter && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.optionsRow}
+          style={styles.optionsWrap}
+          keyboardShouldPersistTaps="handled"
+        >
+          {dropdownItems.map((opt) => (
             <TouchableOpacity
-              key={s.key}
-              style={[styles.pill, sort === s.key && styles.pillActive]}
-              onPress={() => setSort(s.key)}
+              key={opt.key}
+              style={[styles.optionChip, opt.selected && styles.optionChipSelected]}
+              onPress={opt.onSelect}
               activeOpacity={0.75}
             >
-              <Text style={[styles.pillText, sort === s.key && styles.pillTextActive]}>
-                {s.label}
+              {opt.selected && (
+                <Ionicons name="checkmark" size={11} color={Colors.background} style={{ marginRight: 3 }} />
+              )}
+              <Text style={[styles.optionChipText, opt.selected && styles.optionChipTextSelected]}>
+                {opt.label}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
-      </View>
-
-      {/* Date range pills — movies only (TV popularity already implies recency) */}
-      {media === 'movies' && (
-        <View style={styles.filterRow}>
-          <Text style={styles.filterLabel}>Released</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-            {DATE_OPTIONS.map((d) => (
-              <TouchableOpacity
-                key={d.key}
-                style={[styles.pill, dateRange === d.key && styles.pillActive]}
-                onPress={() => setDateRange(d.key)}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.pillText, dateRange === d.key && styles.pillTextActive]}>
-                  {d.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
       )}
-
-      {/* Genre pills */}
-      <View style={styles.filterRow}>
-        <Text style={styles.filterLabel}>Genre</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-          <TouchableOpacity
-            style={[styles.pill, genre === null && styles.pillActive]}
-            onPress={() => setGenre(null)}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.pillText, genre === null && styles.pillTextActive]}>All</Text>
-          </TouchableOpacity>
-          {genres.map((g) => (
-            <TouchableOpacity
-              key={g.id}
-              style={[styles.pill, genre === g.id && styles.pillActive]}
-              onPress={() => setGenre(g.id)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.pillText, genre === g.id && styles.pillTextActive]}>
-                {g.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
 
       {/* Grid */}
       {isLoading ? (
@@ -299,39 +376,93 @@ const styles = StyleSheet.create({
   },
   mediaBtnActive: { backgroundColor: Colors.primary },
   mediaBtnIcon: { fontSize: 16 },
-  mediaBtnText: {
-    ...Typography.subheading,
-    color: Colors.textMuted,
-  },
+  mediaBtnText: { ...Typography.subheading, color: Colors.textMuted },
   mediaBtnTextActive: { color: Colors.background },
-  filterRow: {
+
+  // Filter bar
+  filterBarWrap: {
+    marginBottom: 6,
+  },
+  filterBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: Spacing.lg,
-    marginBottom: 8,
-    gap: Spacing.sm,
-  },
-  filterLabel: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    width: 44,
-    flexShrink: 0,
-  },
-  pillRow: {
+    paddingHorizontal: Spacing.lg,
     gap: 8,
-    paddingRight: Spacing.lg,
   },
-  pill: {
+  filterIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterIconBtnActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '18',
+  },
+  dropBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  dropBtnLit: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '18',
+  },
+  dropBtnLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.textMuted,
+  },
+  dropBtnLabelLit: { color: Colors.primary },
+  dropBtnValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  dropBtnValueLit: { color: Colors.primary },
+
+  // Options row (expanded)
+  optionsWrap: {
+    marginBottom: 8,
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.lg,
+    gap: 8,
+  },
+  optionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.full,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  pillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  pillText: { ...Typography.caption, color: Colors.textMuted, fontWeight: '600' },
-  pillTextActive: { color: Colors.background, fontWeight: '700' },
+  optionChipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  optionChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textMuted,
+  },
+  optionChipTextSelected: {
+    color: Colors.background,
+    fontWeight: '700',
+  },
+
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   grid: {
     paddingHorizontal: Spacing.lg,
@@ -362,18 +493,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   ratingText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
-  cardInfo: {
-    padding: 8,
-    gap: 2,
-  },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.text,
-    lineHeight: 17,
-  },
-  cardYear: {
-    ...Typography.label,
-    color: Colors.textMuted,
-  },
+  cardInfo: { padding: 8, gap: 2 },
+  cardTitle: { fontSize: 13, fontWeight: '600', color: Colors.text, lineHeight: 17 },
+  cardYear: { ...Typography.label, color: Colors.textMuted },
 });
