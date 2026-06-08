@@ -294,14 +294,6 @@ export default function HomeScreen() {
             isLoading={showsLoading}
             showRating
           />
-          {hasTrakt && (
-            <ContentRow
-              title="Recently Watched"
-              items={historyItems ?? []}
-              isLoading={historyLoading}
-              showRating
-            />
-          )}
           {hasGemini && (
             <ContentRow
               title="✦ AI Picks: Movies"
@@ -327,6 +319,14 @@ export default function HomeScreen() {
               title="New Eps This Week"
               items={newEpsThisWeek}
               isLoading={newEpsLoading}
+            />
+          )}
+          {hasTrakt && (
+            <ContentRow
+              title="Recently Watched"
+              items={historyItems ?? []}
+              isLoading={historyLoading}
+              showRating
             />
           )}
         </View>
