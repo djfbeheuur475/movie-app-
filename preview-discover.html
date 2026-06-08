@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextUp — Discover Page</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #060606;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    padding: 40px 20px 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48px;
+  }
+
+  h1 {
+    color: #f59e0b;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    text-align: center;
+  }
+
+  /* ── Phone shell ── */
+  .phone {
+    width: 393px;
+    background: #0a0a0a;
+    border-radius: 48px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px #333,
+      0 0 0 8px #1a1a1a,
+      0 0 0 9px #2a2a2a,
+      0 40px 80px rgba(0,0,0,0.9);
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 50px;
+    padding: 14px 28px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+  }
+  .status-time { font-size: 15px; font-weight: 600; color: #fff; }
+  .status-icons { display: flex; gap: 6px; align-items: center; }
+
+  /* Screen content */
+  .screen { padding: 0 0 24px; }
+
+  /* Header */
+  .header { padding: 12px 16px 8px; }
+  .header-title { font-size: 28px; font-weight: 900; color: #fff; letter-spacing: -0.5px; }
+  .header-sub { font-size: 12px; color: #666; margin-top: 2px; }
+
+  /* Media toggle */
+  .media-toggle {
+    display: flex; margin: 0 16px 10px;
+    background: #141414; border-radius: 12px;
+    padding: 4px; border: 1px solid #2a2a2a;
+  }
+  .media-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 9px 0; border-radius: 8px; cursor: pointer;
+    font-size: 15px; font-weight: 600; color: #666;
+    transition: all 0.15s;
+  }
+  .media-btn.active { background: #f59e0b; color: #0a0a0a; }
+  .media-btn-icon { font-size: 16px; }
+
+  /* Filter bar */
+  .filter-bar-wrap { overflow: hidden; margin-bottom: 0; }
+  .filter-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 16px 8px; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+
+  .filter-icon-btn {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: #141414; border: 1px solid #2a2a2a;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; cursor: pointer;
+    font-size: 16px; color: #666;
+    transition: all 0.15s;
+  }
+  .filter-icon-btn.active {
+    border-color: #f59e0b;
+    background: rgba(245,158,11,0.1);
+    color: #f59e0b;
+  }
+
+  .drop-btn {
+    display: flex; align-items: center; flex-shrink: 0;
+    background: #141414; border-radius: 8px;
+    padding: 9px 12px; border: 1px solid #2a2a2a;
+    cursor: pointer; transition: all 0.15s; gap: 0;
+    white-space: nowrap;
+  }
+  .drop-btn.open, .drop-btn.active-filter {
+    border-color: #f59e0b;
+    background: rgba(245,158,11,0.1);
+  }
+  .drop-btn-label {
+    font-size: 12px; font-weight: 500; color: #666;
+  }
+  .drop-btn.open .drop-btn-label,
+  .drop-btn.active-filter .drop-btn-label { color: #f59e0b; }
+  .drop-btn-value {
+    font-size: 12px; font-weight: 700; color: #fff;
+    margin-left: 2px;
+  }
+  .drop-btn.open .drop-btn-value,
+  .drop-btn.active-filter .drop-btn-value { color: #f59e0b; }
+  .drop-btn-chevron {
+    font-size: 10px; color: #666; margin-left: 4px;
+  }
+  .drop-btn.open .drop-btn-chevron { color: #f59e0b; transform: rotate(180deg); display: inline-block; }
+
+  /* Options row (expanded) */
+  .options-wrap { overflow: hidden; }
+  .options-row {
+    display: flex; gap: 8px;
+    padding: 2px 16px 10px; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .options-row::-webkit-scrollbar { display: none; }
+  .option-chip {
+    display: flex; align-items: center; gap: 3px;
+    flex-shrink: 0;
+    background: #141414; border-radius: 999px;
+    padding: 6px 12px; border: 1px solid #2a2a2a;
+    cursor: pointer; transition: all 0.15s;
+    font-size: 12px; font-weight: 600; color: #666;
+    white-space: nowrap;
+  }
+  .option-chip.selected {
+    background: #f59e0b; border-color: #f59e0b;
+    color: #0a0a0a; font-weight: 700;
+  }
+  .check { font-size: 10px; }
+
+  /* Grid */
+  .grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; padding: 8px 16px 0;
+  }
+  .poster-card {
+    border-radius: 8px; overflow: hidden;
+    background: #141414; cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .poster-card:hover { transform: scale(0.97); }
+  .poster-img {
+    width: 100%; aspect-ratio: 2/3;
+    position: relative; overflow: hidden;
+  }
+  .poster-bg {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px;
+  }
+  .poster-gradient {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 45%;
+    background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
+  }
+  .rating-badge {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(0,0,0,0.75); border-radius: 4px;
+    border: 1px solid #f59e0b;
+    padding: 2px 6px; font-size: 11px; font-weight: 700; color: #f59e0b;
+  }
+  .card-info { padding: 8px; }
+  .card-title { font-size: 13px; font-weight: 600; color: #fff; line-height: 17px; }
+  .card-year { font-size: 11px; color: #666; margin-top: 2px; letter-spacing: 0.5px; }
+
+  /* Poster bg colours */
+  .c1 { background: linear-gradient(135deg,#1e3a5f,#0d2137); }
+  .c2 { background: linear-gradient(135deg,#3b1f5e,#1a0d2e); }
+  .c3 { background: linear-gradient(135deg,#1f3b20,#0d1f0e); }
+  .c4 { background: linear-gradient(135deg,#5e2020,#2e0d0d); }
+  .c5 { background: linear-gradient(135deg,#3d3320,#1f1a10); }
+  .c6 { background: linear-gradient(135deg,#1f2e4a,#0d1520); }
+
+  /* ── Dropdown reference panels (below phone) ── */
+  .dropdowns-section {
+    width: 393px;
+  }
+  .dropdowns-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    color: #444; text-transform: uppercase; margin-bottom: 16px;
+    text-align: center;
+  }
+  .dropdown-ref {
+    background: #0f0f0f; border: 1px solid #1f1f1f;
+    border-radius: 16px; margin-bottom: 12px; overflow: hidden;
+  }
+  .dropdown-ref-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #1f1f1f;
+  }
+  .dropdown-ref-name {
+    font-size: 13px; font-weight: 700; color: #f59e0b;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .dropdown-ref-hint { font-size: 11px; color: #444; }
+  .dropdown-ref-chips {
+    display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px;
+  }
+  .ref-chip {
+    display: flex; align-items: center; gap: 4px;
+    background: #141414; border-radius: 999px;
+    padding: 6px 14px; border: 1px solid #2a2a2a;
+    font-size: 12px; font-weight: 600; color: #888;
+    white-space: nowrap;
+  }
+  .ref-chip.default {
+    border-color: #f59e0b; background: rgba(245,158,11,0.12);
+    color: #f59e0b;
+  }
+  .ref-chip .check { color: #f59e0b; font-size: 11px; }
+
+  /* Tab bar */
+  .tab-bar {
+    background: rgba(10,10,10,0.95);
+    border-top: 1px solid #1a1a1a;
+    display: flex; justify-content: space-around; align-items: center;
+    height: 52px; padding: 0 8px;
+  }
+  .tab {
+    display: flex; align-items: center; justify-content: center;
+    flex: 1; height: 100%; cursor: pointer;
+  }
+  .tab svg { transition: stroke 0.15s; }
+  .tab.active svg { stroke: #f59e0b !important; }
+</style>
+</head>
+<body>
+
+<h1>Discover Page — Filter Redesign</h1>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PHONE 1: Default state (nothing open) -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:500px;">
+  <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#444;text-transform:uppercase;">Default — no filter active</div>
+  <div class="phone">
+    <div class="status-bar">
+      <span class="status-time">9:41</span>
+      <div style="position:absolute;left:50%;transform:translateX(-50%);width:120px;height:34px;background:#0a0a0a;border-radius:0 0 20px 20px;top:0;"></div>
+      <div class="status-icons">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#fff"><rect x="0" y="3" width="3" height="9" rx="1" opacity="0.4"/><rect x="4" y="2" width="3" height="10" rx="1" opacity="0.6"/><rect x="8" y="0" width="3" height="12" rx="1" opacity="0.8"/><rect x="12" y="0" width="3" height="12" rx="1"/></svg>
+        <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.5" y="0.5" width="22" height="11" rx="3.5" stroke="#fff" stroke-opacity="0.35" fill="none"/><rect x="2" y="2" width="18" height="8" rx="2" fill="#fff"/></svg>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="header">
+        <div class="header-title">Discover</div>
+        <div class="header-sub">Browse by genre, popularity, and more</div>
+      </div>
+
+      <div class="media-toggle">
+        <div class="media-btn active"><span class="media-btn-icon">🎬</span> Movies</div>
+        <div class="media-btn"><span class="media-btn-icon">📺</span> TV Shows</div>
+      </div>
+
+      <div class="filter-bar-wrap">
+        <div class="filter-bar">
+          <div class="filter-icon-btn">⊞</div>
+          <div class="drop-btn">
+            <span class="drop-btn-label">Sort: </span>
+            <span class="drop-btn-value">Popular</span>
+            <span class="drop-btn-chevron">∨</span>
+          </div>
+          <div class="drop-btn">
+            <span class="drop-btn-label">Release: </span>
+            <span class="drop-btn-value">Anytime</span>
+            <span class="drop-btn-chevron">∨</span>
+          </div>
+          <div class="drop-btn">
+            <span class="drop-btn-label">Genre: </span>
+            <span class="drop-btn-value">All</span>
+            <span class="drop-btn-chevron">∨</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="poster-card"><div class="poster-img c1"><div class="poster-bg">🎭</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.5</div></div><div class="card-info"><div class="card-title">Oppenheimer</div><div class="card-year">2023</div></div></div>
+        <div class="poster-card"><div class="poster-img c2"><div class="poster-bg">🕷️</div><div class="poster-gradient"></div><div class="rating-badge">★ 7.9</div></div><div class="card-info"><div class="card-title">Deadpool & Wolverine</div><div class="card-year">2024</div></div></div>
+        <div class="poster-card"><div class="poster-img c3"><div class="poster-bg">🌊</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.1</div></div><div class="card-info"><div class="card-title">Inside Out 2</div><div class="card-year">2024</div></div></div>
+        <div class="poster-card"><div class="poster-img c4"><div class="poster-bg">🔥</div><div class="poster-gradient"></div><div class="rating-badge">★ 7.6</div></div><div class="card-info"><div class="card-title">Furiosa</div><div class="card-year">2024</div></div></div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+      <div class="tab active"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PHONE 2: Sort dropdown open -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:500px;">
+  <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#444;text-transform:uppercase;">Sort dropdown open</div>
+  <div class="phone">
+    <div class="status-bar">
+      <span class="status-time">9:41</span>
+      <div style="position:absolute;left:50%;transform:translateX(-50%);width:120px;height:34px;background:#0a0a0a;border-radius:0 0 20px 20px;top:0;"></div>
+      <div class="status-icons"><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.5" y="0.5" width="22" height="11" rx="3.5" stroke="#fff" stroke-opacity="0.35" fill="none"/><rect x="2" y="2" width="18" height="8" rx="2" fill="#fff"/></svg></div>
+    </div>
+    <div class="screen">
+      <div class="header"><div class="header-title">Discover</div><div class="header-sub">Browse by genre, popularity, and more</div></div>
+      <div class="media-toggle">
+        <div class="media-btn active"><span class="media-btn-icon">🎬</span> Movies</div>
+        <div class="media-btn"><span class="media-btn-icon">📺</span> TV Shows</div>
+      </div>
+      <div class="filter-bar-wrap">
+        <div class="filter-bar">
+          <div class="filter-icon-btn">⊞</div>
+          <div class="drop-btn open">
+            <span class="drop-btn-label">Sort: </span>
+            <span class="drop-btn-value">Popular</span>
+            <span class="drop-btn-chevron" style="display:inline-block;transform:rotate(180deg);">∨</span>
+          </div>
+          <div class="drop-btn"><span class="drop-btn-label">Release: </span><span class="drop-btn-value">Anytime</span><span class="drop-btn-chevron">∨</span></div>
+          <div class="drop-btn"><span class="drop-btn-label">Genre: </span><span class="drop-btn-value">All</span><span class="drop-btn-chevron">∨</span></div>
+        </div>
+      </div>
+      <!-- Sort options expanded -->
+      <div class="options-wrap">
+        <div class="options-row">
+          <div class="option-chip selected"><span class="check">✓</span> Popular</div>
+          <div class="option-chip">Top Rated</div>
+          <div class="option-chip">Newest</div>
+          <div class="option-chip">Box Office</div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="poster-card"><div class="poster-img c1"><div class="poster-bg">🎭</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.5</div></div><div class="card-info"><div class="card-title">Oppenheimer</div><div class="card-year">2023</div></div></div>
+        <div class="poster-card"><div class="poster-img c2"><div class="poster-bg">🕷️</div><div class="poster-gradient"></div><div class="rating-badge">★ 7.9</div></div><div class="card-info"><div class="card-title">Deadpool & Wolverine</div><div class="card-year">2024</div></div></div>
+        <div class="poster-card"><div class="poster-img c3"><div class="poster-bg">🌊</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.1</div></div><div class="card-info"><div class="card-title">Inside Out 2</div><div class="card-year">2024</div></div></div>
+        <div class="poster-card"><div class="poster-img c4"><div class="poster-bg">🔥</div><div class="poster-gradient"></div><div class="rating-badge">★ 7.6</div></div><div class="card-info"><div class="card-title">Furiosa</div><div class="card-year">2024</div></div></div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div>
+      <div class="tab active"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PHONE 3: Release dropdown open -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:500px;">
+  <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#444;text-transform:uppercase;">Release dropdown open</div>
+  <div class="phone">
+    <div class="status-bar">
+      <span class="status-time">9:41</span>
+      <div style="position:absolute;left:50%;transform:translateX(-50%);width:120px;height:34px;background:#0a0a0a;border-radius:0 0 20px 20px;top:0;"></div>
+      <div class="status-icons"><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.5" y="0.5" width="22" height="11" rx="3.5" stroke="#fff" stroke-opacity="0.35" fill="none"/><rect x="2" y="2" width="18" height="8" rx="2" fill="#fff"/></svg></div>
+    </div>
+    <div class="screen">
+      <div class="header"><div class="header-title">Discover</div><div class="header-sub">Browse by genre, popularity, and more</div></div>
+      <div class="media-toggle">
+        <div class="media-btn active"><span class="media-btn-icon">🎬</span> Movies</div>
+        <div class="media-btn"><span class="media-btn-icon">📺</span> TV Shows</div>
+      </div>
+      <div class="filter-bar-wrap">
+        <div class="filter-bar">
+          <div class="filter-icon-btn">⊞</div>
+          <div class="drop-btn"><span class="drop-btn-label">Sort: </span><span class="drop-btn-value">Popular</span><span class="drop-btn-chevron">∨</span></div>
+          <div class="drop-btn open">
+            <span class="drop-btn-label">Release: </span>
+            <span class="drop-btn-value">Anytime</span>
+            <span class="drop-btn-chevron" style="display:inline-block;transform:rotate(180deg);">∨</span>
+          </div>
+          <div class="drop-btn"><span class="drop-btn-label">Genre: </span><span class="drop-btn-value">All</span><span class="drop-btn-chevron">∨</span></div>
+        </div>
+      </div>
+      <!-- Release options -->
+      <div class="options-wrap">
+        <div class="options-row">
+          <div class="option-chip selected"><span class="check">✓</span> Anytime</div>
+          <div class="option-chip">12 Months</div>
+          <div class="option-chip">24 Months</div>
+          <div class="option-chip">5 Years</div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="poster-card"><div class="poster-img c5"><div class="poster-bg">🌀</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.8</div></div><div class="card-info"><div class="card-title">Inception</div><div class="card-year">2010</div></div></div>
+        <div class="poster-card"><div class="poster-img c6"><div class="poster-bg">🃏</div><div class="poster-gradient"></div><div class="rating-badge">★ 9.0</div></div><div class="card-info"><div class="card-title">The Dark Knight</div><div class="card-year">2008</div></div></div>
+        <div class="poster-card"><div class="poster-img c1"><div class="poster-bg">🎭</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.5</div></div><div class="card-info"><div class="card-title">Oppenheimer</div><div class="card-year">2023</div></div></div>
+        <div class="poster-card"><div class="poster-img c3"><div class="poster-bg">🪐</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.6</div></div><div class="card-info"><div class="card-title">Interstellar</div><div class="card-year">2014</div></div></div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div>
+      <div class="tab active"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PHONE 4: Genre dropdown open (scrollable) -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:500px;">
+  <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#444;text-transform:uppercase;">Genre dropdown open — scrollable</div>
+  <div class="phone">
+    <div class="status-bar">
+      <span class="status-time">9:41</span>
+      <div style="position:absolute;left:50%;transform:translateX(-50%);width:120px;height:34px;background:#0a0a0a;border-radius:0 0 20px 20px;top:0;"></div>
+      <div class="status-icons"><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.5" y="0.5" width="22" height="11" rx="3.5" stroke="#fff" stroke-opacity="0.35" fill="none"/><rect x="2" y="2" width="18" height="8" rx="2" fill="#fff"/></svg></div>
+    </div>
+    <div class="screen">
+      <div class="header"><div class="header-title">Discover</div><div class="header-sub">Browse by genre, popularity, and more</div></div>
+      <div class="media-toggle">
+        <div class="media-btn active"><span class="media-btn-icon">🎬</span> Movies</div>
+        <div class="media-btn"><span class="media-btn-icon">📺</span> TV Shows</div>
+      </div>
+      <div class="filter-bar-wrap">
+        <div class="filter-bar">
+          <div class="filter-icon-btn">⊞</div>
+          <div class="drop-btn"><span class="drop-btn-label">Sort: </span><span class="drop-btn-value">Popular</span><span class="drop-btn-chevron">∨</span></div>
+          <div class="drop-btn"><span class="drop-btn-label">Release: </span><span class="drop-btn-value">Anytime</span><span class="drop-btn-chevron">∨</span></div>
+          <div class="drop-btn open">
+            <span class="drop-btn-label">Genre: </span>
+            <span class="drop-btn-value">All</span>
+            <span class="drop-btn-chevron" style="display:inline-block;transform:rotate(180deg);">∨</span>
+          </div>
+        </div>
+      </div>
+      <!-- Genre options — horizontal scroll, showing overflow hint -->
+      <div class="options-wrap" style="position:relative;">
+        <div class="options-row">
+          <div class="option-chip selected"><span class="check">✓</span> All</div>
+          <div class="option-chip">Action</div>
+          <div class="option-chip">Adventure</div>
+          <div class="option-chip">Animation</div>
+          <div class="option-chip">Comedy</div>
+          <div class="option-chip">Crime</div>
+          <div class="option-chip">Drama</div>
+          <div class="option-chip">Fantasy</div>
+          <div class="option-chip">Horror</div>
+          <div class="option-chip">Mystery</div>
+          <div class="option-chip">Romance</div>
+          <div class="option-chip">Sci-Fi</div>
+          <div class="option-chip">Thriller</div>
+        </div>
+        <!-- fade-right hint for scrollable -->
+        <div style="position:absolute;right:0;top:0;bottom:0;width:32px;background:linear-gradient(to right,transparent,#0a0a0a);pointer-events:none;"></div>
+      </div>
+      <div class="grid">
+        <div class="poster-card"><div class="poster-img c1"><div class="poster-bg">🎭</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.5</div></div><div class="card-info"><div class="card-title">Oppenheimer</div><div class="card-year">2023</div></div></div>
+        <div class="poster-card"><div class="poster-img c2"><div class="poster-bg">🕷️</div><div class="poster-gradient"></div><div class="rating-badge">★ 7.9</div></div><div class="card-info"><div class="card-title">Deadpool & Wolverine</div><div class="card-year">2024</div></div></div>
+        <div class="poster-card"><div class="poster-img c3"><div class="poster-bg">🌊</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.1</div></div><div class="card-info"><div class="card-title">Inside Out 2</div><div class="card-year">2024</div></div></div>
+        <div class="poster-card"><div class="poster-img c4"><div class="poster-bg">🔥</div><div class="poster-gradient"></div><div class="rating-badge">★ 7.6</div></div><div class="card-info"><div class="card-title">Furiosa</div><div class="card-year">2024</div></div></div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div>
+      <div class="tab active"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PHONE 5: Active filters applied + filter icon amber -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:500px;">
+  <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#444;text-transform:uppercase;">Active filters applied — Top Rated · 12 Months · Thriller</div>
+  <div class="phone">
+    <div class="status-bar">
+      <span class="status-time">9:41</span>
+      <div style="position:absolute;left:50%;transform:translateX(-50%);width:120px;height:34px;background:#0a0a0a;border-radius:0 0 20px 20px;top:0;"></div>
+      <div class="status-icons"><svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.5" y="0.5" width="22" height="11" rx="3.5" stroke="#fff" stroke-opacity="0.35" fill="none"/><rect x="2" y="2" width="18" height="8" rx="2" fill="#fff"/></svg></div>
+    </div>
+    <div class="screen">
+      <div class="header"><div class="header-title">Discover</div><div class="header-sub">Browse by genre, popularity, and more</div></div>
+      <div class="media-toggle">
+        <div class="media-btn active"><span class="media-btn-icon">🎬</span> Movies</div>
+        <div class="media-btn"><span class="media-btn-icon">📺</span> TV Shows</div>
+      </div>
+      <div class="filter-bar-wrap">
+        <div class="filter-bar">
+          <!-- icon is amber = active filters, tap to reset -->
+          <div class="filter-icon-btn active" title="Tap to reset all filters">⊞</div>
+          <div class="drop-btn active-filter">
+            <span class="drop-btn-label">Sort: </span>
+            <span class="drop-btn-value">Top Rated</span>
+            <span class="drop-btn-chevron">∨</span>
+          </div>
+          <div class="drop-btn active-filter">
+            <span class="drop-btn-label">Release: </span>
+            <span class="drop-btn-value">12 Months</span>
+            <span class="drop-btn-chevron">∨</span>
+          </div>
+          <div class="drop-btn active-filter">
+            <span class="drop-btn-label">Genre: </span>
+            <span class="drop-btn-value">Thriller</span>
+            <span class="drop-btn-chevron">∨</span>
+          </div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="poster-card"><div class="poster-img c6"><div class="poster-bg">🔪</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.2</div></div><div class="card-info"><div class="card-title">Saltburn</div><div class="card-year">2023</div></div></div>
+        <div class="poster-card"><div class="poster-img c4"><div class="poster-bg">😱</div><div class="poster-gradient"></div><div class="rating-badge">★ 7.9</div></div><div class="card-info"><div class="card-title">M3GAN</div><div class="card-year">2022</div></div></div>
+        <div class="poster-card"><div class="poster-img c2"><div class="poster-bg">🕵️</div><div class="poster-gradient"></div><div class="rating-badge">★ 8.1</div></div><div class="card-info"><div class="card-title">Knives Out 3</div><div class="card-year">2024</div></div></div>
+        <div class="poster-card"><div class="poster-img c1"><div class="poster-bg">🎯</div><div class="poster-gradient"></div><div class="rating-badge">★ 7.7</div></div><div class="card-info"><div class="card-title">Longlegs</div><div class="card-year">2024</div></div></div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div>
+      <div class="tab active"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- Quick reference: all dropdown options -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="dropdowns-section">
+  <div class="dropdowns-title">All dropdown options at a glance</div>
+
+  <div class="dropdown-ref">
+    <div class="dropdown-ref-header">
+      <div class="dropdown-ref-name">Sort</div>
+      <div class="dropdown-ref-hint">4 options</div>
+    </div>
+    <div class="dropdown-ref-chips">
+      <div class="ref-chip default"><span class="check">✓</span> Popular</div>
+      <div class="ref-chip">Top Rated</div>
+      <div class="ref-chip">Newest</div>
+      <div class="ref-chip">Box Office</div>
+    </div>
+  </div>
+
+  <div class="dropdown-ref">
+    <div class="dropdown-ref-header">
+      <div class="dropdown-ref-name">Release</div>
+      <div class="dropdown-ref-hint">4 options · Movies use primary_release_date · TV uses first_air_date</div>
+    </div>
+    <div class="dropdown-ref-chips">
+      <div class="ref-chip default"><span class="check">✓</span> Anytime</div>
+      <div class="ref-chip">12 Months</div>
+      <div class="ref-chip">24 Months</div>
+      <div class="ref-chip">5 Years</div>
+    </div>
+  </div>
+
+  <div class="dropdown-ref">
+    <div class="dropdown-ref-header">
+      <div class="dropdown-ref-name">Genre — Movies</div>
+      <div class="dropdown-ref-hint">13 options</div>
+    </div>
+    <div class="dropdown-ref-chips">
+      <div class="ref-chip default"><span class="check">✓</span> All</div>
+      <div class="ref-chip">Action</div>
+      <div class="ref-chip">Adventure</div>
+      <div class="ref-chip">Animation</div>
+      <div class="ref-chip">Comedy</div>
+      <div class="ref-chip">Crime</div>
+      <div class="ref-chip">Drama</div>
+      <div class="ref-chip">Fantasy</div>
+      <div class="ref-chip">Horror</div>
+      <div class="ref-chip">Mystery</div>
+      <div class="ref-chip">Romance</div>
+      <div class="ref-chip">Sci-Fi</div>
+      <div class="ref-chip">Thriller</div>
+    </div>
+  </div>
+
+  <div class="dropdown-ref">
+    <div class="dropdown-ref-header">
+      <div class="dropdown-ref-name">Genre — TV Shows</div>
+      <div class="dropdown-ref-hint">11 options</div>
+    </div>
+    <div class="dropdown-ref-chips">
+      <div class="ref-chip default"><span class="check">✓</span> All</div>
+      <div class="ref-chip">Action</div>
+      <div class="ref-chip">Animation</div>
+      <div class="ref-chip">Comedy</div>
+      <div class="ref-chip">Crime</div>
+      <div class="ref-chip">Documentary</div>
+      <div class="ref-chip">Drama</div>
+      <div class="ref-chip">Sci-Fi</div>
+      <div class="ref-chip">Mystery</div>
+      <div class="ref-chip">Soap</div>
+      <div class="ref-chip">War & Politics</div>
+      <div class="ref-chip">Western</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
