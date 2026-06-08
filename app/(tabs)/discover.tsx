@@ -71,7 +71,7 @@ function sortToParams(sort: SortKey, media: MediaTab): Record<string, string> {
   if (sort === 'popular') return { sort_by: 'popularity.desc' };
   if (sort === 'top') return { sort_by: 'vote_average.desc', 'vote_count.gte': '200' };
   if (sort === 'newest') return {
-    sort_by: 'primary_release_date.desc',
+    sort_by: media === 'movies' ? 'primary_release_date.desc' : 'first_air_date.desc',
     ...(media === 'movies' ? { 'release_date.lte': new Date().toISOString().slice(0, 10) } : {}),
   };
   if (sort === 'revenue') return media === 'movies'

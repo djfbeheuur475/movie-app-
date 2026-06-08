@@ -119,11 +119,12 @@ function parseResponse(rawText: string): Omit<GeminiReply, 'modelUsed'> {
     }
   } catch {}
 
-  // Gemini sometimes outputs prose before the JSON — find the embedded JSON object
-  const jsonMatch = stripped.match(/\{[\s\S]*?"reply"[\s\S]*?\}/);
-  if (jsonMatch) {
+  // Gemini sometimes outputs prose before the JSON — extract from first { to last }
+  const firstBrace = stripped.indexOf('{');
+  const lastBrace = stripped.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
     try {
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = JSON.parse(stripped.slice(firstBrace, lastBrace + 1));
       if (parsed && typeof parsed.reply === 'string') {
         return {
           reply: parsed.reply,

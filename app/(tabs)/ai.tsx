@@ -76,7 +76,6 @@ export default function AITabScreen() {
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isSendingRef.current) return;
-    isSendingRef.current = true;
 
     const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
     if (!cleanKey) {
@@ -87,6 +86,8 @@ export default function AITabScreen() {
       );
       return;
     }
+
+    isSendingRef.current = true;
 
     const userMsg: ChatMessage = {
       id: newId(),

@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: Spacing.lg,
     marginTop: -60,
-    marginBottom: Spacing.xs ?? 4,
+    marginBottom: Spacing.xs,
     gap: Spacing.md,
   },
   poster: {
