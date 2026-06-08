@@ -41,6 +41,7 @@ export default function AITabScreen() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const isSendingRef = useRef(false);
   const isInitialState = messages.length === 1;
 
   const traktCache = useRef<{ movies: TraktWatchedMovie[]; shows: TraktWatchedShow[] } | null>(null);
@@ -74,7 +75,8 @@ export default function AITabScreen() {
 
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || isSendingRef.current) return;
+    isSendingRef.current = true;
 
     const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
     if (!cleanKey) {
@@ -157,9 +159,10 @@ export default function AITabScreen() {
         },
       ]);
     } finally {
+      isSendingRef.current = false;
       setIsLoading(false);
     }
-  }, [messages, isLoading, geminiKey, fetchTraktHistory]);
+  }, [messages, geminiKey, fetchTraktHistory]);
 
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
 
@@ -254,7 +257,6 @@ export default function AITabScreen() {
               multiline
               maxLength={500}
               selectionColor={Colors.primary}
-              onSubmitEditing={() => sendMessage(input)}
             />
             <TouchableOpacity
               style={[styles.sendBtn, (!input.trim() || isLoading) && styles.sendBtnDisabled]}

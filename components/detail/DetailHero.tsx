@@ -183,6 +183,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: Spacing.lg,
     marginTop: -60,
+    marginBottom: Spacing.xs ?? 4,
     gap: Spacing.md,
   },
   poster: {
@@ -212,7 +213,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
     marginTop: 6,
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    overflow: 'hidden',
   },
   badge: {
     ...Typography.caption,

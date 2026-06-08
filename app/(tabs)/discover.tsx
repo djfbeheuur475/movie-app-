@@ -23,7 +23,15 @@ const CARD_WIDTH = (SW - Spacing.lg * 2 - CARD_GAP) / 2;
 
 type MediaTab = 'movies' | 'shows';
 type SortKey = 'popular' | 'top' | 'newest' | 'revenue';
+type DateRange = '12m' | '24m' | '5y' | 'all';
 type GenreId = number | null;
+
+const DATE_OPTIONS: { key: DateRange; label: string }[] = [
+  { key: 'all', label: 'Anytime' },
+  { key: '12m', label: '12 Months' },
+  { key: '24m', label: '24 Months' },
+  { key: '5y', label: '5 Years' },
+];
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'popular', label: 'Most Popular' },
@@ -45,6 +53,19 @@ const TV_GENRES: { id: number; name: string }[] = [
   { id: 10765, name: 'Sci-Fi' }, { id: 9648, name: 'Mystery' }, { id: 10766, name: 'Soap' },
   { id: 10767, name: 'Talk' }, { id: 10768, name: 'War & Politics' }, { id: 37, name: 'Western' },
 ];
+
+function dateRangeToParam(range: DateRange, media: MediaTab): Record<string, string> {
+  if (range === 'all') return {};
+  const now = new Date();
+  let gte: Date;
+  if (range === '12m') gte = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  else if (range === '24m') gte = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate());
+  else gte = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
+  const gteStr = gte.toISOString().slice(0, 10);
+  return media === 'movies'
+    ? { 'release_date.gte': gteStr }
+    : { 'first_air_date.gte': gteStr };
+}
 
 function sortToParams(sort: SortKey, media: MediaTab): Record<string, string> {
   if (sort === 'popular') return { sort_by: 'popularity.desc' };
@@ -86,17 +107,19 @@ export default function DiscoverScreen() {
   const [media, setMedia] = useState<MediaTab>('movies');
   const [sort, setSort] = useState<SortKey>('popular');
   const [genre, setGenre] = useState<GenreId>(null);
+  const [dateRange, setDateRange] = useState<DateRange>('all');
 
   const genres = media === 'movies' ? MOVIE_GENRES : TV_GENRES;
 
   const queryParams = useMemo(() => ({
     ...sortToParams(sort, media),
+    ...dateRangeToParam(dateRange, media),
     ...(genre ? { with_genres: String(genre) } : {}),
     page: 1,
-  }), [sort, genre, media]);
+  }), [sort, genre, media, dateRange]);
 
   const { data: items, isLoading } = useQuery<ContentItem[]>({
-    queryKey: ['discover', media, sort, genre],
+    queryKey: ['discover', media, sort, genre, dateRange],
     queryFn: async (): Promise<ContentItem[]> => {
       if (media === 'movies') {
         const results = await tmdbApi.discoverMovies(queryParams);
@@ -111,6 +134,7 @@ export default function DiscoverScreen() {
   const handleMediaChange = useCallback((m: MediaTab) => {
     setMedia(m);
     setGenre(null);
+    setDateRange('all');
   }, []);
 
   return (
@@ -158,6 +182,25 @@ export default function DiscoverScreen() {
             >
               <Text style={[styles.pillText, sort === s.key && styles.pillTextActive]}>
                 {s.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Date range pills */}
+      <View style={styles.filterRow}>
+        <Text style={styles.filterLabel}>Released</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+          {DATE_OPTIONS.map((d) => (
+            <TouchableOpacity
+              key={d.key}
+              style={[styles.pill, dateRange === d.key && styles.pillActive]}
+              onPress={() => setDateRange(d.key)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.pillText, dateRange === d.key && styles.pillTextActive]}>
+                {d.label}
               </Text>
             </TouchableOpacity>
           ))}

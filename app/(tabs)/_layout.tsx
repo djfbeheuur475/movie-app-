@@ -1,17 +1,15 @@
 import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 function TabIcon({
-  label,
   icon,
   iconFocused,
   focused,
 }: {
-  label: string;
   icon: IoniconsName;
   iconFocused: IoniconsName;
   focused: boolean;
@@ -20,10 +18,9 @@ function TabIcon({
     <View style={styles.tabItem}>
       <Ionicons
         name={focused ? iconFocused : icon}
-        size={22}
+        size={24}
         color={focused ? Colors.primary : Colors.textMuted}
       />
-      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
     </View>
   );
 }
@@ -43,7 +40,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="Home" icon="home-outline" iconFocused="home" focused={focused} />
+            <TabIcon icon="home-outline" iconFocused="home" focused={focused} />
           ),
         }}
       />
@@ -51,7 +48,7 @@ export default function TabsLayout() {
         name="discover"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="Discover" icon="compass-outline" iconFocused="compass" focused={focused} />
+            <TabIcon icon="compass-outline" iconFocused="compass" focused={focused} />
           ),
         }}
       />
@@ -59,7 +56,7 @@ export default function TabsLayout() {
         name="watchlist"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="Watchlist" icon="bookmark-outline" iconFocused="bookmark" focused={focused} />
+            <TabIcon icon="bookmark-outline" iconFocused="bookmark" focused={focused} />
           ),
         }}
       />
@@ -67,7 +64,7 @@ export default function TabsLayout() {
         name="calendar"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="Calendar" icon="calendar-outline" iconFocused="calendar" focused={focused} />
+            <TabIcon icon="calendar-outline" iconFocused="calendar" focused={focused} />
           ),
         }}
       />
@@ -75,7 +72,7 @@ export default function TabsLayout() {
         name="ai"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon label="AI" icon="sparkles-outline" iconFocused="sparkles" focused={focused} />
+            <TabIcon icon="sparkles-outline" iconFocused="sparkles" focused={focused} />
           ),
         }}
       />
@@ -92,23 +89,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopColor: Colors.border,
     borderTopWidth: 1,
-    height: 60,
-    paddingBottom: 6,
+    height: 52,
+    paddingBottom: 4,
     paddingTop: 4,
   },
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-  },
-  tabLabelActive: {
-    color: Colors.primary,
-    fontWeight: '700',
   },
 });

@@ -22,11 +22,6 @@ function validateKey(raw: string): string {
   if (!key) {
     throw new Error('No Gemini API key configured. Add one in Settings.');
   }
-  if (!key.startsWith('AIza')) {
-    throw new Error(
-      'Invalid API key format — Gemini keys start with "AIza". Check Settings.'
-    );
-  }
   return key;
 }
 
@@ -102,26 +97,45 @@ When making recommendations:
 
 You can also mention the AI Search addon for Stremio (https://stremio.itcon.au/aisearch/configure) as a way for users to discover AI-curated content directly inside Stremio.
 
-Respond in JSON with this exact format:
-{ "reply": "your message here", "tmdbIds": [12345, 67890] }`;
+CRITICAL: Output ONLY a raw JSON object. No prose before it, no prose after it, no markdown, no code fences, no explanation outside the JSON.
+The JSON must have exactly this shape:
+{"reply":"your conversational message here","tmdbIds":[12345,67890]}`;
 }
 
 // ─── Response parsing ─────────────────────────────────────────────────────────
 
-function parseResponse(text: string): Omit<GeminiReply, 'modelUsed'> {
+function parseResponse(rawText: string): Omit<GeminiReply, 'modelUsed'> {
+  // Strip markdown code fences if present
+  const stripped = rawText.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+
+  // Try parsing the whole stripped string first
   try {
-    const jsonStr = text
-      .replace(/^```json\n?/, '')
-      .replace(/\n?```$/, '')
-      .trim();
-    const parsed = JSON.parse(jsonStr);
-    return {
-      reply: typeof parsed.reply === 'string' ? parsed.reply : text,
-      tmdbIds: Array.isArray(parsed.tmdbIds) ? parsed.tmdbIds : [],
-    };
-  } catch {
-    return { reply: text, tmdbIds: [] };
+    const parsed = JSON.parse(stripped);
+    if (parsed && typeof parsed.reply === 'string') {
+      return {
+        reply: parsed.reply,
+        tmdbIds: Array.isArray(parsed.tmdbIds) ? parsed.tmdbIds : [],
+      };
+    }
+  } catch {}
+
+  // Gemini sometimes outputs prose before the JSON — find the embedded JSON object
+  const jsonMatch = stripped.match(/\{[\s\S]*?"reply"[\s\S]*?\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed && typeof parsed.reply === 'string') {
+        return {
+          reply: parsed.reply,
+          tmdbIds: Array.isArray(parsed.tmdbIds) ? parsed.tmdbIds : [],
+        };
+      }
+    } catch {}
   }
+
+  // Last resort: use the raw text but strip any markdown bold markers
+  const plain = rawText.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1');
+  return { reply: plain, tmdbIds: [] };
 }
 
 // ─── Model fallback detection ─────────────────────────────────────────────────

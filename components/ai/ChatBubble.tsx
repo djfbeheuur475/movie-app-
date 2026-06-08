@@ -9,6 +9,12 @@ interface Props {
   message: ChatMessage;
 }
 
+function cleanContent(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1');
+}
+
 export default function ChatBubble({ message }: Props) {
   const isUser = message.role === 'user';
 
@@ -16,7 +22,7 @@ export default function ChatBubble({ message }: Props) {
     <View style={[styles.row, isUser && styles.rowRight]}>
       {!isUser && <Text style={styles.avatar}>✦</Text>}
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
-        <Text style={[styles.text, isUser && styles.userText]}>{message.content}</Text>
+        <Text style={[styles.text, isUser && styles.userText]}>{cleanContent(message.content)}</Text>
         {message.recommendations && message.recommendations.length > 0 && (
           <View style={styles.recs}>
             {message.recommendations.slice(0, 5).map((item) => (
