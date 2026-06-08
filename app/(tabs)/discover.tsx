@@ -9,6 +9,8 @@ import {
   Dimensions,
   ActivityIndicator,
   ScrollView,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -225,7 +227,11 @@ export default function DiscoverScreen() {
           onPress={() => handleMediaChange('movies')}
           activeOpacity={0.8}
         >
-          <Text style={styles.mediaBtnIcon}>🎬</Text>
+          <Ionicons
+            name="film-outline"
+            size={16}
+            color={media === 'movies' ? Colors.background : Colors.textSecondary}
+          />
           <Text style={[styles.mediaBtnText, media === 'movies' && styles.mediaBtnTextActive]}>Movies</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -233,7 +239,11 @@ export default function DiscoverScreen() {
           onPress={() => handleMediaChange('shows')}
           activeOpacity={0.8}
         >
-          <Text style={styles.mediaBtnIcon}>📺</Text>
+          <Ionicons
+            name="tv-outline"
+            size={16}
+            color={media === 'shows' ? Colors.background : Colors.textSecondary}
+          />
           <Text style={[styles.mediaBtnText, media === 'shows' && styles.mediaBtnTextActive]}>TV Shows</Text>
         </TouchableOpacity>
       </View>
@@ -283,32 +293,39 @@ export default function DiscoverScreen() {
         />
       </ScrollView>
 
-      {/* Expanded dropdown options row */}
-      {activeFilter && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.optionsRow}
-          style={styles.optionsWrap}
-          keyboardShouldPersistTaps="handled"
-        >
-          {dropdownItems.map((opt) => (
-            <TouchableOpacity
-              key={opt.key}
-              style={[styles.optionChip, opt.selected && styles.optionChipSelected]}
-              onPress={opt.onSelect}
-              activeOpacity={0.75}
-            >
-              {opt.selected && (
-                <Ionicons name="checkmark" size={11} color={Colors.background} style={{ marginRight: 3 }} />
-              )}
-              <Text style={[styles.optionChipText, opt.selected && styles.optionChipTextSelected]}>
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
+      {/* Filter options Modal */}
+      <Modal
+        visible={activeFilter !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setActiveFilter(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setActiveFilter(null)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>
+              {activeFilter === 'sort' ? 'Sort By' : activeFilter === 'date' ? 'Release Date' : 'Genre'}
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {dropdownItems.map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.modalOption, opt.selected && styles.modalOptionSelected]}
+                  onPress={opt.onSelect}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modalOptionText, opt.selected && styles.modalOptionTextSelected]}>
+                    {opt.label}
+                  </Text>
+                  {opt.selected && (
+                    <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Grid */}
       {isLoading ? (
@@ -373,7 +390,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
   },
   mediaBtnActive: { backgroundColor: Colors.primary },
-  mediaBtnIcon: { fontSize: 16 },
   mediaBtnText: { ...Typography.subheading, color: Colors.textMuted },
   mediaBtnTextActive: { color: Colors.background },
 
@@ -428,36 +444,58 @@ const styles = StyleSheet.create({
   },
   dropBtnValueLit: { color: Colors.primary },
 
-  // Options row (expanded)
-  optionsWrap: {
-    marginBottom: 8,
+  // Filter Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-end',
   },
-  optionsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.lg,
-    gap: 8,
-  },
-  optionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
+  modalSheet: {
+    backgroundColor: Colors.surfaceElevated,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 36,
+    maxHeight: '70%',
+    borderTopWidth: 1,
     borderColor: Colors.border,
   },
-  optionChipSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 8,
   },
-  optionChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textMuted,
+  modalTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  optionChipTextSelected: {
-    color: Colors.background,
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border + '50',
+  },
+  modalOptionSelected: {
+    backgroundColor: Colors.primary + '18',
+  },
+  modalOptionText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: Colors.text,
+  },
+  modalOptionTextSelected: {
+    color: Colors.primary,
     fontWeight: '700',
   },
 

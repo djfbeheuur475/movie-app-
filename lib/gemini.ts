@@ -107,17 +107,34 @@ The JSON must have exactly this shape:
 // ─── Response parsing ─────────────────────────────────────────────────────────
 
 function parseResponse(rawText: string): Omit<GeminiReply, 'modelUsed'> {
-  // Strip markdown code fences if present
-  const stripped = rawText.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+  const stripped = rawText.replace(/```(?:json)?\n?/g, '').replace(/```/g, '').trim();
 
-  // Try parsing the whole stripped string first
+  // Recursively unwrap double-encoded replies and strip any trailing JSON blob.
+  // Gemini sometimes puts the real JSON inside parsed.reply (double-wrap), or
+  // appends a raw {"reply":...} block after the prose inside the reply field.
+  function clean(reply: string, ids: number[]): Omit<GeminiReply, 'modelUsed'> {
+    const trimmed = reply.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        const inner = JSON.parse(trimmed);
+        if (inner && typeof inner.reply === 'string') {
+          const innerIds: number[] = Array.isArray(inner.tmdbIds) ? inner.tmdbIds : [];
+          return clean(inner.reply, innerIds.length ? innerIds : ids);
+        }
+      } catch {}
+    }
+    const cleanReply = reply
+      .replace(/\s*\{"reply":[\s\S]*$/, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .trim();
+    return { reply: cleanReply || reply.trim(), tmdbIds: ids };
+  }
+
   try {
     const parsed = JSON.parse(stripped);
     if (parsed && typeof parsed.reply === 'string') {
-      return {
-        reply: parsed.reply,
-        tmdbIds: Array.isArray(parsed.tmdbIds) ? parsed.tmdbIds : [],
-      };
+      return clean(parsed.reply, Array.isArray(parsed.tmdbIds) ? parsed.tmdbIds : []);
     }
   } catch {}
 
@@ -128,15 +145,11 @@ function parseResponse(rawText: string): Omit<GeminiReply, 'modelUsed'> {
     try {
       const parsed = JSON.parse(stripped.slice(firstBrace, lastBrace + 1));
       if (parsed && typeof parsed.reply === 'string') {
-        return {
-          reply: parsed.reply,
-          tmdbIds: Array.isArray(parsed.tmdbIds) ? parsed.tmdbIds : [],
-        };
+        return clean(parsed.reply, Array.isArray(parsed.tmdbIds) ? parsed.tmdbIds : []);
       }
     } catch {}
   }
 
-  // Last resort: use the raw text but strip any markdown bold markers
   const plain = rawText.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1');
   return { reply: plain, tmdbIds: [] };
 }
