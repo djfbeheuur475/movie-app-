@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextUp — Home Screen</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #060606;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    padding: 40px 20px;
+  }
+
+  /* ── Phone shell ─────────────────────────────────────────────────────── */
+  .phone {
+    width: 393px;
+    min-height: 852px;
+    background: #0a0a0a;
+    border-radius: 48px;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      0 0 0 1px #333,
+      0 0 0 8px #1a1a1a,
+      0 0 0 9px #2a2a2a,
+      0 40px 80px rgba(0,0,0,0.9),
+      inset 0 0 80px rgba(0,0,0,0.3);
+  }
+
+  /* ── Status bar ──────────────────────────────────────────────────────── */
+  .status-bar {
+    height: 50px;
+    padding: 14px 28px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    z-index: 10;
+  }
+  .status-time { font-size: 15px; font-weight: 600; color: #fff; }
+  .status-icons { display: flex; gap: 6px; align-items: center; }
+  .status-icons svg { fill: #fff; }
+
+  /* ── Scrollable content ──────────────────────────────────────────────── */
+  .scroll {
+    overflow-y: auto;
+    max-height: 802px;
+    scrollbar-width: none;
+  }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  /* ── Top nav ─────────────────────────────────────────────────────────── */
+  .top-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px 10px;
+  }
+  .logo-wrap { display: flex; align-items: center; gap: 8px; }
+  .logo-icon {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .logo-text { font-size: 22px; font-weight: 900; color: #fff; letter-spacing: -0.5px; }
+  .logo-text span { color: #f59e0b; }
+  .nav-actions { display: flex; gap: 8px; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 18px;
+    background: #141414; border: 1px solid #2a2a2a;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .icon-btn:hover { background: #1f1f1f; }
+  .icon-btn svg { stroke: #666; }
+
+  /* ── Hero ────────────────────────────────────────────────────────────── */
+  .hero {
+    position: relative;
+    margin: 0 16px 8px;
+    border-radius: 16px;
+    overflow: hidden;
+    height: 210px;
+    cursor: pointer;
+  }
+  .hero-img {
+    width: 100%; height: 100%; object-fit: cover;
+    display: block;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+  }
+  .hero-bg-placeholder {
+    width: 100%; height: 100%;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #533483 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .hero-bg-text { font-size: 72px; opacity: 0.15; }
+  .hero-gradient {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(10,10,10,0.98) 0%, rgba(10,10,10,0.4) 50%, rgba(10,10,10,0.1) 100%);
+  }
+  .hero-content {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 16px;
+  }
+  .hero-badges { display: flex; gap: 6px; margin-bottom: 8px; }
+  .hero-badge {
+    font-size: 9px; font-weight: 800; letter-spacing: 0.8px;
+    padding: 3px 7px; border-radius: 4px; text-transform: uppercase;
+  }
+  .badge-type { background: #f59e0b; color: #0a0a0a; }
+  .badge-genre { background: rgba(255,255,255,0.12); color: #ccc; border: 1px solid rgba(255,255,255,0.15); }
+  .hero-title { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.3px; margin-bottom: 6px; line-height: 1.15; }
+  .hero-meta { display: flex; align-items: center; gap: 10px; }
+  .hero-rating { display: flex; align-items: center; gap: 3px; }
+  .hero-rating-star { color: #f59e0b; font-size: 12px; }
+  .hero-rating-val { font-size: 12px; font-weight: 700; color: #f59e0b; }
+  .hero-year { font-size: 12px; color: #999; }
+  .hero-dot { width: 3px; height: 3px; border-radius: 50%; background: #555; }
+  .hero-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .hero-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 9px 0; border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-weight: 700;
+    transition: opacity 0.15s;
+  }
+  .hero-btn:hover { opacity: 0.85; }
+  .hero-btn-primary { background: #f59e0b; color: #0a0a0a; }
+  .hero-btn-secondary { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.15); }
+
+  /* ── Section rows ────────────────────────────────────────────────────── */
+  .section { margin-bottom: 28px; }
+  .section-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 16px; margin-bottom: 12px;
+  }
+  .section-title { font-size: 17px; font-weight: 700; color: #fff; }
+  .section-title.accent { color: #f59e0b; font-size: 16px; font-weight: 800; }
+  .section-see-all { font-size: 12px; font-weight: 600; color: #f59e0b; cursor: pointer; }
+  .section-see-all:hover { opacity: 0.8; }
+
+  /* ── Poster cards row ────────────────────────────────────────────────── */
+  .cards-row {
+    display: flex; gap: 10px; overflow-x: auto;
+    padding: 0 16px 4px; scrollbar-width: none;
+  }
+  .cards-row::-webkit-scrollbar { display: none; }
+
+  .poster-card {
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .poster-card:hover { transform: scale(0.95); }
+  .poster-card:active { transform: scale(0.9); }
+
+  .poster-img {
+    border-radius: 8px; overflow: hidden;
+    position: relative;
+    background: #1f1f1f;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+  .poster-img .bg {
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+  }
+  .poster-gradient {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 45%;
+    background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
+    border-radius: 0 0 8px 8px;
+  }
+  .rating-badge {
+    position: absolute; top: 5px; right: 5px;
+    background: rgba(0,0,0,0.82); border-radius: 4px;
+    border: 1px solid rgba(245,158,11,0.5);
+    padding: 2px 5px; display: flex; align-items: center; gap: 2px;
+  }
+  .rating-star { font-size: 9px; color: #f59e0b; }
+  .rating-val { font-size: 10px; font-weight: 700; color: #f59e0b; }
+  .poster-title { font-size: 11px; font-weight: 600; color: #fff; margin-top: 5px; line-height: 14px; }
+
+  /* Card widths */
+  .card-sm .poster-img { width: 120px; height: 180px; }
+  .card-sm .poster-title { width: 120px; }
+  .card-md .poster-img { width: 130px; height: 195px; }
+  .card-md .poster-title { width: 130px; }
+
+  /* ── Recently watched row (slightly wider cards) ─────────────────────── */
+  .card-rw .poster-img { width: 120px; height: 180px; }
+  .card-rw .poster-title { width: 120px; }
+
+  /* ── AI section accent glow ──────────────────────────────────────────── */
+  .section.ai-section { position: relative; }
+  .ai-glow {
+    position: absolute; top: -10px; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(245,158,11,0.3), transparent);
+  }
+
+  /* ── New Eps This Week cards ─────────────────────────────────────────── */
+  .card-ep .poster-img { width: 120px; height: 180px; }
+  .card-ep .poster-title { width: 120px; }
+  .ep-badge {
+    position: absolute; bottom: 5px; left: 5px;
+    background: rgba(245,158,11,0.9); border-radius: 4px;
+    padding: 2px 5px;
+    font-size: 8px; font-weight: 800; color: #0a0a0a; letter-spacing: 0.3px;
+  }
+
+  /* ── Bottom tab bar ──────────────────────────────────────────────────── */
+  .tab-bar {
+    position: sticky; bottom: 0;
+    background: rgba(10,10,10,0.95);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid #1f1f1f;
+    display: flex; justify-content: space-around; align-items: center;
+    height: 52px; padding: 0 8px;
+  }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex: 1; cursor: pointer; padding: 8px 0; gap: 3px;
+    transition: opacity 0.15s;
+  }
+  .tab:hover { opacity: 0.8; }
+  .tab svg { transition: stroke 0.15s; }
+  .tab.active svg { stroke: #f59e0b !important; }
+  .tab-dot { width: 4px; height: 4px; border-radius: 50%; background: #f59e0b; }
+
+  /* ── Poster placeholder colours ──────────────────────────────────────── */
+  .c1 { background: linear-gradient(135deg, #1e3a5f, #0d2137); }
+  .c2 { background: linear-gradient(135deg, #3b1f5e, #1a0d2e); }
+  .c3 { background: linear-gradient(135deg, #1f3b20, #0d1f0e); }
+  .c4 { background: linear-gradient(135deg, #5e2020, #2e0d0d); }
+  .c5 { background: linear-gradient(135deg, #3d3320, #1f1a10); }
+  .c6 { background: linear-gradient(135deg, #1f2e4a, #0d1520); }
+  .c7 { background: linear-gradient(135deg, #4a1f3d, #200d1a); }
+  .c8 { background: linear-gradient(135deg, #1a3a3a, #0a1e1e); }
+  .c9 { background: linear-gradient(135deg, #3a2a1a, #1e150a); }
+  .c10 { background: linear-gradient(135deg, #2a1a3a, #150a1e); }
+
+  /* ── Scrollable section indicator ───────────────────────────────────── */
+  .rows-start { padding-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span class="status-time">9:41</span>
+    <div style="position:absolute;left:50%;transform:translateX(-50%);width:120px;height:34px;background:#0a0a0a;border-radius:0 0 20px 20px;top:0;"></div>
+    <div class="status-icons">
+      <svg width="16" height="12" viewBox="0 0 16 12"><rect x="0" y="3" width="3" height="9" rx="1" fill="#fff" opacity="0.4"/><rect x="4" y="2" width="3" height="10" rx="1" fill="#fff" opacity="0.6"/><rect x="8" y="0" width="3" height="12" rx="1" fill="#fff" opacity="0.8"/><rect x="12" y="0" width="3" height="12" rx="1" fill="#fff"/></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.5C10.5 2.5 12.7 3.6 14.2 5.3L15.5 4C13.6 1.9 10.9 0.5 8 0.5C5.1 0.5 2.4 1.9 0.5 4L1.8 5.3C3.3 3.6 5.5 2.5 8 2.5Z" fill="#fff" opacity="0.5"/><path d="M8 5.5C9.7 5.5 11.2 6.2 12.3 7.3L13.6 6C12.1 4.5 10.2 3.5 8 3.5C5.8 3.5 3.9 4.5 2.4 6L3.7 7.3C4.8 6.2 6.3 5.5 8 5.5Z" fill="#fff" opacity="0.7"/><circle cx="8" cy="10" r="1.5" fill="#fff"/></svg>
+      <svg width="26" height="12" viewBox="0 0 26 12"><rect x="0.5" y="0.5" width="22" height="11" rx="3.5" stroke="#fff" stroke-opacity="0.35" fill="none"/><rect x="2" y="2" width="18" height="8" rx="2" fill="#fff"/><path d="M23.5 4v4a2 2 0 000-4z" fill="#fff" fill-opacity="0.4"/></svg>
+    </div>
+  </div>
+
+  <!-- Scrollable content -->
+  <div class="scroll">
+
+    <!-- Top Nav -->
+    <div class="top-nav">
+      <div class="logo-wrap">
+        <div class="logo-icon">🎬</div>
+        <div class="logo-text">Next<span>Up</span></div>
+      </div>
+      <div class="nav-actions">
+        <div class="icon-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <div class="icon-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hero Section -->
+    <div class="hero">
+      <div class="hero-bg-placeholder">
+        <div style="width:100%;height:100%;background:linear-gradient(135deg,#0d1b2a 0%,#1b2a3b 30%,#2d4a6b 60%,#1a3352 100%);position:relative;overflow:hidden;">
+          <!-- Fake backdrop silhouettes -->
+          <div style="position:absolute;bottom:0;left:0;right:0;height:120px;background:linear-gradient(to top,#0a0a0a,transparent);"></div>
+          <div style="position:absolute;top:20px;right:20px;font-size:80px;opacity:0.08;">🌌</div>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:56px;opacity:0.12;">🎬</div>
+          <!-- fake poster overlay -->
+          <div style="position:absolute;right:20px;bottom:40px;width:70px;height:100px;border-radius:6px;background:linear-gradient(135deg,#1f3a5f,#0d2040);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:28px;opacity:0.5;">🎭</div>
+        </div>
+      </div>
+      <div class="hero-gradient"></div>
+      <div class="hero-content">
+        <div class="hero-badges">
+          <span class="hero-badge badge-type">Film</span>
+          <span class="hero-badge badge-genre">Sci-Fi</span>
+          <span class="hero-badge badge-genre">Thriller</span>
+        </div>
+        <div class="hero-title">Dune: Part Two</div>
+        <div class="hero-meta">
+          <div class="hero-rating">
+            <span class="hero-rating-star">★</span>
+            <span class="hero-rating-val">8.5</span>
+          </div>
+          <div class="hero-dot"></div>
+          <span class="hero-year">2024</span>
+          <div class="hero-dot"></div>
+          <span class="hero-year">2h 46m</span>
+        </div>
+        <div class="hero-actions">
+          <div class="hero-btn hero-btn-primary">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Details
+          </div>
+          <div class="hero-btn hero-btn-secondary">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+            Watchlist
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spacer for rows start -->
+    <div class="rows-start"></div>
+
+    <!-- ── Popular Movies ── -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Popular Movies</span>
+        <span class="section-see-all">See all</span>
+      </div>
+      <div class="cards-row">
+        <!-- Card 1 -->
+        <div class="poster-card card-sm">
+          <div class="poster-img c1">
+            <div class="bg">🎭</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.5</span></div>
+          </div>
+          <div class="poster-title">Oppenheimer</div>
+        </div>
+        <!-- Card 2 -->
+        <div class="poster-card card-sm">
+          <div class="poster-img c2">
+            <div class="bg">🕷️</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">7.9</span></div>
+          </div>
+          <div class="poster-title">Deadpool & Wolverine</div>
+        </div>
+        <!-- Card 3 -->
+        <div class="poster-card card-sm">
+          <div class="poster-img c3">
+            <div class="bg">🌊</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.1</span></div>
+          </div>
+          <div class="poster-title">Inside Out 2</div>
+        </div>
+        <!-- Card 4 -->
+        <div class="poster-card card-sm">
+          <div class="poster-img c4">
+            <div class="bg">🔥</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">7.6</span></div>
+          </div>
+          <div class="poster-title">Furiosa</div>
+        </div>
+        <!-- Card 5 -->
+        <div class="poster-card card-sm">
+          <div class="poster-img c5">
+            <div class="bg">🎪</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">7.4</span></div>
+          </div>
+          <div class="poster-title">The Fall Guy</div>
+        </div>
+        <!-- Card 6 -->
+        <div class="poster-card card-sm">
+          <div class="poster-img c6">
+            <div class="bg">🚀</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">7.8</span></div>
+          </div>
+          <div class="poster-title">Kingdom of the Planet of the Apes</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Top Series ── -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Top Series</span>
+        <span class="section-see-all">See all</span>
+      </div>
+      <div class="cards-row">
+        <div class="poster-card card-sm">
+          <div class="poster-img c2">
+            <div class="bg">👑</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">9.0</span></div>
+          </div>
+          <div class="poster-title">House of the Dragon</div>
+        </div>
+        <div class="poster-card card-sm">
+          <div class="poster-img c7">
+            <div class="bg">🔬</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.8</span></div>
+          </div>
+          <div class="poster-title">The Last of Us</div>
+        </div>
+        <div class="poster-card card-sm">
+          <div class="poster-img c8">
+            <div class="bg">🎲</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.6</span></div>
+          </div>
+          <div class="poster-title">Shōgun</div>
+        </div>
+        <div class="poster-card card-sm">
+          <div class="poster-img c9">
+            <div class="bg">🕵️</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.4</span></div>
+          </div>
+          <div class="poster-title">True Detective: Night Country</div>
+        </div>
+        <div class="poster-card card-sm">
+          <div class="poster-img c10">
+            <div class="bg">🌐</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.2</span></div>
+          </div>
+          <div class="poster-title">Fallout</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Recently Watched (Trakt) ── -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Recently Watched</span>
+      </div>
+      <div class="cards-row">
+        <div class="poster-card card-rw">
+          <div class="poster-img c3">
+            <div class="bg">🧪</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">9.5</span></div>
+          </div>
+          <div class="poster-title">Breaking Bad</div>
+        </div>
+        <div class="poster-card card-rw">
+          <div class="poster-img c1">
+            <div class="bg">🌌</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.6</span></div>
+          </div>
+          <div class="poster-title">Interstellar</div>
+        </div>
+        <div class="poster-card card-rw">
+          <div class="poster-img c4">
+            <div class="bg">🎭</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.2</span></div>
+          </div>
+          <div class="poster-title">Succession</div>
+        </div>
+        <div class="poster-card card-rw">
+          <div class="poster-img c5">
+            <div class="bg">🔱</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">9.2</span></div>
+          </div>
+          <div class="poster-title">The Wire</div>
+        </div>
+        <div class="poster-card card-rw">
+          <div class="poster-img c6">
+            <div class="bg">🚗</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.9</span></div>
+          </div>
+          <div class="poster-title">Better Call Saul</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AI Picks: Movies ── -->
+    <div class="section ai-section">
+      <div class="ai-glow"></div>
+      <div class="section-header">
+        <span class="section-title accent">✦ AI Picks: Movies</span>
+      </div>
+      <div class="cards-row">
+        <div class="poster-card card-md">
+          <div class="poster-img c2" style="width:130px;height:195px;">
+            <div class="bg">🪐</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.7</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">Arrival</div>
+        </div>
+        <div class="poster-card card-md">
+          <div class="poster-img c7" style="width:130px;height:195px;">
+            <div class="bg">🎯</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.4</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">No Country for Old Men</div>
+        </div>
+        <div class="poster-card card-md">
+          <div class="poster-img c8" style="width:130px;height:195px;">
+            <div class="bg">🌀</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.8</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">Inception</div>
+        </div>
+        <div class="poster-card card-md">
+          <div class="poster-img c9" style="width:130px;height:195px;">
+            <div class="bg">🎪</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.2</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">Parasite</div>
+        </div>
+        <div class="poster-card card-md">
+          <div class="poster-img c1" style="width:130px;height:195px;">
+            <div class="bg">🎬</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.9</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">The Dark Knight</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AI Picks: TV Shows ── -->
+    <div class="section ai-section">
+      <div class="ai-glow"></div>
+      <div class="section-header">
+        <span class="section-title accent">✦ AI Picks: TV Shows</span>
+      </div>
+      <div class="cards-row">
+        <div class="poster-card card-md">
+          <div class="poster-img c4" style="width:130px;height:195px;">
+            <div class="bg">⚗️</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">9.5</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">Breaking Bad</div>
+        </div>
+        <div class="poster-card card-md">
+          <div class="poster-img c10" style="width:130px;height:195px;">
+            <div class="bg">🌍</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">9.1</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">Chernobyl</div>
+        </div>
+        <div class="poster-card card-md">
+          <div class="poster-img c3" style="width:130px;height:195px;">
+            <div class="bg">👁️</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.9</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">Dark</div>
+        </div>
+        <div class="poster-card card-md">
+          <div class="poster-img c5" style="width:130px;height:195px;">
+            <div class="bg">🗡️</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">9.2</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">Game of Thrones</div>
+        </div>
+        <div class="poster-card card-md">
+          <div class="poster-img c6" style="width:130px;height:195px;">
+            <div class="bg">🤖</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.7</span></div>
+          </div>
+          <div class="poster-title" style="width:130px;">Westworld</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── New Eps This Week ── -->
+    <div class="section" style="margin-bottom:16px;">
+      <div class="section-header">
+        <span class="section-title">New Eps This Week</span>
+      </div>
+      <div class="cards-row">
+        <!-- Show with amber "tonight" indicator -->
+        <div class="poster-card card-ep">
+          <div class="poster-img c2" style="width:120px;height:180px;">
+            <div class="bg">🐴</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.4</span></div>
+            <div class="ep-badge">TODAY</div>
+          </div>
+          <div class="poster-title" style="width:120px;">House of the Dragon</div>
+        </div>
+        <div class="poster-card card-ep">
+          <div class="poster-img c8" style="width:120px;height:180px;">
+            <div class="bg">🦠</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.8</span></div>
+            <div class="ep-badge">TUE</div>
+          </div>
+          <div class="poster-title" style="width:120px;">The Last of Us</div>
+        </div>
+        <div class="poster-card card-ep">
+          <div class="poster-img c3" style="width:120px;height:180px;">
+            <div class="bg">🌿</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">7.9</span></div>
+            <div class="ep-badge">WED</div>
+          </div>
+          <div class="poster-title" style="width:120px;">Severance</div>
+        </div>
+        <div class="poster-card card-ep">
+          <div class="poster-img c9" style="width:120px;height:180px;">
+            <div class="bg">🎲</div>
+            <div class="poster-gradient"></div>
+            <div class="rating-badge"><span class="rating-star">★</span><span class="rating-val">8.6</span></div>
+            <div class="ep-badge">FRI</div>
+          </div>
+          <div class="poster-title" style="width:120px;">Shōgun</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- bottom padding -->
+    <div style="height:16px;"></div>
+
+  </div><!-- /scroll -->
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <!-- Home (active) -->
+    <div class="tab active">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <div class="tab-dot"></div>
+    </div>
+    <!-- Discover -->
+    <div class="tab">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </div>
+    <!-- Calendar -->
+    <div class="tab">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    </div>
+    <!-- AI -->
+    <div class="tab">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 010 2h-1v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1H2a1 1 0 010-2h1a7 7 0 017-7h1V5.73A2 2 0 0110 4a2 2 0 012-2z"/><circle cx="8.5" cy="13.5" r="1.5" fill="#555"/><circle cx="15.5" cy="13.5" r="1.5" fill="#555"/></svg>
+    </div>
+    <!-- Watchlist -->
+    <div class="tab">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+    </div>
+  </div>
+
+</div><!-- /phone -->
+
+</body>
+</html>
