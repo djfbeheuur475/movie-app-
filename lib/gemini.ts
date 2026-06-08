@@ -56,6 +56,9 @@ function buildSystemPrompt(
   watchedMovies: TraktWatchedMovie[],
   watchedShows: TraktWatchedShow[]
 ): string {
+  const today = new Date().toLocaleDateString('en-AU', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
   const recentMovies = watchedMovies
     .sort(
       (a, b) =>
@@ -86,6 +89,7 @@ Use this history to personalise your recommendations. Identify their taste — g
 
   return `You are NextUp AI, a knowledgeable and personable entertainment guide.
 Your job is to help users decide what to watch next — movies and TV shows.
+Today's date is ${today}. When users ask about recent content (e.g. "last 12 months", "this year", "new releases"), calculate the date range relative to today's date.
 ${historySection}
 
 When making recommendations:
@@ -94,8 +98,6 @@ When making recommendations:
 3. For each recommendation you make, include its TMDB ID in the tmdbIds array so the app can fetch posters and details.
 4. Focus on movies AND TV shows unless the user specifies one.
 5. If the user asks about a specific title, give a brief review or explanation.
-
-You can also mention the AI Search addon for Stremio (https://stremio.itcon.au/aisearch/configure) as a way for users to discover AI-curated content directly inside Stremio.
 
 CRITICAL: Output ONLY a raw JSON object. No prose before it, no prose after it, no markdown, no code fences, no explanation outside the JSON.
 The JSON must have exactly this shape:

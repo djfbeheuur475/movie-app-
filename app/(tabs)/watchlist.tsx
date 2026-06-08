@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,12 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { useWatchlistStore } from '../../store/watchlistStore';
+import { useApiKeysStore } from '../../store/apiKeysStore';
 import { getPosterUrl } from '../../lib/tmdb';
+import { traktApi } from '../../lib/trakt';
 import type { WatchlistItem } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -55,17 +58,68 @@ function WatchlistCard({ item, onRemove }: { item: WatchlistItem; onRemove: () =
 export default function WatchlistScreen() {
   const router = useRouter();
   const { items, removeFromWatchlist } = useWatchlistStore();
+  const { traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
+
+  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
+
+  const { data: traktMovies } = useQuery({
+    queryKey: ['trakt-watched-movies-wl', traktClientId, traktUsername, traktAccessToken],
+    queryFn: () =>
+      traktAccessToken
+        ? traktApi.getWatchedMovies(traktClientId, traktAccessToken)
+        : traktApi.getUserWatchedMovies(traktUsername, traktClientId),
+    enabled: hasTrakt,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const { data: traktShows } = useQuery({
+    queryKey: ['trakt-watched-shows-wl', traktClientId, traktUsername, traktAccessToken],
+    queryFn: () =>
+      traktAccessToken
+        ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
+        : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+    enabled: hasTrakt,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  // Build lookup sets from Trakt data
+  const watchedMovieIds = useMemo(() => {
+    const ids = new Set<number>();
+    (traktMovies ?? []).forEach((m) => {
+      if (m.movie.ids.tmdb) ids.add(m.movie.ids.tmdb);
+    });
+    return ids;
+  }, [traktMovies]);
+
+  const watchedShowIds = useMemo(() => {
+    const ids = new Set<number>();
+    (traktShows ?? []).forEach((s) => {
+      if (s.show.ids.tmdb) ids.add(s.show.ids.tmdb);
+    });
+    return ids;
+  }, [traktShows]);
 
   const movieCount = items.filter((i) => i.media_type === 'movie').length;
   const tvCount = items.filter((i) => i.media_type === 'tv').length;
 
-  const filtered = items.filter((i) => {
-    if (mediaFilter === 'movie' && i.media_type !== 'movie') return false;
-    if (mediaFilter === 'tv' && i.media_type !== 'tv') return false;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    return items.filter((i) => {
+      if (mediaFilter === 'movie' && i.media_type !== 'movie') return false;
+      if (mediaFilter === 'tv' && i.media_type !== 'tv') return false;
+
+      if (activeTab === 'all') return true;
+
+      const isWatchedMovie = i.media_type === 'movie' && watchedMovieIds.has(i.tmdb_id);
+      const isWatchingShow = i.media_type === 'tv' && watchedShowIds.has(i.tmdb_id);
+
+      if (activeTab === 'watchlist') return !isWatchedMovie && !isWatchingShow;
+      if (activeTab === 'watching') return isWatchingShow;
+      if (activeTab === 'watched') return isWatchedMovie;
+      return true;
+    });
+  }, [items, mediaFilter, activeTab, watchedMovieIds, watchedShowIds]);
 
   const handleRemove = (item: WatchlistItem) => {
     Alert.alert('Remove from watchlist?', item.title, [
@@ -84,6 +138,17 @@ export default function WatchlistScreen() {
     { key: 'watching', label: 'Watching' },
     { key: 'watched', label: 'Watched' },
   ];
+
+  const tabEmptyMessages: Record<FilterTab, string> = {
+    all: '',
+    watchlist: 'Nothing left to watch — add some titles first.',
+    watching: hasTrakt
+      ? 'No TV shows in progress. Start watching a show on Trakt to see it here.'
+      : 'Connect Trakt in Settings to track your watching progress.',
+    watched: hasTrakt
+      ? 'No watched movies yet. Mark movies as watched on Trakt to see them here.'
+      : 'Connect Trakt in Settings to track what you\'ve watched.',
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -153,7 +218,7 @@ export default function WatchlistScreen() {
         </View>
       ) : (
         <FlatList
-          data={activeTab === 'all' ? filtered : []}
+          data={filtered}
           keyExtractor={(item) => `${item.media_type}-${item.tmdb_id}`}
           numColumns={2}
           columnWrapperStyle={styles.gridRow}
@@ -165,10 +230,15 @@ export default function WatchlistScreen() {
           ListEmptyComponent={
             activeTab !== 'all' ? (
               <View style={styles.tabEmptyState}>
-                <Text style={styles.tabEmptyText}>
-                  No items in {FILTER_TABS.find((t) => t.key === activeTab)?.label ?? ''} yet.
-                </Text>
-                <Text style={styles.tabEmptyHint}>This feature is coming soon!</Text>
+                <Text style={styles.tabEmptyText}>{tabEmptyMessages[activeTab]}</Text>
+                {!hasTrakt && (activeTab === 'watching' || activeTab === 'watched') && (
+                  <TouchableOpacity
+                    style={styles.connectBtn}
+                    onPress={() => router.push('/settings')}
+                  >
+                    <Text style={styles.connectBtnText}>Connect Trakt</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : null
           }
@@ -208,58 +278,6 @@ const styles = StyleSheet.create({
   settingsIcon: {
     fontSize: 22,
     color: Colors.textMuted,
-  },
-  accountCard: {
-    marginHorizontal: Spacing.lg,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.md,
-    overflow: 'hidden',
-  },
-  accountCardInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    gap: Spacing.md,
-  },
-  accountAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primary + '33',
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accountAvatarText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  accountName: {
-    ...Typography.subheading,
-    color: Colors.text,
-  },
-  accountEmail: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-  manageKeysBtn: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  manageKeysBtnText: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    fontWeight: '600',
   },
   filterTabsWrap: {
     paddingHorizontal: Spacing.lg,
@@ -414,15 +432,25 @@ const styles = StyleSheet.create({
   tabEmptyState: {
     alignItems: 'center',
     paddingTop: 60,
-    gap: Spacing.sm,
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
   },
   tabEmptyText: {
     ...Typography.body,
     color: Colors.textSecondary,
     textAlign: 'center',
+    lineHeight: 22,
   },
-  tabEmptyHint: {
-    ...Typography.caption,
-    color: Colors.textMuted,
+  connectBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 10,
+    marginTop: Spacing.sm,
+  },
+  connectBtnText: {
+    ...Typography.subheading,
+    color: Colors.background,
+    fontWeight: '700',
   },
 });

@@ -63,7 +63,7 @@ function dateRangeToParam(range: DateRange, media: MediaTab): Record<string, str
   else gte = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
   const gteStr = gte.toISOString().slice(0, 10);
   return media === 'movies'
-    ? { 'release_date.gte': gteStr }
+    ? { 'primary_release_date.gte': gteStr }
     : { 'first_air_date.gte': gteStr };
 }
 
@@ -188,24 +188,26 @@ export default function DiscoverScreen() {
         </ScrollView>
       </View>
 
-      {/* Date range pills */}
-      <View style={styles.filterRow}>
-        <Text style={styles.filterLabel}>Released</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-          {DATE_OPTIONS.map((d) => (
-            <TouchableOpacity
-              key={d.key}
-              style={[styles.pill, dateRange === d.key && styles.pillActive]}
-              onPress={() => setDateRange(d.key)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.pillText, dateRange === d.key && styles.pillTextActive]}>
-                {d.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* Date range pills — movies only (TV popularity already implies recency) */}
+      {media === 'movies' && (
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Released</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+            {DATE_OPTIONS.map((d) => (
+              <TouchableOpacity
+                key={d.key}
+                style={[styles.pill, dateRange === d.key && styles.pillActive]}
+                onPress={() => setDateRange(d.key)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.pillText, dateRange === d.key && styles.pillTextActive]}>
+                  {d.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Genre pills */}
       <View style={styles.filterRow}>

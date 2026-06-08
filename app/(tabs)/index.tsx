@@ -130,13 +130,13 @@ export default function HomeScreen() {
       const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
       const { tmdbIds } = await askGemini(
         cleanKey,
-        [{ role: 'user', content: 'Recommend exactly 6 must-watch movies and TV shows. Mix genres — thriller, comedy, drama, sci-fi. Include both recent hits and timeless classics.' }],
+        [{ role: 'user', content: 'Recommend exactly 10 must-watch movies and TV shows. Mix genres — thriller, comedy, drama, sci-fi, action. Include both recent hits and timeless classics.' }],
         [],
         []
       );
       if (!tmdbIds.length) return [];
       const results = await Promise.allSettled(
-        tmdbIds.slice(0, 6).map(async (id) => {
+        tmdbIds.slice(0, 10).map(async (id) => {
           try { return normalizeMovie(await tmdbApi.getMovieDetail(id)); }
           catch { return normalizeTVShow(await tmdbApi.getTVDetail(id)); }
         })
