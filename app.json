@@ -1,34 +1,31 @@
 {
   "expo": {
-    "name": "NextUp",
-    "slug": "nextup",
+    "name": "Lemonade Tycoon: Sydney",
+    "slug": "lemonade-tycoon-sydney",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "scheme": "nextup",
+    "userInterfaceStyle": "light",
+    "scheme": "lemonadetycoon",
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundColor": "#0a0a0a"
+        "backgroundColor": "#F59E0B"
       },
-      "package": "com.nextup.app",
+      "package": "com.sydneylemonade.app",
       "versionCode": 1,
       "permissions": [
-        "android.permission.INTERNET",
-        "android.permission.ACCESS_NETWORK_STATE",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE"
       ]
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.nextup.app"
+      "bundleIdentifier": "com.sydneylemonade.app"
     },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0a0a0a"
+      "backgroundColor": "#F59E0B"
     },
     "assetBundlePatterns": [
       "**/*"

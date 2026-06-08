@@ -2,9 +2,11 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "lib": ["ES2020", "DOM"],
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "types": ["node"]
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.d.ts", "expo-env.d.ts"]
 }
