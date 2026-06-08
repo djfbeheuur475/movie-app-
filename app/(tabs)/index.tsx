@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { traktApi } from '../../lib/trakt';
+import { askGemini } from '../../lib/gemini';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import HeroSection from '../../components/home/HeroSection';
 import ContentRow from '../../components/home/ContentRow';
@@ -22,8 +23,9 @@ import type { ContentItem } from '../../types';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
+  const { traktClientId, traktUsername, traktAccessToken, geminiKey } = useApiKeysStore();
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
+  const hasGemini = !!(geminiKey?.trim());
 
   const { data: trending, isLoading: trendingLoading, refetch: refetchTrending } = useQuery({
     queryKey: ['trending'],
@@ -118,6 +120,34 @@ export default function HomeScreen() {
     },
     enabled: recentIds.length > 0,
     staleTime: 1000 * 60 * 30,
+  });
+
+  // ─── AI home recommendations ───────────────────────────────────────────────
+
+  const { data: aiPickItems, isLoading: aiPicksLoading } = useQuery({
+    queryKey: ['home-ai-picks', geminiKey],
+    queryFn: async (): Promise<ContentItem[]> => {
+      const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
+      const { tmdbIds } = await askGemini(
+        cleanKey,
+        [{ role: 'user', content: 'Recommend exactly 6 must-watch movies and TV shows. Mix genres — thriller, comedy, drama, sci-fi. Include both recent hits and timeless classics.' }],
+        [],
+        []
+      );
+      if (!tmdbIds.length) return [];
+      const results = await Promise.allSettled(
+        tmdbIds.slice(0, 6).map(async (id) => {
+          try { return normalizeMovie(await tmdbApi.getMovieDetail(id)); }
+          catch { return normalizeTVShow(await tmdbApi.getTVDetail(id)); }
+        })
+      );
+      return results
+        .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
+        .map((r) => r.value);
+    },
+    enabled: hasGemini,
+    staleTime: 1000 * 60 * 120,
+    retry: 0,
   });
 
   const heroItem: ContentItem | null = useMemo(() => {
@@ -251,6 +281,16 @@ export default function HomeScreen() {
               items={historyItems ?? []}
               isLoading={historyLoading}
               showRating
+            />
+          )}
+          {hasGemini && (
+            <ContentRow
+              title="✦ AI Picks for You"
+              items={aiPickItems ?? []}
+              isLoading={aiPicksLoading}
+              showRating
+              cardWidth={130}
+              accent
             />
           )}
         </View>

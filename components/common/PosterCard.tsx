@@ -1,12 +1,12 @@
 import React from 'react';
-import {
-  TouchableOpacity,
-  StyleSheet,
-  View,
-  Text,
-  Dimensions,
-} from 'react-native';
+import { Pressable, StyleSheet, View, Text, Dimensions } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Colors, BorderRadius, Typography, Shadow } from '../../constants/theme';
 import { getPosterUrl } from '../../lib/tmdb';
@@ -25,43 +25,59 @@ export default function PosterCard({ item, width = 120, showTitle = false, showR
   const router = useRouter();
   const height = width * 1.5;
   const posterUrl = getPosterUrl(item.posterPath, width > 150 ? 'large' : 'medium');
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   const handlePress = () => {
     router.push(`/title/${item.id}?type=${item.mediaType}`);
   };
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={handlePress}
-      activeOpacity={0.75}
+      onPressIn={() => {
+        scale.value = withSpring(0.93, { damping: 15, stiffness: 400 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+      }}
       style={[styles.container, { width, ...Shadow.md }]}
     >
-      <View style={[styles.poster, { width, height, borderRadius: BorderRadius.md }]}>
-        {posterUrl ? (
-          <Image
-            source={{ uri: posterUrl }}
-            style={[styles.image, { borderRadius: BorderRadius.md }]}
-            contentFit="cover"
-            transition={300}
+      <Animated.View style={animatedStyle}>
+        <View style={[styles.poster, { width, height, borderRadius: BorderRadius.md }]}>
+          {posterUrl ? (
+            <Image
+              source={{ uri: posterUrl }}
+              style={[styles.image, { borderRadius: BorderRadius.md }]}
+              contentFit="cover"
+              transition={300}
+            />
+          ) : (
+            <View style={[styles.placeholder, { borderRadius: BorderRadius.md }]}>
+              <Text style={styles.placeholderText}>{item.title?.charAt(0) ?? '?'}</Text>
+            </View>
+          )}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.55)']}
+            style={[styles.gradient, { borderRadius: BorderRadius.md }]}
           />
-        ) : (
-          <View style={[styles.placeholder, { borderRadius: BorderRadius.md }]}>
-            <Text style={styles.placeholderText}>{item.title?.charAt(0) ?? '?'}</Text>
-          </View>
+          {showRating && item.rating > 0 && (
+            <View style={styles.ratingBadge}>
+              <Text style={{ fontSize: 9, color: Colors.primary }}>★</Text>
+              <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+            </View>
+          )}
+        </View>
+        {showTitle && (
+          <Text style={styles.title} numberOfLines={2}>
+            {item.title}
+          </Text>
         )}
-        {showRating && item.rating > 0 && (
-          <View style={styles.ratingBadge}>
-            <Text style={{ fontSize: 9, color: Colors.primary }}>★</Text>
-            <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
-          </View>
-        )}
-      </View>
-      {showTitle && (
-        <Text style={styles.title} numberOfLines={2}>
-          {item.title}
-        </Text>
-      )}
-    </TouchableOpacity>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -87,6 +103,13 @@ const styles = StyleSheet.create({
   placeholderText: {
     ...Typography.title,
     color: Colors.textMuted,
+  },
+  gradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '45%',
   },
   ratingBadge: {
     position: 'absolute',

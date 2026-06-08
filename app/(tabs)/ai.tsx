@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
-  SafeAreaView, ScrollView, Linking, Alert,
+  SafeAreaView, ScrollView, Alert,
 } from 'react-native';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import ChatBubble from '../../components/ai/ChatBubble';
@@ -13,15 +13,19 @@ import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import type { ChatMessage, ContentItem } from '../../types';
 
-const SUGGESTIONS = [
-  { icon: '🚀', label: 'Mind-bending sci-fi films' },
-  { icon: '😂', label: 'Feel-good comedies for tonight' },
-  { icon: '😱', label: 'Best horror movies of the decade' },
-  { icon: '🏆', label: 'Award-winning dramas to watch' },
-  { icon: '🛋️', label: 'Cozy movies for a lazy day' },
-  { icon: '⚡', label: 'Action-packed thrillers under 2h' },
-  { icon: '💕', label: 'Romantic movies for date night' },
-  { icon: '🔍', label: 'Underrated hidden gems' },
+const MOOD_CHIPS = [
+  { icon: '😴', label: 'Easy watch' },
+  { icon: '⚡', label: 'Action' },
+  { icon: '😂', label: 'Laugh' },
+  { icon: '💕', label: 'Romance' },
+  { icon: '😱', label: 'Horror' },
+];
+
+const CONTEXT_CHIPS = [
+  { icon: '🏆', label: 'Award-winners' },
+  { icon: '🔍', label: 'Hidden gems' },
+  { icon: '🎬', label: 'Classic cinema' },
+  { icon: '⭐', label: 'Trending now' },
 ];
 
 let msgId = 0;
@@ -180,15 +184,8 @@ export default function AITabScreen() {
             </View>
           )}
         </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.stremioBtn}
-            onPress={() => Linking.openURL('https://stremio.itcon.au/aisearch/configure')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.stremioBtnText}>⚡ Stremio AI</Text>
-          </TouchableOpacity>
-          {!isInitialState && (
+        {!isInitialState && (
+          <View style={styles.headerRight}>
             <TouchableOpacity
               style={styles.resetBtn}
               onPress={() => {
@@ -204,8 +201,8 @@ export default function AITabScreen() {
             >
               <Text style={styles.resetBtnText}>New chat</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
       </View>
 
       {!geminiKey && (
@@ -223,28 +220,60 @@ export default function AITabScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
+            {/* Hero section */}
             <View style={styles.heroSection}>
-              <Text style={styles.heroIcon}>✦</Text>
+              <View style={styles.heroIconWrapper}>
+                <Text style={styles.heroIcon}>✦</Text>
+              </View>
               <Text style={styles.heroTitle}>What should{'\n'}you watch?</Text>
               <Text style={styles.heroSub}>
                 {hasTrakt
                   ? 'Personalised recommendations based on your Trakt watch history'
-                  : 'Get AI-powered movie & TV recommendations'}
+                  : 'Your intelligent entertainment concierge'}
               </Text>
             </View>
-            <View style={styles.suggestions}>
-              {SUGGESTIONS.map((s) => (
-                <TouchableOpacity
-                  key={s.label}
-                  style={styles.suggestionPill}
-                  onPress={() => sendMessage(s.label)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.suggestionIcon}>{s.icon}</Text>
-                  <Text style={styles.suggestionText}>{s.label}</Text>
-                  <Text style={styles.suggestionArrow}>›</Text>
-                </TouchableOpacity>
-              ))}
+
+            {/* Tonight's Picks chip section */}
+            <View style={styles.chipsSection}>
+              <Text style={styles.chipsLabel}>Tonight's Picks</Text>
+
+              {/* Row 1 — mood chips */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}
+              >
+                {MOOD_CHIPS.map((chip) => (
+                  <TouchableOpacity
+                    key={chip.label}
+                    style={styles.chip}
+                    onPress={() => sendMessage(`${chip.icon} ${chip.label}`)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.chipIcon}>{chip.icon}</Text>
+                    <Text style={styles.chipText}>{chip.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {/* Row 2 — context chips */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}
+              >
+                {CONTEXT_CHIPS.map((chip) => (
+                  <TouchableOpacity
+                    key={chip.label}
+                    style={[styles.chip, styles.chipContext]}
+                    onPress={() => sendMessage(`${chip.icon} ${chip.label}`)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.chipIcon}>{chip.icon}</Text>
+                    <Text style={styles.chipText}>{chip.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           </ScrollView>
 
@@ -316,81 +345,114 @@ export default function AITabScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+
+  // ── Header ──────────────────────────────────────────────────────────────────
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    borderBottomWidth: 1, borderBottomColor: '#2a2a2a',
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerIcon: { fontSize: 20, color: Colors.primary },
   headerTitle: { fontSize: 20, fontWeight: '800', color: Colors.text, letterSpacing: -0.3 },
   traktBadge: {
     backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.full,
-    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#2a2a2a',
   },
   traktBadgeText: { ...Typography.label, color: Colors.textMuted },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  stremioBtn: {
-    backgroundColor: '#7b2d8b', borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.sm, paddingVertical: 5,
-  },
-  stremioBtnText: { ...Typography.label, color: Colors.text, fontWeight: '700' },
   resetBtn: {
     backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.full,
     paddingHorizontal: Spacing.md, paddingVertical: 6,
-    borderWidth: 1, borderColor: Colors.border,
+    borderWidth: 1, borderColor: '#2a2a2a',
   },
   resetBtnText: { ...Typography.caption, color: Colors.textSecondary, fontWeight: '600' },
+
+  // ── Key notice ───────────────────────────────────────────────────────────────
   keyNotice: {
     backgroundColor: Colors.primary + '15', borderBottomWidth: 1,
     borderBottomColor: Colors.primary + '30',
     paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
   },
   keyNoticeText: { ...Typography.caption, color: Colors.textSecondary, lineHeight: 18 },
-  heroContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md },
+
+  // ── Hero section ─────────────────────────────────────────────────────────────
+  heroContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl },
   heroSection: {
-    alignItems: 'center', paddingTop: Spacing.xxl, paddingBottom: Spacing.xl, gap: Spacing.md,
+    alignItems: 'center',
+    paddingTop: Spacing.xxxl,
+    paddingBottom: Spacing.xxl,
+    gap: Spacing.lg,
   },
-  heroIcon: { fontSize: 48, color: Colors.primary },
+  heroIconWrapper: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: Colors.primary + '18',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: Colors.primary + '35',
+  },
+  heroIcon: { fontSize: 32, color: Colors.primary },
   heroTitle: {
-    fontSize: 34, fontWeight: '900', color: Colors.text,
-    textAlign: 'center', letterSpacing: -1, lineHeight: 40,
+    fontSize: 36, fontWeight: '900', color: Colors.text,
+    textAlign: 'center', letterSpacing: -1.2, lineHeight: 42,
   },
   heroSub: {
     ...Typography.body, color: Colors.textMuted,
-    textAlign: 'center', lineHeight: 22, maxWidth: 280,
+    textAlign: 'center', lineHeight: 22, maxWidth: 260,
   },
-  suggestions: { gap: Spacing.sm },
-  suggestionPill: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.lg, paddingVertical: 14,
-    borderWidth: 1, borderColor: Colors.border, gap: Spacing.md,
+
+  // ── Chips section ────────────────────────────────────────────────────────────
+  chipsSection: {
+    gap: Spacing.md,
+    paddingTop: Spacing.sm,
   },
-  suggestionIcon: { fontSize: 20 },
-  suggestionText: { flex: 1, ...Typography.body, color: Colors.text, fontWeight: '500' },
-  suggestionArrow: { fontSize: 20, color: Colors.textMuted },
+  chipsLabel: {
+    fontSize: 13, fontWeight: '700', color: Colors.textSecondary,
+    letterSpacing: 0.4, textTransform: 'uppercase',
+    paddingHorizontal: 2,
+  },
+  chipRow: {
+    flexDirection: 'row', gap: Spacing.sm,
+    paddingBottom: 2,
+  },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: '#2a2a2a',
+  },
+  chipContext: {
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.primary + '30',
+  },
+  chipIcon: { fontSize: 16 },
+  chipText: { fontSize: 13, fontWeight: '600', color: Colors.text },
+
+  // ── Chat / messages ──────────────────────────────────────────────────────────
   messageList: { paddingTop: Spacing.md, paddingBottom: Spacing.sm },
   typingIndicator: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     paddingHorizontal: Spacing.xl, paddingBottom: Spacing.sm,
   },
   typingText: { ...Typography.caption, color: Colors.textMuted },
+
+  // ── Input area ───────────────────────────────────────────────────────────────
   inputArea: {
     flexDirection: 'row', alignItems: 'flex-end',
     paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    borderTopWidth: 1, borderTopColor: Colors.border,
+    borderTopWidth: 1, borderTopColor: '#2a2a2a',
     gap: Spacing.sm, backgroundColor: Colors.background,
   },
   input: {
     flex: 1, backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
     paddingHorizontal: Spacing.md, paddingVertical: 10,
     ...Typography.body, color: Colors.text, maxHeight: 100,
-    borderWidth: 1, borderColor: Colors.border,
+    borderWidth: 1, borderColor: '#2a2a2a',
   },
   sendBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
   },
-  sendBtnDisabled: { backgroundColor: Colors.border },
+  sendBtnDisabled: { backgroundColor: '#2a2a2a' },
   sendIcon: { fontSize: 20, color: Colors.background, fontWeight: '700' },
 });

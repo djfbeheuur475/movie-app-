@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  ActivityIndicator, SectionList, TextInput, FlatList,
+  ActivityIndicator, SectionList, TextInput, FlatList, ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +32,7 @@ interface CalendarEntry {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function groupByDate(entries: CalendarEntry[]): { title: string; data: CalendarEntry[] }[] {
+function groupByDate(entries: CalendarEntry[]): { title: string; isTonight: boolean; data: CalendarEntry[] }[] {
   const map = new Map<string, CalendarEntry[]>();
   const today = startOfToday();
 
@@ -49,7 +49,7 @@ function groupByDate(entries: CalendarEntry[]): { title: string; data: CalendarE
     const isToday = isSameDay(d, today);
     const isTomorrow = isSameDay(d, addDays(today, 1));
     const label = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : format(d, 'EEEE, MMMM d');
-    return { title: label, data };
+    return { title: label, isTonight: isToday, data };
   });
 }
 
@@ -61,7 +61,7 @@ const PERIOD_OPTIONS = [
 
 type PeriodOffset = 0 | 1 | 2;
 
-function CalendarCard({ entry }: { entry: CalendarEntry }) {
+function CalendarCard({ entry, isTonight }: { entry: CalendarEntry; isTonight: boolean }) {
   const router = useRouter();
   return (
     <TouchableOpacity
@@ -77,6 +77,11 @@ function CalendarCard({ entry }: { entry: CalendarEntry }) {
       <View style={styles.cardInfo}>
         <View style={styles.cardTitleRow}>
           <Text style={styles.cardTitle} numberOfLines={1}>{entry.title}</Text>
+          {isTonight && (
+            <View style={styles.tonightBadge}>
+              <Text style={styles.tonightBadgeText}>• Tonight</Text>
+            </View>
+          )}
           {entry.isFromWatchlist && (
             <View style={styles.savedPip}>
               <Text style={styles.savedPipText}>✓</Text>
@@ -118,7 +123,6 @@ export default function CalendarScreen() {
   const today = startOfToday();
   const router = useRouter();
   const [weekOffset, setWeekOffset] = useState<PeriodOffset>(0);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [pinnedShow, setPinnedShow] = useState<{ id: number; name: string } | null>(null);
@@ -129,7 +133,6 @@ export default function CalendarScreen() {
 
   const weekStart = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
   const weekEnd = endOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
-  const currentPeriodLabel = PERIOD_OPTIONS.find((o) => o.offset === weekOffset)?.label ?? 'This Week';
 
   // ── TMDB upcoming movies ──────────────────────────────────────────────────
 
@@ -319,47 +322,29 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Period dropdown */}
-      <View style={styles.weekDropdownWrap}>
-        <TouchableOpacity
-          style={styles.weekDropdownTrigger}
-          onPress={() => setDropdownOpen((v) => !v)}
-          activeOpacity={0.8}
+      {/* Period chip pills */}
+      <View style={styles.chipsRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsScroll}
         >
-          <Text style={styles.weekDropdownLabel}>{currentPeriodLabel}</Text>
-          <Ionicons
-            name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
-            size={16}
-            color={Colors.textMuted}
-          />
-        </TouchableOpacity>
-
-        {dropdownOpen && (
-          <View style={styles.weekDropdownList}>
-            {PERIOD_OPTIONS.map((opt, i) => (
+          {PERIOD_OPTIONS.map((opt) => {
+            const active = weekOffset === opt.offset;
+            return (
               <TouchableOpacity
                 key={opt.offset}
-                style={[
-                  styles.weekDropdownItem,
-                  i === PERIOD_OPTIONS.length - 1 && styles.weekDropdownItemLast,
-                  weekOffset === opt.offset && styles.weekDropdownItemActive,
-                ]}
-                onPress={() => { setWeekOffset(opt.offset); setDropdownOpen(false); }}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setWeekOffset(opt.offset)}
                 activeOpacity={0.75}
               >
-                <Text style={[
-                  styles.weekDropdownItemText,
-                  weekOffset === opt.offset && styles.weekDropdownItemTextActive,
-                ]}>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
                   {opt.label}
                 </Text>
-                {weekOffset === opt.offset && (
-                  <Ionicons name="checkmark" size={16} color={Colors.primary} />
-                )}
               </TouchableOpacity>
-            ))}
-          </View>
-        )}
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Show search */}
@@ -450,12 +435,14 @@ export default function CalendarScreen() {
           contentContainerStyle={styles.list}
           stickySectionHeadersEnabled={false}
           keyboardShouldPersistTaps="handled"
-          renderSectionHeader={({ section: { title } }) => (
+          renderSectionHeader={({ section: { title, isTonight } }) => (
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionHeaderText}>{title}</Text>
+              <Text style={[styles.sectionHeaderText, isTonight && styles.sectionHeaderTonight]}>
+                {title}
+              </Text>
             </View>
           )}
-          renderItem={({ item }) => <CalendarCard entry={item} />}
+          renderItem={({ item, section }) => <CalendarCard entry={item} isTonight={section.isTonight} />}
         />
       )}
     </SafeAreaView>
@@ -474,28 +461,16 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface,
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
-  weekDropdownWrap: { marginHorizontal: Spacing.lg, marginBottom: Spacing.sm, zIndex: 20 },
-  weekDropdownTrigger: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
-    borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: Spacing.md, paddingVertical: 12,
+  chipsRow: { marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
+  chipsScroll: { flexDirection: 'row', gap: Spacing.sm },
+  chip: {
+    borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 14, paddingVertical: 6,
   },
-  weekDropdownLabel: { ...Typography.subheading, color: Colors.text, fontWeight: '600' },
-  weekDropdownList: {
-    marginTop: 4, backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.lg, borderWidth: 1, borderColor: Colors.border,
-    overflow: 'hidden', ...Shadow.sm,
-  },
-  weekDropdownItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  weekDropdownItemLast: { borderBottomWidth: 0 },
-  weekDropdownItemActive: { backgroundColor: Colors.primary + '18' },
-  weekDropdownItemText: { ...Typography.body, color: Colors.text, fontWeight: '500' },
-  weekDropdownItemTextActive: { color: Colors.primary, fontWeight: '700' },
+  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  chipText: { ...Typography.label, color: Colors.textMuted, fontWeight: '600' },
+  chipTextActive: { color: Colors.background },
   searchWrap: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm, zIndex: 10 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
@@ -526,14 +501,15 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: Spacing.lg, paddingBottom: 32 },
   sectionHeader: { paddingTop: Spacing.lg, paddingBottom: Spacing.sm },
   sectionHeaderText: { ...Typography.heading, color: Colors.text },
+  sectionHeaderTonight: { color: '#f59e0b' },
   card: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg, marginBottom: Spacing.sm,
     borderWidth: 1, borderColor: Colors.border, overflow: 'hidden', ...Shadow.sm,
   },
   cardHighlighted: { borderColor: Colors.primary + '50', backgroundColor: Colors.primary + '08' },
-  cardPoster: { width: 60, height: 84, backgroundColor: Colors.surfaceElevated },
-  cardInfo: { flex: 1, padding: Spacing.md, gap: 3 },
+  cardPoster: { width: 52, height: 74, backgroundColor: Colors.surfaceElevated },
+  cardInfo: { flex: 1, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.sm, gap: 3 },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   cardTitle: { ...Typography.subheading, color: Colors.text, flex: 1 },
   savedPip: {
@@ -541,6 +517,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5, paddingVertical: 1,
   },
   savedPipText: { ...Typography.label, color: Colors.primary },
+  tonightBadge: {
+    backgroundColor: '#f59e0b22', borderRadius: BorderRadius.full,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  tonightBadgeText: { fontSize: 10, fontWeight: '700', color: '#f59e0b' },
   cardNote: { ...Typography.caption, color: Colors.primary, fontWeight: '600' },
   cardDate: { ...Typography.caption, color: Colors.textMuted },
   cardTypeIcon: { marginRight: Spacing.md },
