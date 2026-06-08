@@ -266,15 +266,13 @@ export default function DiscoverScreen() {
           onPress={() => toggleFilter('sort')}
         />
 
-        {media === 'movies' && (
-          <DropdownButton
-            label="Release"
-            value={dateLabel}
-            isOpen={activeFilter === 'date'}
-            isActive={dateRange !== 'all'}
-            onPress={() => toggleFilter('date')}
-          />
-        )}
+        <DropdownButton
+          label="Release"
+          value={dateLabel}
+          isOpen={activeFilter === 'date'}
+          isActive={dateRange !== 'all'}
+          onPress={() => toggleFilter('date')}
+        />
 
         <DropdownButton
           label="Genre"
