@@ -20,6 +20,7 @@ import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import HeroSection from '../../components/home/HeroSection';
 import ContentRow from '../../components/home/ContentRow';
+import NewEpsRow from '../../components/home/NewEpsRow';
 import type { ContentItem } from '../../types';
 
 export default function HomeScreen() {
@@ -149,17 +150,16 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  const newEpsThisWeek = useMemo((): ContentItem[] => {
+  const newEpsThisWeek = useMemo((): any[] => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    return (newEpsShowDetails ?? [])
-      .filter((show: any) => {
-        if (!show.next_episode_to_air?.air_date) return false;
-        const airDate = new Date(show.next_episode_to_air.air_date);
-        return airDate >= today && airDate <= weekFromNow;
-      })
-      .map((show: any) => normalizeTVShow(show));
+    return (newEpsShowDetails ?? []).filter((show: any) => {
+      if (!show.next_episode_to_air?.air_date) return false;
+      const [y, m, d] = show.next_episode_to_air.air_date.split('-').map(Number);
+      const airDate = new Date(y, m - 1, d);
+      return airDate >= today && airDate <= weekFromNow;
+    });
   }, [newEpsShowDetails]);
 
   // ─── AI Picks: Movies ──────────────────────────────────────────────────────
@@ -315,9 +315,9 @@ export default function HomeScreen() {
             />
           )}
           {(newEpsLoading || newEpsThisWeek.length > 0) && (
-            <ContentRow
+            <NewEpsRow
               title="New Eps This Week"
-              items={newEpsThisWeek}
+              shows={newEpsThisWeek}
               isLoading={newEpsLoading}
             />
           )}
