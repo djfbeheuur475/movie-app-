@@ -318,7 +318,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.logoWrap}>
             <Image
-              source={require('../../assets/icon.png')}
+              source={require('../../assets/splash-logo.png')}
               style={styles.logoImage}
               contentFit="contain"
             />
@@ -443,12 +443,11 @@ const styles = StyleSheet.create({
   logoWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
   logoImage: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+    width: 44,
+    height: 36,
   },
   logoText: {
     fontSize: 22,
