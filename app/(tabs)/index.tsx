@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,13 +16,19 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { traktApi } from '../../lib/trakt';
-import { askGemini } from '../../lib/gemini';
+import { askGeminiForHomePicks } from '../../lib/gemini';
+import { filterAndRankContent, passesQualityFilter } from '../../lib/quality';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import HeroSection from '../../components/home/HeroSection';
 import ContentRow from '../../components/home/ContentRow';
 import NewEpsRow from '../../components/home/NewEpsRow';
+import RecentlyWatchedRow from '../../components/home/RecentlyWatchedRow';
+import LoadingSkeleton from '../../components/common/LoadingSkeleton';
 import type { ContentItem } from '../../types';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const HERO_SKELETON_HEIGHT = SCREEN_HEIGHT * 0.55;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -51,7 +58,7 @@ export default function HomeScreen() {
 
   // ─── Trakt watch history ───────────────────────────────────────────────────
 
-  const { data: traktMovies } = useQuery({
+  const { data: traktMovies, isFetched: traktMoviesFetched } = useQuery({
     queryKey: ['trakt-watched-movies', traktClientId, traktUsername, traktAccessToken],
     queryFn: () =>
       traktAccessToken
@@ -61,7 +68,7 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  const { data: traktShows } = useQuery({
+  const { data: traktShows, isFetched: traktShowsFetched } = useQuery({
     queryKey: ['trakt-watched-shows', traktClientId, traktUsername, traktAccessToken],
     queryFn: () =>
       traktAccessToken
@@ -78,15 +85,18 @@ export default function HomeScreen() {
         tmdbId: m.movie.ids.tmdb,
         mediaType: 'movie' as const,
         watchedAt: m.last_watched_at,
+        title: m.movie.title,
       })),
       ...(traktShows ?? []).map((s) => ({
         tmdbId: s.show.ids.tmdb,
         mediaType: 'tv' as const,
         watchedAt: s.last_watched_at,
+        title: s.show.title,
       })),
     ];
     const seen = new Set<number>();
     return combined
+      .filter(({ tmdbId }) => !!tmdbId)
       .sort((a, b) => new Date(b.watchedAt).getTime() - new Date(a.watchedAt).getTime())
       .filter(({ tmdbId }) => {
         if (seen.has(tmdbId)) return false;
@@ -114,9 +124,32 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
+  // Map tmdbId -> last watched episode (highest season+ep with plays > 0)
+  const lastEpisodes = useMemo(() => {
+    const map = new Map<number, { season: number; episode: number }>();
+    for (const s of traktShows ?? []) {
+      const tmdbId = s.show.ids.tmdb;
+      if (!tmdbId) continue;
+      let bestSeason = 0, bestEp = 0;
+      for (const season of s.seasons ?? []) {
+        for (const ep of season.episodes) {
+          if (ep.plays > 0) {
+            if (
+              season.number > bestSeason ||
+              (season.number === bestSeason && ep.number > bestEp)
+            ) {
+              bestSeason = season.number;
+              bestEp = ep.number;
+            }
+          }
+        }
+      }
+      if (bestSeason > 0) map.set(tmdbId, { season: bestSeason, episode: bestEp });
+    }
+    return map;
+  }, [traktShows]);
+
   // ─── New Eps This Week ─────────────────────────────────────────────────────
-  // Merges watchlist TV shows + Trakt watched shows, fetches next_episode_to_air,
-  // filters to shows with an episode airing within the next 7 days.
 
   const watchlistShowIds = useMemo(
     () => watchlistItems.filter((i) => i.media_type === 'tv').map((i) => i.tmdb_id),
@@ -154,81 +187,115 @@ export default function HomeScreen() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    return (newEpsShowDetails ?? []).filter((show: any) => {
-      if (!show.next_episode_to_air?.air_date) return false;
-      const [y, m, d] = show.next_episode_to_air.air_date.split('-').map(Number);
-      const airDate = new Date(y, m - 1, d);
-      return airDate >= today && airDate <= weekFromNow;
-    });
+    return (newEpsShowDetails ?? [])
+      .filter((show: any) => {
+        if (!show.next_episode_to_air?.air_date) return false;
+        const [y, m, d] = show.next_episode_to_air.air_date.split('-').map(Number);
+        const airDate = new Date(y, m - 1, d);
+        return airDate >= today && airDate <= weekFromNow;
+      })
+      .sort((a: any, b: any) => {
+        const [ay, am, ad] = a.next_episode_to_air.air_date.split('-').map(Number);
+        const [by, bm, bd] = b.next_episode_to_air.air_date.split('-').map(Number);
+        return new Date(ay, am - 1, ad).getTime() - new Date(by, bm - 1, bd).getTime();
+      });
   }, [newEpsShowDetails]);
 
-  // ─── AI Picks: Movies ──────────────────────────────────────────────────────
+  // ─── AI Picks ─────────────────────────────────────────────────────────────
+  // Fingerprint the first 10 Trakt IDs so the query key changes when history loads.
+  const traktMovieFingerprint = (traktMovies ?? []).slice(0, 10).map((m) => m.movie.ids.tmdb).join(',');
+  const traktShowFingerprint = (traktShows ?? []).slice(0, 10).map((s) => s.show.ids.tmdb).join(',');
 
-  const { data: aiMovieItems, isLoading: aiMoviesLoading } = useQuery({
-    queryKey: ['home-ai-picks-movies', geminiKey],
-    queryFn: async (): Promise<ContentItem[]> => {
+  // If Trakt is connected, wait until both queries have settled (success OR failure)
+  // before firing so Gemini gets real history — but don't block forever on a Trakt error.
+  const traktReady = !hasTrakt || (traktMoviesFetched && traktShowsFetched);
+
+  // Single Gemini call returns both movieIds and tvIds, avoiding rate-limit issues
+  const { data: aiPicksData, isLoading: aiPicksLoading } = useQuery({
+    queryKey: ['home-ai-picks-v8', geminiKey, traktMovieFingerprint, traktShowFingerprint],
+    queryFn: async () => {
       const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
-      const { tmdbIds } = await askGemini(
-        cleanKey,
-        [{ role: 'user', content: 'Recommend exactly 20 must-watch movies across different genres — thriller, comedy, drama, sci-fi, action, horror. Mix recent releases with timeless classics. Only include movies, no TV shows.' }],
-        [],
-        []
-      );
-      if (!tmdbIds.length) return [];
-      const results = await Promise.allSettled(
-        tmdbIds.slice(0, 20).map((id) => tmdbApi.getMovieDetail(id).then(normalizeMovie))
-      );
-      return results
+      const movies = traktMovies ?? [];
+      const shows = traktShows ?? [];
+      console.log('[AI Picks] firing — history:', movies.length, 'movies,', shows.length, 'shows');
+      const { movieIds, tvIds, modelUsed } = await askGeminiForHomePicks(cleanKey, movies, shows);
+      console.log('[AI Picks] via', modelUsed, '— movieIds:', movieIds.length, 'tvIds:', tvIds.length);
+
+      // Hard-filter watched IDs that Gemini may have included anyway
+      const watchedMovieIds = new Set(movies.map((m) => m.movie.ids.tmdb).filter(Boolean));
+      const watchedShowIds = new Set(shows.map((s) => s.show.ids.tmdb).filter(Boolean));
+      const unseenMovieIds = movieIds.filter((id) => !watchedMovieIds.has(id));
+      const unseenTvIds = tvIds.filter((id) => !watchedShowIds.has(id));
+
+      const [movieResults, tvResults] = await Promise.all([
+        Promise.allSettled(unseenMovieIds.slice(0, 60).map((id) => tmdbApi.getMovieDetail(id).then(normalizeMovie))),
+        Promise.allSettled(unseenTvIds.slice(0, 60).map((id) => tmdbApi.getTVDetail(id).then(normalizeTVShow))),
+      ]);
+
+      const PREFERRED_LANGS = new Set(['en', 'es', 'fr', 'ko', 'ja']);
+
+      const movieItems = movieResults
         .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
-        .map((r) => r.value);
+        .map((r) => r.value)
+        .filter((item) =>
+          !!item.posterPath &&
+          (item.voteCount ?? 0) >= 500 &&
+          (item.rating ?? 0) >= 6.5 &&
+          PREFERRED_LANGS.has(item.originalLanguage ?? 'en')
+        )
+        .slice(0, 20);
+
+      const tvItems = tvResults
+        .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
+        .map((r) => r.value)
+        .filter((item) =>
+          !!item.posterPath &&
+          (item.voteCount ?? 0) >= 200 &&
+          (item.rating ?? 0) >= 6.5 &&
+          PREFERRED_LANGS.has(item.originalLanguage ?? 'en')
+        )
+        .slice(0, 20);
+
+      console.log('[AI Picks] resolved:', movieItems.length, 'movies,', tvItems.length, 'shows');
+      return { movies: movieItems, shows: tvItems };
     },
-    enabled: hasGemini,
+    enabled: hasGemini && traktReady,
     staleTime: 1000 * 60 * 120,
-    retry: 0,
+    retry: 2,
+    retryDelay: 3000,
   });
 
-  // ─── AI Picks: TV Shows ────────────────────────────────────────────────────
-
-  const { data: aiTVItems, isLoading: aiTVLoading } = useQuery({
-    queryKey: ['home-ai-picks-tv', geminiKey],
-    queryFn: async (): Promise<ContentItem[]> => {
-      const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
-      const { tmdbIds } = await askGemini(
-        cleanKey,
-        [{ role: 'user', content: 'Recommend exactly 20 must-watch TV shows across different genres — drama, thriller, comedy, sci-fi, crime, fantasy. Mix recent hits with beloved classics. Only include TV shows, no movies.' }],
-        [],
-        []
-      );
-      if (!tmdbIds.length) return [];
-      const results = await Promise.allSettled(
-        tmdbIds.slice(0, 20).map((id) => tmdbApi.getTVDetail(id).then(normalizeTVShow))
-      );
-      return results
-        .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
-        .map((r) => r.value);
-    },
-    enabled: hasGemini,
-    staleTime: 1000 * 60 * 120,
-    retry: 0,
-  });
+  const aiMovieItems = aiPicksData?.movies ?? [];
+  const aiTVItems = aiPicksData?.shows ?? [];
+  // Cover the full wait: Trakt fetching → Gemini call → TMDB resolution.
+  // Without this, the rows show blank (no skeleton) while Trakt is still loading.
+  const aiPicksWaiting = hasGemini && (!traktReady || aiPicksLoading);
+  const aiMoviesLoading = aiPicksWaiting;
+  const aiTVLoading = aiPicksWaiting;
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
   const heroItem: ContentItem | null = useMemo(() => {
     if (!trending?.length) return null;
-    const item = trending[Math.floor(Math.random() * Math.min(5, trending.length))];
-    if ('title' in item) return normalizeMovie(item as any);
-    if ('name' in item) return normalizeTVShow(item as any);
-    return null;
+    const qualified = (trending as any[])
+      .slice(0, 10)
+      .map((item: any) =>
+        'title' in item ? normalizeMovie(item) : normalizeTVShow(item)
+      )
+      .filter((item) => passesQualityFilter(item, 'trending'));
+    if (!qualified.length) return null;
+    // Stable pick: use first item's id as seed so hero doesn't jump on re-render
+    const seed = (trending[0] as any).id ?? 0;
+    return qualified[seed % Math.min(3, qualified.length)];
   }, [trending]);
 
   const popularMovieItems: ContentItem[] = useMemo(
-    () => (popularMovies ?? []).map(normalizeMovie),
+    () => filterAndRankContent((popularMovies ?? []).map(normalizeMovie), 'default', 20),
     [popularMovies]
   );
 
   const popularShowItems: ContentItem[] = useMemo(
-    () => (popularShows ?? []).map(normalizeTVShow),
+    () => filterAndRankContent((popularShows ?? []).map(normalizeTVShow), 'default', 20),
     [popularShows]
   );
 
@@ -278,18 +345,24 @@ export default function HomeScreen() {
         </View>
 
         {/* Hero */}
-        {heroItem && <HeroSection item={heroItem} />}
+        {trendingLoading ? (
+          <LoadingSkeleton width="100%" height={HERO_SKELETON_HEIGHT} borderRadius={0} />
+        ) : heroItem ? (
+          <HeroSection item={heroItem} />
+        ) : null}
 
         {/* Rows */}
         <View style={styles.rows}>
           <ContentRow
             title="Popular Movies"
+            subtitle="Trending with audiences worldwide"
             items={popularMovieItems}
             isLoading={moviesLoading}
             showRating
           />
           <ContentRow
             title="Top Series"
+            subtitle="Binge-worthy shows everyone's talking about"
             items={popularShowItems}
             isLoading={showsLoading}
             showRating
@@ -297,6 +370,7 @@ export default function HomeScreen() {
           {hasGemini && (
             <ContentRow
               title="✦ AI Picks: Movies"
+              subtitle="Curated by AI based on great taste"
               items={aiMovieItems ?? []}
               isLoading={aiMoviesLoading}
               showRating
@@ -307,6 +381,7 @@ export default function HomeScreen() {
           {hasGemini && (
             <ContentRow
               title="✦ AI Picks: TV Shows"
+              subtitle="Curated by AI based on great taste"
               items={aiTVItems ?? []}
               isLoading={aiTVLoading}
               showRating
@@ -322,11 +397,10 @@ export default function HomeScreen() {
             />
           )}
           {hasTrakt && (
-            <ContentRow
-              title="Recently Watched"
+            <RecentlyWatchedRow
               items={historyItems ?? []}
               isLoading={historyLoading}
-              showRating
+              lastEpisodes={lastEpisodes}
             />
           )}
         </View>

@@ -409,7 +409,7 @@ export default function SettingsScreen() {
               label="Gemini API Key"
               value={fields.geminiKey}
               onChange={set('geminiKey')}
-              placeholder="AIza..."
+              placeholder="Paste your Gemini API key here..."
               secure
               hint="Free tier available — no billing required for personal use"
             />

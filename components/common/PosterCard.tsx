@@ -7,9 +7,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors, BorderRadius, Typography, Shadow } from '../../constants/theme';
 import { getPosterUrl } from '../../lib/tmdb';
+import { useTraktWatched } from '../../hooks/useTraktWatched';
+import WatchedBadge from './WatchedBadge';
 import type { ContentItem } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -19,13 +22,16 @@ interface Props {
   width?: number;
   showTitle?: boolean;
   showRating?: boolean;
+  showType?: boolean;
 }
 
-export default function PosterCard({ item, width = 120, showTitle = false, showRating = false }: Props) {
+function PosterCard({ item, width = 120, showTitle = false, showRating = false, showType = false }: Props) {
   const router = useRouter();
   const height = width * 1.5;
   const posterUrl = getPosterUrl(item.posterPath, width > 150 ? 'large' : 'medium');
   const scale = useSharedValue(1);
+  const { isWatched } = useTraktWatched();
+  const watched = isWatched(item.id, item.mediaType);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -70,6 +76,17 @@ export default function PosterCard({ item, width = 120, showTitle = false, showR
               <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
             </View>
           )}
+          {watched ? (
+            <WatchedBadge />
+          ) : showType ? (
+            <View style={styles.typeBadge}>
+              <Ionicons
+                name={item.mediaType === 'tv' ? 'tv-outline' : 'film-outline'}
+                size={10}
+                color="#fff"
+              />
+            </View>
+          ) : null}
         </View>
         {showTitle && (
           <Text style={styles.title} numberOfLines={2}>
@@ -80,6 +97,8 @@ export default function PosterCard({ item, width = 120, showTitle = false, showR
     </Pressable>
   );
 }
+
+export default React.memo(PosterCard);
 
 const styles = StyleSheet.create({
   container: {
@@ -124,6 +143,14 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderWidth: 1,
     borderColor: Colors.primary + '80',
+  },
+  typeBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: BorderRadius.sm,
+    padding: 4,
   },
   ratingText: {
     fontSize: 10,

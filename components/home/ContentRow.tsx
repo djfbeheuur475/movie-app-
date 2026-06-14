@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import PosterCard from '../common/PosterCard';
@@ -14,8 +15,11 @@ import type { ContentItem } from '../../types';
 
 interface Props {
   title: string;
+  subtitle?: string;
   items: ContentItem[];
   isLoading?: boolean;
+  isLoadingMore?: boolean;
+  onEndReached?: () => void;
   onSeeAll?: () => void;
   cardWidth?: number;
   showRating?: boolean;
@@ -24,8 +28,11 @@ interface Props {
 
 export default function ContentRow({
   title,
+  subtitle,
   items,
   isLoading,
+  isLoadingMore,
+  onEndReached,
   onSeeAll,
   cardWidth = 120,
   showRating = false,
@@ -33,20 +40,30 @@ export default function ContentRow({
 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
+  const hasAnimated = useRef(false);
 
   useEffect(() => {
-    if (!isLoading && items.length > 0) {
+    if (hasAnimated.current) return;
+    if (isLoading || items.length > 0) {
+      hasAnimated.current = true;
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
       ]).start();
     }
   }, [isLoading, items.length]);
 
+  const renderItem = useCallback(({ item }: { item: ContentItem }) => (
+    <PosterCard item={item} width={cardWidth} showRating={showRating} />
+  ), [cardWidth, showRating]);
+
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
       <View style={[styles.header, accent && styles.headerAccent]}>
-        <Text style={[styles.title, accent && styles.titleAccent]}>{title}</Text>
+        <View style={styles.titleBlock}>
+          <Text style={[styles.title, accent && styles.titleAccent]}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </View>
         {onSeeAll && (
           <TouchableOpacity onPress={onSeeAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={styles.seeAll}>See all</Text>
@@ -70,9 +87,16 @@ export default function ContentRow({
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item) => `${item.mediaType}-${item.id}`}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <PosterCard item={item} width={cardWidth} showRating={showRating} />
-          )}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.5}
+          renderItem={renderItem}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={styles.loadingMore}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+              </View>
+            ) : null
+          }
         />
       )}
     </Animated.View>
@@ -93,6 +117,10 @@ const styles = StyleSheet.create({
   headerAccent: {
     marginBottom: Spacing.sm,
   },
+  titleBlock: {
+    flex: 1,
+    gap: 2,
+  },
   title: {
     ...Typography.heading,
     color: Colors.text,
@@ -103,6 +131,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.2,
   },
+  subtitle: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontWeight: '400',
+  },
   seeAll: {
     ...Typography.caption,
     color: Colors.primary,
@@ -110,5 +143,11 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: Spacing.lg,
+  },
+  loadingMore: {
+    width: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingRight: Spacing.lg,
   },
 });

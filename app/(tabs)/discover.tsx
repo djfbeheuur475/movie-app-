@@ -1,226 +1,171 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
   SafeAreaView,
-  Dimensions,
-  ActivityIndicator,
   ScrollView,
-  Modal,
-  Pressable,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
-import { tmdbApi, normalizeMovie, normalizeTVShow, getPosterUrl } from '../../lib/tmdb';
+import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
+import { hasGoodMetadata } from '../../lib/quality';
+import ContentRow from '../../components/home/ContentRow';
+import IndiePicksRow from '../../components/discover/IndiePicksRow';
 import type { ContentItem } from '../../types';
 
-const { width: SW } = Dimensions.get('window');
-const CARD_GAP = 12;
-const CARD_WIDTH = (SW - Spacing.lg * 2 - CARD_GAP) / 2;
-
 type MediaTab = 'movies' | 'shows';
-type SortKey = 'popular' | 'top' | 'newest' | 'revenue';
-type DateRange = '12m' | '24m' | '5y' | 'all';
-type GenreId = number | null;
-type ActiveFilter = 'sort' | 'date' | 'genre' | null;
 
-const DATE_OPTIONS: { key: DateRange; label: string }[] = [
-  { key: 'all', label: 'Anytime' },
-  { key: '12m', label: '12 Months' },
-  { key: '24m', label: '24 Months' },
-  { key: '5y', label: '5 Years' },
-];
+type PageResult = { items: ContentItem[]; nextPage: number | null };
 
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'popular', label: 'Popular' },
-  { key: 'top', label: 'Top Rated' },
-  { key: 'newest', label: 'Newest' },
-  { key: 'revenue', label: 'Box Office' },
-];
+// ─── Infinite row component ────────────────────────────────────────────────────
 
-const MOVIE_GENRES: { id: number; name: string }[] = [
-  { id: 28, name: 'Action' }, { id: 12, name: 'Adventure' }, { id: 16, name: 'Animation' },
-  { id: 35, name: 'Comedy' }, { id: 80, name: 'Crime' }, { id: 18, name: 'Drama' },
-  { id: 14, name: 'Fantasy' }, { id: 27, name: 'Horror' }, { id: 9648, name: 'Mystery' },
-  { id: 10749, name: 'Romance' }, { id: 878, name: 'Sci-Fi' }, { id: 53, name: 'Thriller' },
-];
-
-const TV_GENRES: { id: number; name: string }[] = [
-  { id: 10759, name: 'Action' }, { id: 16, name: 'Animation' }, { id: 35, name: 'Comedy' },
-  { id: 80, name: 'Crime' }, { id: 99, name: 'Documentary' }, { id: 18, name: 'Drama' },
-  { id: 10765, name: 'Sci-Fi' }, { id: 9648, name: 'Mystery' }, { id: 10766, name: 'Soap' },
-  { id: 10768, name: 'War & Politics' }, { id: 37, name: 'Western' },
-];
-
-function dateRangeToParam(range: DateRange, media: MediaTab): Record<string, string> {
-  if (range === 'all') return {};
-  const now = new Date();
-  let gte: Date;
-  if (range === '12m') gte = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-  else if (range === '24m') gte = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate());
-  else gte = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
-  const gteStr = gte.toISOString().slice(0, 10);
-  return media === 'movies'
-    ? { 'primary_release_date.gte': gteStr }
-    : { 'first_air_date.gte': gteStr };
-}
-
-function sortToParams(sort: SortKey, media: MediaTab): Record<string, string> {
-  if (sort === 'popular') return { sort_by: 'popularity.desc' };
-  if (sort === 'top') return { sort_by: 'vote_average.desc', 'vote_count.gte': '200' };
-  if (sort === 'newest') return {
-    sort_by: media === 'movies' ? 'primary_release_date.desc' : 'first_air_date.desc',
-    ...(media === 'movies' ? { 'release_date.lte': new Date().toISOString().slice(0, 10) } : {}),
-  };
-  if (sort === 'revenue') return media === 'movies'
-    ? { sort_by: 'revenue.desc' }
-    : { sort_by: 'popularity.desc' };
-  return {};
-}
-
-function DropdownButton({
-  label, value, isOpen, isActive, onPress,
+function InfiniteRow({
+  title,
+  subtitle,
+  queryKey,
+  fetchPage,
 }: {
-  label: string;
-  value: string;
-  isOpen: boolean;
-  isActive: boolean;
-  onPress: () => void;
+  title: string;
+  subtitle?: string;
+  queryKey: (string | number)[];
+  fetchPage: (page: number) => Promise<PageResult>;
 }) {
-  const lit = isOpen || isActive;
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
+    useInfiniteQuery({
+      queryKey,
+      queryFn: ({ pageParam }) => fetchPage(pageParam as number),
+      initialPageParam: 1,
+      getNextPageParam: (last) => last.nextPage ?? undefined,
+      staleTime: 1000 * 60 * 30,
+    });
+
+  const items = data?.pages.flatMap((p) => p.items) ?? [];
+
   return (
-    <TouchableOpacity
-      style={[styles.dropBtn, lit && styles.dropBtnLit]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      <Text style={[styles.dropBtnLabel, lit && styles.dropBtnLabelLit]}>{label}: </Text>
-      <Text style={[styles.dropBtnValue, lit && styles.dropBtnValueLit]}>{value}</Text>
-      <Ionicons
-        name={isOpen ? 'chevron-up' : 'chevron-down'}
-        size={11}
-        color={lit ? Colors.primary : Colors.textMuted}
-        style={{ marginLeft: 3 }}
-      />
-    </TouchableOpacity>
+    <ContentRow
+      title={title}
+      subtitle={subtitle}
+      items={items}
+      isLoading={isLoading}
+      isLoadingMore={isFetchingNextPage}
+      onEndReached={hasNextPage ? () => fetchNextPage() : undefined}
+      showRating
+    />
   );
 }
 
-function PosterCard({ item, onPress }: { item: ContentItem; onPress: () => void }) {
+// ─── Fetch helpers (defined outside component to keep references stable) ──────
+
+async function fetchMovieTrending(page: number): Promise<PageResult> {
+  const { results, total_pages } = await tmdbApi.getTrendingPage('movie', 'week', page);
+  const items = (results as any[]).map(normalizeMovie).filter(hasGoodMetadata);
+  return { items, nextPage: page < total_pages ? page + 1 : null };
+}
+
+async function fetchTVTrending(page: number): Promise<PageResult> {
+  const { results, total_pages } = await tmdbApi.getTrendingPage('tv', 'week', page);
+  const items = (results as any[]).map(normalizeTVShow).filter(hasGoodMetadata);
+  return { items, nextPage: page < total_pages ? page + 1 : null };
+}
+
+
+async function fetchMovieNewReleases(page: number): Promise<PageResult> {
+  const { results, total_pages } = await tmdbApi.getNowPlayingPage(page);
+  const items = results.map(normalizeMovie).filter(hasGoodMetadata);
+  return { items, nextPage: page < total_pages ? page + 1 : null };
+}
+
+async function fetchTVNewEpisodes(page: number): Promise<PageResult> {
+  const { results, total_pages } = await tmdbApi.getAiringTodayPage(page);
+  const items = results.map(normalizeTVShow).filter(hasGoodMetadata);
+  return { items, nextPage: page < total_pages ? page + 1 : null };
+}
+
+async function fetchMovieHiddenGems(page: number): Promise<PageResult> {
+  const { results, total_pages } = await tmdbApi.getHiddenGems('movie', page);
+  const items = (results as any[]).map(normalizeMovie).filter(hasGoodMetadata);
+  return { items, nextPage: page < total_pages ? page + 1 : null };
+}
+
+async function fetchTVHiddenGems(page: number): Promise<PageResult> {
+  const { results, total_pages } = await tmdbApi.getHiddenGems('tv', page);
+  const items = (results as any[]).map(normalizeTVShow).filter(hasGoodMetadata);
+  return { items, nextPage: page < total_pages ? page + 1 : null };
+}
+
+function makeGenreFetcher(type: 'movie' | 'tv', genreId: number) {
+  return async (page: number): Promise<PageResult> => {
+    const { results, total_pages } = await tmdbApi.getByGenre(type, genreId, page);
+    const items = (results as any[])
+      .map(type === 'movie' ? normalizeMovie : normalizeTVShow)
+      .filter(hasGoodMetadata);
+    return { items, nextPage: page < total_pages ? page + 1 : null };
+  };
+}
+
+// ─── Genre row configs ─────────────────────────────────────────────────────────
+
+const MOVIE_GENRES = [
+  { id: 28, name: 'Action & Adrenaline', subtitle: 'High-octane thrills' },
+  { id: 878, name: 'Mind-Bending Sci-Fi', subtitle: 'Ideas that challenge reality' },
+  { id: 53, name: 'Gripping Thrillers', subtitle: 'Edge-of-your-seat tension' },
+  { id: 35, name: 'Feel-Good Comedies', subtitle: 'Easy laughs and warm stories' },
+  { id: 18, name: 'Acclaimed Drama', subtitle: 'Character-driven masterpieces' },
+  { id: 27, name: 'Best Horror', subtitle: 'Scary done right' },
+];
+
+const TV_GENRES = [
+  { id: 18, name: 'Prestige Drama', subtitle: 'Critically acclaimed storytelling' },
+  { id: 80, name: 'Crime & Thriller', subtitle: 'Dark, gripping investigations' },
+  { id: 10765, name: 'Sci-Fi & Fantasy', subtitle: 'Worlds beyond imagination' },
+  { id: 35, name: 'Comedy Series', subtitle: 'Consistently funny and warm' },
+  { id: 9648, name: 'Mystery', subtitle: 'Puzzles worth solving' },
+  { id: 99, name: 'Documentary', subtitle: 'Real stories worth telling' },
+  { id: 10759, name: 'Action & Adventure', subtitle: 'High-stakes, high-energy series' },
+  { id: 16, name: 'Animation', subtitle: 'From prestige anime to adult cartoons' },
+  { id: 10768, name: 'War & Politics', subtitle: 'Power, conflict, and consequence' },
+];
+
+// ─── Genre row components (one per genre to satisfy hooks rules) ───────────────
+
+function MovieGenreRow({ id, name, subtitle }: { id: number; name: string; subtitle: string }) {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
-      <Image
-        source={{ uri: getPosterUrl(item.posterPath, 'medium') ?? '' }}
-        style={styles.cardImage}
-        contentFit="cover"
-        transition={200}
-      />
-      {item.rating > 0 && (
-        <View style={styles.ratingBadge}>
-          <Text style={styles.ratingText}>★ {item.rating.toFixed(1)}</Text>
-        </View>
-      )}
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.cardYear}>{item.releaseDate?.slice(0, 4) ?? ''}</Text>
-      </View>
-    </TouchableOpacity>
+    <InfiniteRow
+      title={name}
+      subtitle={subtitle}
+      queryKey={['discover-movie-genre', id]}
+      fetchPage={makeGenreFetcher('movie', id)}
+    />
   );
 }
+
+function TVGenreRow({ id, name, subtitle }: { id: number; name: string; subtitle: string }) {
+  return (
+    <InfiniteRow
+      title={name}
+      subtitle={subtitle}
+      queryKey={['discover-tv-genre', id]}
+      fetchPage={makeGenreFetcher('tv', id)}
+    />
+  );
+}
+
+// ─── Main screen ───────────────────────────────────────────────────────────────
 
 export default function DiscoverScreen() {
-  const router = useRouter();
   const [media, setMedia] = useState<MediaTab>('movies');
-  const [sort, setSort] = useState<SortKey>('popular');
-  const [genre, setGenre] = useState<GenreId>(null);
-  const [dateRange, setDateRange] = useState<DateRange>('all');
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter>(null);
-
-  const genres = media === 'movies' ? MOVIE_GENRES : TV_GENRES;
-
-  const sortLabel = SORT_OPTIONS.find((s) => s.key === sort)?.label ?? 'Popular';
-  const dateLabel = DATE_OPTIONS.find((d) => d.key === dateRange)?.label ?? 'Anytime';
-  const genreLabel = genres.find((g) => g.id === genre)?.name ?? 'All';
-  const hasActiveFilters = sort !== 'popular' || dateRange !== 'all' || genre !== null;
-
-  const toggleFilter = (f: ActiveFilter) =>
-    setActiveFilter((prev) => (prev === f ? null : f));
-
-  const resetFilters = () => {
-    setSort('popular');
-    setDateRange('all');
-    setGenre(null);
-    setActiveFilter(null);
-  };
-
-  const queryParams = useMemo(() => ({
-    ...sortToParams(sort, media),
-    ...dateRangeToParam(dateRange, media),
-    ...(genre ? { with_genres: String(genre) } : {}),
-    page: 1,
-  }), [sort, genre, media, dateRange]);
-
-  const { data: items, isLoading } = useQuery<ContentItem[]>({
-    queryKey: ['discover', media, sort, genre, dateRange],
-    queryFn: async (): Promise<ContentItem[]> => {
-      if (media === 'movies') {
-        const results = await tmdbApi.discoverMovies(queryParams);
-        return results.map(normalizeMovie);
-      } else {
-        const results = await tmdbApi.discoverTV(queryParams);
-        return results.map(normalizeTVShow);
-      }
-    },
-  });
-
-  const handleMediaChange = useCallback((m: MediaTab) => {
-    setMedia(m);
-    setGenre(null);
-    setDateRange('all');
-    setActiveFilter(null);
-  }, []);
-
-  // Options to display in the expanded dropdown row
-  const dropdownItems = useMemo(() => {
-    if (activeFilter === 'sort')
-      return SORT_OPTIONS.map((o) => ({
-        key: o.key, label: o.label,
-        selected: sort === o.key,
-        onSelect: () => { setSort(o.key); setActiveFilter(null); },
-      }));
-    if (activeFilter === 'date')
-      return DATE_OPTIONS.map((o) => ({
-        key: o.key, label: o.label,
-        selected: dateRange === o.key,
-        onSelect: () => { setDateRange(o.key); setActiveFilter(null); },
-      }));
-    if (activeFilter === 'genre')
-      return [
-        { key: 'all', label: 'All', selected: genre === null, onSelect: () => { setGenre(null); setActiveFilter(null); } },
-        ...genres.map((g) => ({
-          key: String(g.id), label: g.name,
-          selected: genre === g.id,
-          onSelect: () => { setGenre(g.id); setActiveFilter(null); },
-        })),
-      ];
-    return [];
-  }, [activeFilter, sort, dateRange, genre, genres]);
+  const handleMediaChange = useCallback((m: MediaTab) => setMedia(m), []);
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Discover</Text>
-        <Text style={styles.headerSub}>Browse by genre, popularity, and more</Text>
+        <Text style={styles.headerSub}>Curated picks for every mood</Text>
       </View>
 
-      {/* Movies / TV Shows toggle */}
       <View style={styles.mediaToggle}>
         <TouchableOpacity
           style={[styles.mediaBtn, media === 'movies' && styles.mediaBtnActive]}
@@ -232,7 +177,9 @@ export default function DiscoverScreen() {
             size={16}
             color={media === 'movies' ? Colors.background : Colors.textSecondary}
           />
-          <Text style={[styles.mediaBtnText, media === 'movies' && styles.mediaBtnTextActive]}>Movies</Text>
+          <Text style={[styles.mediaBtnText, media === 'movies' && styles.mediaBtnTextActive]}>
+            Movies
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.mediaBtn, media === 'shows' && styles.mediaBtnActive]}
@@ -244,110 +191,66 @@ export default function DiscoverScreen() {
             size={16}
             color={media === 'shows' ? Colors.background : Colors.textSecondary}
           />
-          <Text style={[styles.mediaBtnText, media === 'shows' && styles.mediaBtnTextActive]}>TV Shows</Text>
+          <Text style={[styles.mediaBtnText, media === 'shows' && styles.mediaBtnTextActive]}>
+            TV Shows
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Single-row filter bar */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterBar}
-        style={styles.filterBarWrap}
-      >
-        {/* Filter icon — tapping resets all filters */}
-        <TouchableOpacity
-          style={[styles.filterIconBtn, hasActiveFilters && styles.filterIconBtnActive]}
-          onPress={resetFilters}
-          activeOpacity={0.75}
-        >
-          <Ionicons
-            name="options-outline"
-            size={16}
-            color={hasActiveFilters ? Colors.primary : Colors.textMuted}
-          />
-        </TouchableOpacity>
-
-        <DropdownButton
-          label="Sort"
-          value={sortLabel}
-          isOpen={activeFilter === 'sort'}
-          isActive={sort !== 'popular'}
-          onPress={() => toggleFilter('sort')}
-        />
-
-        <DropdownButton
-          label="Release"
-          value={dateLabel}
-          isOpen={activeFilter === 'date'}
-          isActive={dateRange !== 'all'}
-          onPress={() => toggleFilter('date')}
-        />
-
-        <DropdownButton
-          label="Genre"
-          value={genreLabel}
-          isOpen={activeFilter === 'genre'}
-          isActive={genre !== null}
-          onPress={() => toggleFilter('genre')}
-        />
-      </ScrollView>
-
-      {/* Filter options Modal */}
-      <Modal
-        visible={activeFilter !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setActiveFilter(null)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setActiveFilter(null)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>
-              {activeFilter === 'sort' ? 'Sort By' : activeFilter === 'date' ? 'Release Date' : 'Genre'}
-            </Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {dropdownItems.map((opt) => (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[styles.modalOption, opt.selected && styles.modalOptionSelected]}
-                  onPress={opt.onSelect}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.modalOptionText, opt.selected && styles.modalOptionTextSelected]}>
-                    {opt.label}
-                  </Text>
-                  {opt.selected && (
-                    <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* Grid */}
-      {isLoading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={Colors.primary} size="large" />
-        </View>
-      ) : (
-        <FlatList
-          data={items ?? []}
-          keyExtractor={(item) => `${item.id}-${item.mediaType}`}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.grid}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <PosterCard
-              item={item}
-              onPress={() => router.push(`/title/${item.id}?type=${item.mediaType}`)}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {media === 'movies' ? (
+          <>
+            <InfiniteRow
+              title="Trending This Week"
+              subtitle="What everyone is watching right now"
+              queryKey={['discover-trending-movies']}
+              fetchPage={fetchMovieTrending}
             />
-          )}
-        />
-      )}
+            <IndiePicksRow />
+            <InfiniteRow
+              title="New in Cinemas"
+              subtitle="Fresh releases worth seeing now"
+              queryKey={['discover-now-playing']}
+              fetchPage={fetchMovieNewReleases}
+            />
+            <InfiniteRow
+              title="Hidden Gems"
+              subtitle="Beloved by those who found them"
+              queryKey={['discover-hidden-gems-movies']}
+              fetchPage={fetchMovieHiddenGems}
+            />
+            {MOVIE_GENRES.map((g) => (
+              <MovieGenreRow key={g.id} {...g} />
+            ))}
+          </>
+        ) : (
+          <>
+            <InfiniteRow
+              title="Trending This Week"
+              subtitle="What everyone is watching right now"
+              queryKey={['discover-trending-tv']}
+              fetchPage={fetchTVTrending}
+            />
+            <IndiePicksRow mediaType="tv" />
+            <InfiniteRow
+              title="New Episodes Airing"
+              subtitle="Fresh episodes dropping this week"
+              queryKey={['discover-airing-today']}
+              fetchPage={fetchTVNewEpisodes}
+            />
+            <InfiniteRow
+              title="Hidden Gems"
+              subtitle="Underrated series that deserve your attention"
+              queryKey={['discover-hidden-gems-tv']}
+              fetchPage={fetchTVHiddenGems}
+            />
+            {TV_GENRES.map((g) => (
+              <TVGenreRow key={g.id} {...g} />
+            ))}
+          </>
+        )}
+        <View style={styles.bottomPad} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -373,7 +276,7 @@ const styles = StyleSheet.create({
   mediaToggle: {
     flexDirection: 'row',
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     padding: 4,
@@ -392,144 +295,6 @@ const styles = StyleSheet.create({
   mediaBtnActive: { backgroundColor: Colors.primary },
   mediaBtnText: { ...Typography.subheading, color: Colors.textMuted },
   mediaBtnTextActive: { color: Colors.background },
-
-  // Filter bar
-  filterBarWrap: {
-    marginBottom: 6,
-  },
-  filterBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    gap: 8,
-  },
-  filterIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterIconBtnActive: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '18',
-  },
-  dropBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  dropBtnLit: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '18',
-  },
-  dropBtnLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: Colors.textMuted,
-  },
-  dropBtnLabelLit: { color: Colors.primary },
-  dropBtnValue: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  dropBtnValueLit: { color: Colors.primary },
-
-  // Filter Modal
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: Colors.surfaceElevated,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 36,
-    maxHeight: '70%',
-    borderTopWidth: 1,
-    borderColor: Colors.border,
-  },
-  modalHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.border,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  modalTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.text,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  modalOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border + '50',
-  },
-  modalOptionSelected: {
-    backgroundColor: Colors.primary + '18',
-  },
-  modalOptionText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: Colors.text,
-  },
-  modalOptionTextSelected: {
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  grid: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    paddingBottom: 24,
-    gap: CARD_GAP,
-  },
-  row: { gap: CARD_GAP },
-  card: {
-    width: CARD_WIDTH,
-    borderRadius: BorderRadius.md,
-    overflow: 'hidden',
-    backgroundColor: Colors.surface,
-  },
-  cardImage: {
-    width: CARD_WIDTH,
-    height: CARD_WIDTH * 1.5,
-  },
-  ratingBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  ratingText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
-  cardInfo: { padding: 8, gap: 2 },
-  cardTitle: { fontSize: 13, fontWeight: '600', color: Colors.text, lineHeight: 17 },
-  cardYear: { ...Typography.label, color: Colors.textMuted },
+  scroll: { paddingTop: Spacing.sm },
+  bottomPad: { height: 32 },
 });

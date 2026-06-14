@@ -1,15 +1,15 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  ActivityIndicator, SectionList, TextInput, FlatList, ScrollView,
+  ActivityIndicator, SectionList, TextInput, FlatList,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
-  format, addDays, startOfWeek, endOfWeek, startOfToday,
-  isSameDay, parseISO, isAfter, isBefore, addWeeks,
+  format, addDays, startOfToday,
+  isSameDay, parseISO, isAfter, isBefore, addYears,
 } from 'date-fns';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { tmdbApi, getPosterUrl } from '../../lib/tmdb';
@@ -52,14 +52,6 @@ function groupByDate(entries: CalendarEntry[]): { title: string; isTonight: bool
     return { title: label, isTonight: isToday, data };
   });
 }
-
-const PERIOD_OPTIONS = [
-  { offset: 0, label: 'This Week' },
-  { offset: 1, label: 'Next Week' },
-  { offset: 2, label: 'Upcoming' },
-] as const;
-
-type PeriodOffset = 0 | 1 | 2;
 
 function CalendarCard({ entry, isTonight }: { entry: CalendarEntry; isTonight: boolean }) {
   const router = useRouter();
@@ -122,7 +114,7 @@ function ShowSearchResult({ show, onPress }: { show: any; onPress: () => void })
 export default function CalendarScreen() {
   const today = startOfToday();
   const router = useRouter();
-  const [weekOffset, setWeekOffset] = useState<PeriodOffset>(0);
+  const [watchedOnly, setWatchedOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [pinnedShow, setPinnedShow] = useState<{ id: number; name: string } | null>(null);
@@ -131,18 +123,22 @@ export default function CalendarScreen() {
   const { traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
 
-  const weekStart = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
+  // ── Upcoming movies — full year (5 pages ≈ 100 films) ────────────────────
 
-  // ── TMDB upcoming movies ──────────────────────────────────────────────────
-
-  const { data: upcomingMovies, isLoading: moviesLoading } = useQuery({
-    queryKey: ['upcoming-movies-cal'],
-    queryFn: () => tmdbApi.getUpcomingMovies(),
-    staleTime: 1000 * 60 * 60,
+  const { data: upcomingMoviesYear, isLoading: moviesLoading } = useQuery({
+    queryKey: ['upcoming-movies-year'],
+    queryFn: async () => {
+      const pages = await Promise.allSettled(
+        [1, 2, 3, 4, 5].map((p) => tmdbApi.getUpcomingYear(p))
+      );
+      return pages
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .flatMap((r) => r.value.results);
+    },
+    staleTime: 1000 * 60 * 60 * 6,
   });
 
-  // ── Watchlist TV shows → next_episode_to_air ──────────────────────────────
+  // ── Watchlist TV shows → details ─────────────────────────────────────────
 
   const watchlistShowIds = watchlist.filter((w) => w.media_type === 'tv').map((w) => w.tmdb_id);
 
@@ -150,7 +146,7 @@ export default function CalendarScreen() {
     queryKey: ['watchlist-show-details', watchlistShowIds],
     queryFn: async () => {
       const results = await Promise.allSettled(
-        watchlistShowIds.slice(0, 10).map((id) => tmdbApi.getTVDetail(id))
+        watchlistShowIds.map((id) => tmdbApi.getTVDetail(id))
       );
       return results
         .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
@@ -177,8 +173,8 @@ export default function CalendarScreen() {
     return traktWatchedShows
       .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
       .map((s) => s.show.ids.tmdb)
-      .filter((id) => id && !watchlistShowIds.includes(id))
-      .slice(0, 12);
+      .filter((id): id is number => !!id && !watchlistShowIds.includes(id))
+      .slice(0, 40);
   }, [traktWatchedShows, watchlistShowIds]);
 
   const { data: traktShowDetails, isLoading: traktShowsLoading } = useQuery({
@@ -193,6 +189,41 @@ export default function CalendarScreen() {
     },
     enabled: traktShowTmdbIds.length > 0,
     staleTime: 1000 * 60 * 30,
+  });
+
+  // ── Season episode schedules ──────────────────────────────────────────────
+  // For every show that has a scheduled next episode, fetch the full current
+  // season so we can populate all future episodes (not just the next one).
+
+  const seasonFetchList = useMemo(() => {
+    const list: { showId: number; seasonNumber: number }[] = [];
+    const seen = new Set<string>();
+    const allShows = [...(watchlistShowDetails ?? []), ...(traktShowDetails ?? [])];
+    for (const show of allShows) {
+      const sn = show.next_episode_to_air?.season_number;
+      if (!sn) continue;
+      const key = `${show.id}-${sn}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      list.push({ showId: show.id, seasonNumber: sn });
+    }
+    return list;
+  }, [watchlistShowDetails, traktShowDetails]);
+
+  const { data: seasonData, isLoading: seasonsLoading } = useQuery({
+    queryKey: ['season-episodes', seasonFetchList.map((s) => `${s.showId}-${s.seasonNumber}`)],
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        seasonFetchList.map(({ showId, seasonNumber }) =>
+          tmdbApi.getTVSeason(showId, seasonNumber).then((d) => ({ showId, ...d }))
+        )
+      );
+      return results
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .map((r) => r.value);
+    },
+    enabled: seasonFetchList.length > 0,
+    staleTime: 1000 * 60 * 60,
   });
 
   // ── TV show search ────────────────────────────────────────────────────────
@@ -222,76 +253,109 @@ export default function CalendarScreen() {
 
   const allEntries: CalendarEntry[] = useMemo(() => {
     const entries: CalendarEntry[] = [];
+    const today = startOfToday();
+    const cutoff = addYears(today, 1);
 
-    // Watchlist shows — use next_episode_to_air
-    (watchlistShowDetails ?? []).forEach((show: any) => {
-      const next = show.next_episode_to_air;
-      if (!next?.air_date) return;
+    // Build showId → episodes map from fetched season data
+    const seasonEpMap = new Map<number, any[]>();
+    for (const season of (seasonData ?? [])) {
+      seasonEpMap.set(season.showId, season.episodes ?? []);
+    }
+
+    // TV shows — watchlist (isFromWatchlist=true) + Trakt history (false)
+    const showSources = [
+      ...(watchlistShowDetails ?? []).map((s: any) => ({ show: s, fromWatchlist: true })),
+      ...(traktShowDetails ?? []).map((s: any) => ({ show: s, fromWatchlist: false })),
+    ];
+    const seenEpKeys = new Set<string>();
+
+    for (const { show, fromWatchlist } of showSources) {
+      const episodes = seasonEpMap.get(show.id);
+
+      if (episodes?.length) {
+        // Full season schedule
+        for (const ep of episodes) {
+          if (!ep.air_date) continue;
+          let airDate: Date;
+          try { airDate = parseISO(ep.air_date); } catch { continue; }
+          if (isBefore(airDate, today) || isAfter(airDate, cutoff)) continue;
+          const key = `${show.id}-S${ep.season_number}E${ep.episode_number}`;
+          if (seenEpKeys.has(key)) continue;
+          seenEpKeys.add(key);
+          entries.push({
+            id: key,
+            tmdbId: show.id,
+            mediaType: 'tv',
+            title: show.name,
+            posterPath: show.poster_path,
+            airDate,
+            note: `S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')} — ${ep.name ?? 'New episode'}`,
+            isFromWatchlist: fromWatchlist,
+          });
+        }
+      } else if (show.next_episode_to_air?.air_date) {
+        // Fallback: season data not yet loaded / unavailable
+        const next = show.next_episode_to_air;
+        let airDate: Date;
+        try { airDate = parseISO(next.air_date); } catch { continue; }
+        if (isBefore(airDate, today) || isAfter(airDate, cutoff)) continue;
+        const key = `${show.id}-S${next.season_number}E${next.episode_number}`;
+        if (!seenEpKeys.has(key)) {
+          seenEpKeys.add(key);
+          entries.push({
+            id: key,
+            tmdbId: show.id,
+            mediaType: 'tv',
+            title: show.name,
+            posterPath: show.poster_path,
+            airDate,
+            note: `S${String(next.season_number).padStart(2, '0')}E${String(next.episode_number).padStart(2, '0')} — ${next.name ?? 'New episode'}`,
+            isFromWatchlist: fromWatchlist,
+          });
+        }
+      }
+    }
+
+    // Movies — full year
+    const seenMovieIds = new Set<number>();
+    for (const m of (upcomingMoviesYear ?? [])) {
+      if (!m.release_date || seenMovieIds.has(m.id)) continue;
+      seenMovieIds.add(m.id);
+      let airDate: Date;
+      try { airDate = parseISO(m.release_date); } catch { continue; }
+      if (isBefore(airDate, today) || isAfter(airDate, cutoff)) continue;
       entries.push({
-        id: `show-next-${show.id}`,
-        tmdbId: show.id,
-        mediaType: 'tv',
-        title: show.name,
-        posterPath: show.poster_path,
-        airDate: parseISO(next.air_date),
-        note: `S${String(next.season_number).padStart(2, '0')}E${String(next.episode_number).padStart(2, '0')} — ${next.name ?? 'New episode'}`,
-        isFromWatchlist: true,
+        id: `movie-${m.id}`,
+        tmdbId: m.id,
+        mediaType: 'movie',
+        title: m.title,
+        posterPath: m.poster_path,
+        airDate,
+        note: 'In cinemas',
+        isFromWatchlist: watchlistMovieIds.has(m.id),
       });
-    });
-
-    // Trakt history shows — use next_episode_to_air
-    (traktShowDetails ?? []).forEach((show: any) => {
-      const next = show.next_episode_to_air;
-      if (!next?.air_date) return;
-      entries.push({
-        id: `trakt-show-${show.id}`,
-        tmdbId: show.id,
-        mediaType: 'tv',
-        title: show.name,
-        posterPath: show.poster_path,
-        airDate: parseISO(next.air_date),
-        note: `S${String(next.season_number).padStart(2, '0')}E${String(next.episode_number).padStart(2, '0')} — ${next.name ?? 'New episode'}`,
-        isFromWatchlist: false,
-      });
-    });
-
-    // Upcoming movies
-    (upcomingMovies ?? []).forEach((m) => {
-      if (!m.release_date) return;
-      try {
-        entries.push({
-          id: `movie-${m.id}`,
-          tmdbId: m.id,
-          mediaType: 'movie',
-          title: m.title,
-          posterPath: m.poster_path,
-          airDate: parseISO(m.release_date),
-          note: 'In cinemas',
-          isFromWatchlist: watchlistMovieIds.has(m.id),
-        });
-      } catch {}
-    });
+    }
 
     return entries;
-  }, [watchlistShowDetails, traktShowDetails, upcomingMovies, watchlistMovieIds]);
+  }, [seasonData, watchlistShowDetails, traktShowDetails, upcomingMoviesYear, watchlistMovieIds]);
 
-  // ── Filter by selected period ─────────────────────────────────────────────
+  // ── "Shows I'm Watching" filter ───────────────────────────────────────────
 
-  const weekEntries = useMemo(() => {
-    if (weekOffset === 2) {
-      // "Upcoming" — everything from today onwards, no end cap
-      return allEntries.filter(
-        (e) => isAfter(e.airDate, addDays(today, -1)) || isSameDay(e.airDate, today)
-      );
-    }
-    return allEntries.filter(
-      (e) =>
-        (isAfter(e.airDate, addDays(weekStart, -1)) || isSameDay(e.airDate, weekStart)) &&
-        (isBefore(e.airDate, addDays(weekEnd, 1)) || isSameDay(e.airDate, weekEnd))
+  const watchedShowTmdbIds = useMemo(() => {
+    return new Set(
+      (traktWatchedShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id)
     );
-  }, [allEntries, weekOffset, weekStart, weekEnd, today]);
+  }, [traktWatchedShows]);
 
-  const sections = useMemo(() => groupByDate(weekEntries), [weekEntries]);
+  const filteredEntries = useMemo(() => {
+    const base = allEntries.filter(
+      (e) => isAfter(e.airDate, addDays(today, -1)) || isSameDay(e.airDate, today)
+    );
+    if (!watchedOnly) return base;
+    return base.filter((e) => e.mediaType === 'tv' && watchedShowTmdbIds.has(e.tmdbId));
+  }, [allEntries, today, watchedOnly, watchedShowTmdbIds]);
+
+  const sections = useMemo(() => groupByDate(filteredEntries), [filteredEntries]);
 
   const handleShowSelect = useCallback((show: any) => {
     setPinnedShow({ id: show.id, name: show.name });
@@ -299,7 +363,7 @@ export default function CalendarScreen() {
     setSearchActive(false);
   }, []);
 
-  const isLoading = moviesLoading || traktShowsLoading;
+  const isLoading = moviesLoading || traktShowsLoading || seasonsLoading;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -308,9 +372,7 @@ export default function CalendarScreen() {
         <View>
           <Text style={styles.title}>Calendar</Text>
           <Text style={styles.subtitle}>
-            {weekOffset === 2
-              ? 'All upcoming releases'
-              : format(weekStart, 'MMMM yyyy')}
+            {watchedOnly ? 'Shows you\'re watching' : 'Next 12 months'}
           </Text>
         </View>
         <TouchableOpacity
@@ -322,29 +384,22 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Period chip pills */}
-      <View style={styles.chipsRow}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsScroll}
+      {/* Shows I'm Watching toggle */}
+      <View style={styles.filterRow}>
+        <TouchableOpacity
+          style={[styles.filterBtn, watchedOnly && styles.filterBtnActive]}
+          onPress={() => setWatchedOnly((v) => !v)}
+          activeOpacity={0.8}
         >
-          {PERIOD_OPTIONS.map((opt) => {
-            const active = weekOffset === opt.offset;
-            return (
-              <TouchableOpacity
-                key={opt.offset}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => setWeekOffset(opt.offset)}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+          <Ionicons
+            name="eye-outline"
+            size={14}
+            color={watchedOnly ? Colors.background : Colors.textSecondary}
+          />
+          <Text style={[styles.filterBtnText, watchedOnly && styles.filterBtnTextActive]}>
+            Shows I'm Watching
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Show search */}
@@ -423,7 +478,9 @@ export default function CalendarScreen() {
           </Text>
           <Text style={styles.emptyText}>
             {hasTrakt
-              ? 'Try "Upcoming" or search for a show above.'
+              ? watchedOnly
+                ? 'No upcoming episodes for shows you\'ve watched.'
+                : 'No upcoming releases in the next 12 months.'
               : 'Go to Settings → Trakt to connect your account.'}
           </Text>
         </View>
@@ -461,16 +518,15 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface,
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
-  chipsRow: { marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
-  chipsScroll: { flexDirection: 'row', gap: Spacing.sm },
-  chip: {
-    borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 14, paddingVertical: 6,
+  filterRow: { marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
+  filterBtn: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    gap: 6, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.surface, paddingHorizontal: 14, paddingVertical: 7,
   },
-  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  chipText: { ...Typography.label, color: Colors.textMuted, fontWeight: '600' },
-  chipTextActive: { color: Colors.background },
+  filterBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  filterBtnText: { ...Typography.label, color: Colors.textMuted, fontWeight: '600' },
+  filterBtnTextActive: { color: Colors.background },
   searchWrap: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm, zIndex: 10 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,

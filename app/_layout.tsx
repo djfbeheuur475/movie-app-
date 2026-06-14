@@ -1,15 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
+import { StyleSheet, View } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { useWatchlistStore } from '../store/watchlistStore';
 import { usePreferencesStore } from '../store/preferencesStore';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { Colors } from '../constants/theme';
+import { useEpisodeNotifications } from '../hooks/useEpisodeNotifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,11 +41,32 @@ function NavigationGuard() {
   return null;
 }
 
+function NotificationScheduler() {
+  useEpisodeNotifications();
+  return null;
+}
+
 export default function RootLayout() {
   const loadUser = useAuthStore((s) => s.loadUser);
   const loadWatchlist = useWatchlistStore((s) => s.loadWatchlist);
   const loadFromStorage = usePreferencesStore((s) => s.loadFromStorage);
   const loadKeys = useApiKeysStore((s) => s.loadKeys);
+
+  const [statusBarHidden, setStatusBarHidden] = useState(true);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showStatusBar = () => {
+    setStatusBarHidden(false);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setStatusBarHidden(true), 3000);
+  };
+
+  // Activates only on a clear downward swipe (5+ pts) within the top gesture zone
+  const swipeDownGesture = Gesture.Pan()
+    .activeOffsetY([5, Infinity])
+    .onStart(() => {
+      runOnJS(showStatusBar)();
+    });
 
   useEffect(() => {
     async function prepare() {
@@ -56,13 +79,17 @@ export default function RootLayout() {
       }
     }
     prepare();
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
   }, []);
 
   return (
     <GestureHandlerRootView style={styles.root}>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
+        <StatusBar style="light" hidden={statusBarHidden} animated />
         <NavigationGuard />
+        <NotificationScheduler />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }}>
           <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
@@ -80,7 +107,15 @@ export default function RootLayout() {
             name="person/[id]"
             options={{ presentation: 'card', animation: 'slide_from_right' }}
           />
+          <Stack.Screen
+            name="episode"
+            options={{ presentation: 'card', animation: 'slide_from_right' }}
+          />
         </Stack>
+        {/* Invisible swipe zone — catches downward swipes from the top edge to reveal the status bar */}
+        <GestureDetector gesture={swipeDownGesture}>
+          <View style={styles.statusBarGestureZone} />
+        </GestureDetector>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );
@@ -88,4 +123,11 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
+  statusBarGestureZone: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 30,
+  },
 });

@@ -260,6 +260,9 @@ export interface ContentItem {
   rating: number;
   overview: string;
   genres?: number[];
+  voteCount?: number;
+  popularity?: number;
+  originalLanguage?: string;
 }
 
 export interface ChatMessage {

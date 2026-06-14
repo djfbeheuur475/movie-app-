@@ -12,6 +12,8 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { PosterSkeleton } from '../common/LoadingSkeleton';
 import { getPosterUrl } from '../../lib/tmdb';
+import { useTraktWatched } from '../../hooks/useTraktWatched';
+import WatchedBadge from '../common/WatchedBadge';
 
 const CARD_WIDTH = 120;
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
@@ -38,10 +40,12 @@ function formatAirDate(dateStr: string): { dayLabel: string; dateLabel: string }
 
 function NewEpsCard({ show }: { show: any }) {
   const router = useRouter();
+  const { isEpisodeWatched } = useTraktWatched();
   const ep = show.next_episode_to_air;
   if (!ep) return null;
 
   const posterUrl = getPosterUrl(show.poster_path, 'medium');
+  const watched = isEpisodeWatched(show.id, ep.season_number, ep.episode_number);
   const { dayLabel, dateLabel } = formatAirDate(ep.air_date);
   const epCode = `S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
   const isToday = dayLabel === 'TODAY';
@@ -69,6 +73,8 @@ function NewEpsCard({ show }: { show: any }) {
           </View>
         )}
 
+        {watched && <WatchedBadge />}
+
         {/* Day badge */}
         <View style={[styles.dayBadge, isToday && styles.dayBadgeToday]}>
           <Text style={[styles.dayBadgeText, isToday && styles.dayBadgeTextToday]}>
@@ -78,7 +84,6 @@ function NewEpsCard({ show }: { show: any }) {
       </View>
 
       {/* Text info */}
-      <Text style={styles.title} numberOfLines={1}>{show.name}</Text>
       <Text style={styles.epInfo} numberOfLines={1}>
         {epCode}
         <Text style={styles.epDate}>{`  ·  ${dateLabel}`}</Text>
@@ -96,9 +101,12 @@ interface Props {
 export default function NewEpsRow({ title, shows, isLoading }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
+  const hasAnimated = useRef(false);
 
   useEffect(() => {
-    if (!isLoading && shows.length > 0) {
+    if (hasAnimated.current) return;
+    if (isLoading || shows.length > 0) {
+      hasAnimated.current = true;
       Animated.parallel([
         Animated.timing(opacity, { toValue: 1, duration: 400, useNativeDriver: true }),
         Animated.timing(translateY, { toValue: 0, duration: 400, useNativeDriver: true }),

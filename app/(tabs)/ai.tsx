@@ -109,28 +109,54 @@ export default function AITabScreen() {
       const history = [...messages, userMsg];
       const { movies, shows } = await fetchTraktHistory();
 
-      const { reply, tmdbIds } = await askGemini(
+      // Collect every title already shown as a card this session so Gemini doesn't repeat them
+      const alreadyRecommended = [
+        ...new Set(
+          messages
+            .filter((m) => m.role === 'assistant' && m.recommendations?.length)
+            .flatMap((m) => m.recommendations!.map((r) => r.title))
+            .filter(Boolean)
+        ),
+      ];
+
+      const { reply, movies: movieTitles, shows: showTitles } = await askGemini(
         cleanKey,
         history.map((m) => ({ role: m.role, content: m.content })),
         movies,
-        shows
+        shows,
+        alreadyRecommended
       );
 
-      let recItems: ContentItem[] = [];
-      if (tmdbIds.length > 0) {
-        const fetched = await Promise.allSettled(
-          tmdbIds.slice(0, 5).map(async (id) => {
-            try {
-              return normalizeMovie(await tmdbApi.getMovieDetail(id));
-            } catch {
-              return normalizeTVShow(await tmdbApi.getTVDetail(id));
-            }
-          })
-        );
-        recItems = fetched
-          .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
-          .map((r) => r.value);
-      }
+      const PREFERRED_LANGS = new Set(['en', 'es', 'fr', 'ko', 'ja']);
+      const fulfilled = <T,>(r: PromiseSettledResult<T>): r is PromiseFulfilledResult<T> => r.status === 'fulfilled';
+
+      // Search TMDB by title — far more reliable than asking Gemini for IDs
+      const [movieSearchRes, showSearchRes] = await Promise.all([
+        Promise.allSettled(
+          movieTitles.slice(0, 10).map((title) =>
+            tmdbApi.searchMovies(title).then((results) => results[0] ? normalizeMovie(results[0]) : null)
+          )
+        ),
+        Promise.allSettled(
+          showTitles.slice(0, 10).map((title) =>
+            tmdbApi.searchTVShows(title).then((results) => results[0] ? normalizeTVShow(results[0]) : null)
+          )
+        ),
+      ]);
+
+      const allMovies = movieSearchRes.filter(fulfilled).map((r) => r.value).filter((v): v is ContentItem => !!v);
+      const allShows = showSearchRes.filter(fulfilled).map((r) => r.value).filter((v): v is ContentItem => !!v);
+
+      // First 5 quality-passing results become poster cards; all resolved items enable inline linking
+      const posterItems = [...allMovies, ...allShows]
+        .filter((item) => !!item.posterPath && PREFERRED_LANGS.has(item.originalLanguage ?? 'en'))
+        .slice(0, 6);
+
+      // Append any items that didn't make the poster cut — still needed for inline title links
+      const posterIds = new Set(posterItems.map((i) => i.id));
+      const linkOnlyItems = [...allMovies, ...allShows].filter((i) => !posterIds.has(i.id));
+
+      const recItems: ContentItem[] = [...posterItems, ...linkOnlyItems];
 
       setMessages((prev) => [
         ...prev,
@@ -178,11 +204,6 @@ export default function AITabScreen() {
         <View style={styles.headerLeft}>
           <Text style={styles.headerIcon}>✦</Text>
           <Text style={styles.headerTitle}>AI Guide</Text>
-          {hasTrakt && (
-            <View style={styles.traktBadge}>
-              <Text style={styles.traktBadgeText}>📡 Trakt</Text>
-            </View>
-          )}
         </View>
         {!isInitialState && (
           <View style={styles.headerRight}>
@@ -355,11 +376,6 @@ const styles = StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerIcon: { fontSize: 20, color: Colors.primary },
   headerTitle: { fontSize: 20, fontWeight: '800', color: Colors.text, letterSpacing: -0.3 },
-  traktBadge: {
-    backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.full,
-    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#2a2a2a',
-  },
-  traktBadgeText: { ...Typography.label, color: Colors.textMuted },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   resetBtn: {
     backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.full,

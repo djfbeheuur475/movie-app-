@@ -14,6 +14,7 @@ import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import DetailHero from '../../components/detail/DetailHero';
 import CastList from '../../components/detail/CastList';
+import EpisodeList from '../../components/detail/EpisodeList';
 import ContentRow from '../../components/home/ContentRow';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import type { ContentItem, TMDBMovieDetail, TMDBTVDetail } from '../../types';
@@ -100,9 +101,19 @@ export default function TitleDetailScreen() {
           crew={detailAny.credits?.crew ?? []}
         />
 
+        {mediaType === 'tv' && (detailAny as TMDBTVDetail).seasons?.length > 0 && (
+          <EpisodeList
+            showId={numId}
+            seasons={(detailAny as TMDBTVDetail).seasons}
+            posterPath={detail.poster_path}
+            imdbId={(detailAny as TMDBTVDetail).external_ids?.imdb_id}
+            showName={(detailAny as TMDBTVDetail).name}
+          />
+        )}
+
         {similar.length > 0 && (
           <View style={{ marginTop: Spacing.sm }}>
-            <ContentRow title="More Like This" items={similar} />
+            <ContentRow title="More Like This" items={similar} showRating />
           </View>
         )}
 
