@@ -17,6 +17,7 @@ import CastList from '../../components/detail/CastList';
 import EpisodeList from '../../components/detail/EpisodeList';
 import ContentRow from '../../components/home/ContentRow';
 import { useWatchlistStore } from '../../store/watchlistStore';
+import { useAuthStore } from '../../store/authStore';
 import type { ContentItem, TMDBMovieDetail, TMDBTVDetail } from '../../types';
 
 type DetailData = TMDBMovieDetail | TMDBTVDetail;
@@ -28,6 +29,7 @@ export default function TitleDetailScreen() {
   const mediaType = type === 'tv' ? 'tv' : 'movie';
 
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlistStore();
+  const userId = useAuthStore((s) => s.user?.id);
   const inWatchlist = isInWatchlist(numId, mediaType);
 
   const { data: detail, isLoading, error } = useQuery<DetailData>({
@@ -43,14 +45,14 @@ export default function TitleDetailScreen() {
     if (!detail) return;
     const title = 'title' in detail ? (detail as TMDBMovieDetail).title : (detail as TMDBTVDetail).name;
     if (inWatchlist) {
-      removeFromWatchlist(numId, mediaType);
+      removeFromWatchlist(numId, mediaType, userId);
     } else {
       addToWatchlist({
         tmdb_id: numId,
         media_type: mediaType,
         title,
         poster_path: detail.poster_path,
-      });
+      }, userId);
     }
   };
 

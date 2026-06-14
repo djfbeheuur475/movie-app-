@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
+import { useApiKeysStore } from './apiKeysStore';
+import { useWatchlistStore } from './watchlistStore';
 
-const STORAGE_KEY = 'nextup_user_profile';
-
-interface LocalUser {
+export interface LocalUser {
+  id: string;
   displayName: string;
   email: string;
   avatarUrl: string | null;
@@ -15,8 +16,8 @@ interface AuthState {
   isLoaded: boolean;
 
   loadUser: () => Promise<void>;
-  setUser: (user: LocalUser) => Promise<void>;
   signOut: () => Promise<void>;
+  _refreshFromSession: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -26,25 +27,70 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   loadUser: async () => {
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const user = JSON.parse(raw) as LocalUser;
-        set({ user, isAuthenticated: true, isLoaded: true });
-      } else {
-        set({ isLoaded: true });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const u = session.user;
+        set({
+          user: {
+            id: u.id,
+            displayName: u.user_metadata?.full_name ?? u.email ?? 'User',
+            email: u.email ?? '',
+            avatarUrl: u.user_metadata?.avatar_url ?? null,
+          },
+          isAuthenticated: true,
+          isLoaded: true,
+        });
+        return;
       }
-    } catch {
-      set({ isLoaded: true });
+    } catch (e) {
+      console.warn('Auth session load error:', e);
     }
+    set({ isLoaded: true });
   },
 
-  setUser: async (user) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    set({ user, isAuthenticated: true });
+  _refreshFromSession: async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+
+    const u = session.user;
+    const localUser: LocalUser = {
+      id: u.id,
+      displayName: u.user_metadata?.full_name ?? u.email ?? 'User',
+      email: u.email ?? '',
+      avatarUrl: u.user_metadata?.avatar_url ?? null,
+    };
+
+    // Upsert base profile — only updates identity fields
+    await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: u.id,
+          email: localUser.email,
+          display_name: localUser.displayName,
+          avatar_url: localUser.avatarUrl,
+        },
+        { onConflict: 'id' }
+      );
+
+    // Check user_settings for stored API keys
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('*')
+      .eq('id', u.id)
+      .single();
+
+    // Existing user with keys: restore to device SecureStore + load watchlist
+    if (settings?.setup_done || settings?.tmdb_key) {
+      await useApiKeysStore.getState().restoreFromCloud(settings);
+      await useWatchlistStore.getState().syncFromCloud(u.id);
+    }
+
+    set({ user: localUser, isAuthenticated: true, isLoaded: true });
   },
 
   signOut: async () => {
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await supabase.auth.signOut();
     set({ user: null, isAuthenticated: false });
   },
 }));

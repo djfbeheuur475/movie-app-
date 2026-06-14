@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useApiKeysStore } from '../../store/apiKeysStore';
+import { useAuthStore } from '../../store/authStore';
 import { getPosterUrl } from '../../lib/tmdb';
 import { traktApi } from '../../lib/trakt';
 import type { WatchlistItem } from '../../types';
@@ -58,6 +59,7 @@ function WatchlistCard({ item, onRemove }: { item: WatchlistItem; onRemove: () =
 export default function WatchlistScreen() {
   const router = useRouter();
   const { items, removeFromWatchlist } = useWatchlistStore();
+  const userId = useAuthStore((s) => s.user?.id);
   const { traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
@@ -127,7 +129,7 @@ export default function WatchlistScreen() {
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => removeFromWatchlist(item.tmdb_id, item.media_type),
+        onPress: () => removeFromWatchlist(item.tmdb_id, item.media_type, userId),
       },
     ]);
   };

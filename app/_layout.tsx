@@ -28,15 +28,23 @@ const queryClient = new QueryClient({
 function NavigationGuard() {
   const router = useRouter();
   const segments = useSegments();
-  const { isSetupDone, isLoaded } = useApiKeysStore();
+  const { isSetupDone, isLoaded: keysLoaded } = useApiKeysStore();
+  const { isAuthenticated, isLoaded: authLoaded } = useAuthStore();
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!keysLoaded || !authLoaded) return;
+
+    const inAuth = segments[0] === '(auth)';
     const inWelcome = segments[0] === 'welcome';
-    if (!isSetupDone && !inWelcome) {
+
+    if (!isAuthenticated && !inAuth) {
+      router.replace('/(auth)/login');
+    } else if (isAuthenticated && !isSetupDone && !inWelcome) {
       router.replace('/welcome');
+    } else if (isAuthenticated && isSetupDone && (inAuth || inWelcome)) {
+      router.replace('/(tabs)');
     }
-  }, [isLoaded, isSetupDone, segments]);
+  }, [keysLoaded, authLoaded, isAuthenticated, isSetupDone, segments]);
 
   return null;
 }
@@ -111,6 +119,7 @@ export default function RootLayout() {
             name="episode"
             options={{ presentation: 'card', animation: 'slide_from_right' }}
           />
+          <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
         </Stack>
         {/* Invisible swipe zone — catches downward swipes from the top edge to reveal the status bar */}
         <GestureDetector gesture={swipeDownGesture}>

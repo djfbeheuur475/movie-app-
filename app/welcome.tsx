@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useApiKeysStore } from '../store/apiKeysStore';
+import { useAuthStore } from '../store/authStore';
 import { requestDeviceCode, pollDeviceToken } from '../lib/trakt';
 
 type Step = 'intro' | 'tmdb' | 'trakt' | 'gemini';
@@ -37,9 +38,11 @@ function StepDots({ current }: { current: Step }) {
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { saveKeys, markSetupDone } = useApiKeysStore();
+  const { saveKeys, markSetupDone, syncToCloud } = useApiKeysStore();
+  const userId = useAuthStore((s) => s.user?.id);
 
-  const [step, setStep] = useState<Step>('intro');
+  // Skip intro for authenticated users — they came from Google login
+  const [step, setStep] = useState<Step>(userId ? 'tmdb' : 'intro');
 
   // TMDB
   const [tmdbKey, setTmdbKey] = useState('');
@@ -120,6 +123,7 @@ export default function WelcomeScreen() {
     const key = geminiKey.trim();
     if (key) await saveKeys({ geminiKey: key });
     await markSetupDone();
+    if (userId) await syncToCloud(userId);
     setIsSaving(false);
     router.replace('/(tabs)');
   };
@@ -127,6 +131,7 @@ export default function WelcomeScreen() {
   const handleSkipToFinish = async () => {
     setIsSaving(true);
     await markSetupDone();
+    if (userId) await syncToCloud(userId);
     setIsSaving(false);
     router.replace('/(tabs)');
   };

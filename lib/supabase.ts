@@ -1,13 +1,68 @@
-// Supabase removed — replaced by local AsyncStorage-based storage.
-// This stub prevents import errors in any files that haven't been updated yet.
-export const supabase = {
+import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Config } from '../constants/config';
+
+const supabaseUrl = Config.SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = Config.SUPABASE_ANON_KEY || 'placeholder';
+
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    getSession: async () => ({ data: { session: null }, error: null }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    signInWithPassword: async () => { throw new Error('Supabase removed'); },
-    signUp: async () => { throw new Error('Supabase removed'); },
-    signOut: async () => { throw new Error('Supabase removed'); },
-    signInWithOAuth: async () => { throw new Error('Supabase removed'); },
-    setSession: async () => { throw new Error('Supabase removed'); },
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+    flowType: 'implicit',
   },
+});
+
+export type Database = {
+  public: {
+    Tables: {
+      profiles: {
+        Row: {
+          id: string;
+          email: string;
+          display_name: string | null;
+          avatar_url: string | null;
+          trakt_connected: boolean;
+          trakt_username: string | null;
+          trakt_client_id: string | null;
+          trakt_access_token: string | null;
+          trakt_refresh_token: string | null;
+          tmdb_api_key: string | null;
+          gemini_api_key: string | null;
+          setup_done: boolean;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at'>;
+        Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+      };
+      user_settings: {
+        Row: {
+          id: string;
+          tmdb_key: string | null;
+          gemini_key: string | null;
+          trakt_client_id: string | null;
+          trakt_access_token: string | null;
+          trakt_username: string | null;
+          setup_done: boolean;
+        };
+        Insert: Database['public']['Tables']['user_settings']['Row'];
+        Update: Partial<Database['public']['Tables']['user_settings']['Row']>;
+      };
+      watchlist: {
+        Row: {
+          id: string;
+          user_id: string;
+          tmdb_id: number;
+          media_type: 'movie' | 'tv';
+          added_at: string;
+          title: string;
+          poster_path: string | null;
+        };
+        Insert: Omit<Database['public']['Tables']['watchlist']['Row'], 'id' | 'added_at'>;
+        Update: Partial<Database['public']['Tables']['watchlist']['Insert']>;
+      };
+    };
+  };
 };
