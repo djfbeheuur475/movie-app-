@@ -21,7 +21,10 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://hsavkfjtyhxwbvnupefl.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzYXZrZmp0eWh4d2J2bnVwZWZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwOTA3MDMsImV4cCI6MjA5NjY2NjcwM30.qE2vIN5u2PjzGyl0XC6_IOTJ-IyCCgs9jD1b5cDJVYI",
+        "EXPO_PUBLIC_BACKEND_URL": "http://localhost:3001"
       }
     },
     "apk": {
@@ -32,7 +35,10 @@
       "distribution": "internal",
       "channel": "production",
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://hsavkfjtyhxwbvnupefl.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzYXZrZmp0eWh4d2J2bnVwZWZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwOTA3MDMsImV4cCI6MjA5NjY2NjcwM30.qE2vIN5u2PjzGyl0XC6_IOTJ-IyCCgs9jD1b5cDJVYI",
+        "EXPO_PUBLIC_BACKEND_URL": "http://localhost:3001"
       }
     },
     "production": {
