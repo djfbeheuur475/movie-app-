@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Dimensions,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,12 +15,42 @@ import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
-import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
+import { Colors, Spacing, BorderRadius } from '../../constants/theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Hardcoded to avoid Linking.createURL producing nextup:///auth/callback (triple-slash) on Android
 const REDIRECT_URL = 'nextup://auth/callback';
+
+const { width: W } = Dimensions.get('window');
+const TMDB_IMG = 'https://image.tmdb.org/t/p/w342';
+
+const POSTER_PATHS = [
+  '/d5NXSklXo0qyIYkgV61sZ9fEEzD.jpg', // Dune
+  '/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg', // Oppenheimer
+  '/74xTEgt7R36Fpooo50r9T25onhq.jpg', // The Batman
+  '/uKvVjHNqB5VmOrdxqAt2F7J78ED.jpg', // The Last of Us
+  '/t6HIqrRAclMCA60NsSW-zecjOdX.jpg', // Avatar: Way of Water
+  '/62HCnUTziyWcpDaBO2i1DX17ljH.jpg', // Top Gun: Maverick
+  '/iuFNMS8U5cb6xfzi5YNI0Mk7S9A.jpg', // Barbie
+  '/dB6A9W78TGe6RR8INuCJNp7NmpB.jpg', // Killers of the Flower Moon
+  '/9V9b7j9bTJxd3c8RmfGOlqKe19Q.jpg', // Succession
+  '/qNBAXBIQlnOThrVvA6mA2B5ggkl.jpg', // Andor
+  '/jXJxMcVoEuXzym3vFnjqDW4ifo6.jpg', // House of the Dragon
+  '/mBaXZ95R2OxueZhvQbcEWy2DqyO.jpg', // Severance
+  '/vDGr1YdrlfbU9wxTOdpf3zChmv9.jpg', // Shogun
+  '/9V9b7j9bTJxd3c8RmfGOlqKe19Q.jpg', // Succession (repeat to fill)
+  '/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg', // Oppenheimer (repeat)
+];
+
+const COLS = 3;
+const POSTER_W = Math.ceil(W / COLS);
+const POSTER_H = Math.ceil(POSTER_W * 1.5);
+
+// Build a 3-column grid of poster URI strings
+const POSTER_COLS: string[][] = [[], [], []];
+POSTER_PATHS.forEach((path, i) => {
+  POSTER_COLS[i % COLS].push(TMDB_IMG + path);
+});
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -28,8 +60,6 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      console.log('[Auth] REDIRECT_URL:', REDIRECT_URL);
-
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -38,21 +68,11 @@ export default function LoginScreen() {
         },
       });
 
-      console.log('[Auth] signInWithOAuth error:', error);
-      console.log('[Auth] signInWithOAuth data.url:', data?.url?.slice(0, 120));
-
-      if (error || !data.url) {
-        throw error ?? new Error('No auth URL returned');
-      }
+      if (error || !data.url) throw error ?? new Error('No auth URL returned');
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, REDIRECT_URL);
-      console.log('[Auth] result type:', result.type);
-
       if (result.type !== 'success' || !result.url) return;
 
-      console.log('[Auth] result.url:', result.url.slice(0, 150));
-
-      // Implicit flow: Supabase puts tokens in hash fragment or query params
       const urlObj = new URL(result.url);
       const hash = urlObj.hash ? new URLSearchParams(urlObj.hash.slice(1)) : null;
       const query = urlObj.searchParams;
@@ -67,7 +87,6 @@ export default function LoginScreen() {
         });
         if (sessionError) throw sessionError;
       } else {
-        // Fallback: PKCE code in query params
         const code = query.get('code');
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -89,113 +108,147 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <LinearGradient colors={['#1a0f00', Colors.background]} style={StyleSheet.absoluteFill} />
-
-      <View style={styles.logoArea}>
-        <Image
-          source={require('../../assets/icon.png')}
-          style={styles.logoImage}
-          contentFit="contain"
-        />
-        <Text style={styles.logoText}>
-          Next<Text style={styles.logoAccent}>Up</Text>
-        </Text>
-        <Text style={styles.logoTagline}>DISCOVER · TRACK · EXPERIENCE</Text>
+    <View style={styles.root}>
+      {/* Movie poster collage background */}
+      <View style={styles.posterGrid}>
+        {POSTER_COLS.map((col, ci) => (
+          <View key={ci} style={styles.posterColumn}>
+            {col.map((uri, ri) => (
+              <Image
+                key={ri}
+                source={{ uri }}
+                style={styles.poster}
+                contentFit="cover"
+                transition={400}
+              />
+            ))}
+          </View>
+        ))}
       </View>
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Sign in to NextUp</Text>
-        <Text style={styles.panelSub}>
-          Sync your watchlist and preferences across devices.
-        </Text>
+      {/* Gradient overlay — heavy at bottom for readability */}
+      <LinearGradient
+        colors={[
+          'rgba(0,0,0,0.45)',
+          'rgba(0,0,0,0.65)',
+          'rgba(0,0,0,0.90)',
+          'rgba(0,0,0,0.98)',
+        ]}
+        locations={[0, 0.35, 0.62, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
-        <TouchableOpacity
-          style={styles.googleBtn}
-          onPress={handleGoogleSignIn}
-          disabled={isLoading}
-          activeOpacity={0.85}
-        >
-          {isLoading ? (
-            <ActivityIndicator color={Colors.background} />
-          ) : (
-            <>
-              <Image
-                source={{ uri: 'https://www.google.com/favicon.ico' }}
-                style={styles.googleIcon}
-                contentFit="contain"
-              />
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
+      {/* Foreground content */}
+      <View style={styles.content}>
+        {/* Brand section — centered in upper-middle */}
+        <View style={styles.brand}>
+          <Image
+            source={require('../../assets/splash-logo.png')}
+            style={styles.logoImage}
+            contentFit="contain"
+          />
+          <Text style={styles.appName}>NextUp</Text>
+          <Text style={styles.tagline}>FINDING YOUR NEXT FAVOURITE</Text>
         </View>
 
-        <TouchableOpacity style={styles.guestBtn} onPress={handleGuest} activeOpacity={0.8}>
-          <Text style={styles.guestBtnText}>Continue without account</Text>
-        </TouchableOpacity>
+        {/* Sign-in section pinned to bottom */}
+        <View style={styles.signIn}>
+          <TouchableOpacity
+            style={styles.googleBtn}
+            onPress={handleGoogleSignIn}
+            disabled={isLoading}
+            activeOpacity={0.85}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#1a1a1a" />
+            ) : (
+              <>
+                <Image
+                  source={{ uri: 'https://www.google.com/favicon.ico' }}
+                  style={styles.googleIcon}
+                  contentFit="contain"
+                />
+                <Text style={styles.googleBtnText}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-        <Text style={styles.disclaimer}>
-          By signing in you agree to our Terms of Service and Privacy Policy.
-        </Text>
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity style={styles.guestBtn} onPress={handleGuest} activeOpacity={0.8}>
+            <Text style={styles.guestBtnText}>Continue without account</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.disclaimer}>
+            By signing in you agree to our Terms of Service and Privacy Policy.
+          </Text>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#0a0a0a',
+  },
+
+  // Poster grid
+  posterGrid: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+  },
+  posterColumn: {
+    width: POSTER_W,
+    flexDirection: 'column',
+  },
+  poster: {
+    width: POSTER_W,
+    height: POSTER_H,
+    backgroundColor: '#1a1a1a',
+  },
+
+  // Foreground layout
+  content: {
+    flex: 1,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 48 : 32,
     justifyContent: 'flex-end',
   },
-  logoArea: {
+
+  // Brand
+  brand: {
     alignItems: 'center',
-    paddingBottom: 48,
+    marginBottom: 52,
   },
   logoImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 18,
-    marginBottom: 14,
+    width: 110,
+    height: 90,
+    marginBottom: 12,
   },
-  logoText: {
-    fontSize: 52,
+  appName: {
+    fontSize: 58,
     fontWeight: '900',
-    color: Colors.text,
+    color: '#ffffff',
     letterSpacing: -2,
+    lineHeight: 62,
   },
-  logoAccent: { color: Colors.primary },
-  logoTagline: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 4,
-    letterSpacing: 2,
+  tagline: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.55)',
+    letterSpacing: 3.5,
+    marginTop: 6,
   },
-  panel: {
-    padding: Spacing.xl,
-    paddingBottom: 48,
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    borderColor: Colors.border,
-  },
-  panelTitle: {
-    ...Typography.heading,
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-  },
-  panelSub: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginBottom: Spacing.xl,
-    lineHeight: 18,
+
+  // Sign-in
+  signIn: {
+    width: '100%',
   },
   googleBtn: {
     flexDirection: 'row',
@@ -204,7 +257,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     backgroundColor: '#ffffff',
     borderRadius: BorderRadius.md,
-    height: 52,
+    height: 54,
   },
   googleIcon: {
     width: 20,
@@ -212,31 +265,42 @@ const styles = StyleSheet.create({
   },
   googleBtnText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1a1a1a',
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: Spacing.md,
+    marginVertical: 14,
     gap: Spacing.sm,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
-  dividerText: { ...Typography.caption, color: Colors.textMuted },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  dividerText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+  },
   guestBtn: {
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: 'rgba(255,255,255,0.2)',
     borderRadius: BorderRadius.md,
     height: 50,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  guestBtnText: { ...Typography.subheading, color: Colors.textSecondary },
+  guestBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
   disclaimer: {
-    ...Typography.caption,
-    color: Colors.textMuted,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.3)',
     textAlign: 'center',
-    marginTop: Spacing.lg,
-    lineHeight: 18,
+    marginTop: 16,
+    lineHeight: 17,
   },
 });
