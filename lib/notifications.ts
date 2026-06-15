@@ -25,7 +25,7 @@ export async function setupNotificationChannel() {
     description: 'Alerts when a tracked show has a new episode',
     importance: Notifications.AndroidImportance.DEFAULT,
     vibrationPattern: [0, 200, 100, 200],
-    lightColor: '#7B5CE4',
+    lightColor: '#f59e0b',
   });
 }
 
@@ -34,18 +34,22 @@ export interface EpisodeAlert {
   season: number;
   episode: number;
   airDate: string; // YYYY-MM-DD
+  tmdbId: number;
 }
 
 export async function scheduleEpisodeNotifications(alerts: EpisodeAlert[]) {
+  // Clear everything — scheduled queue + notification tray — so we start fresh
   await Notifications.cancelAllScheduledNotificationsAsync();
+  await Notifications.dismissAllNotificationsAsync();
 
   const now = new Date();
 
   for (const alert of alerts) {
     const [y, m, d] = alert.airDate.split('-').map(Number);
     const epCode = `S${String(alert.season).padStart(2, '0')}E${String(alert.episode).padStart(2, '0')}`;
+    // One stable identifier per episode — prevents the same episode appearing twice
+    const identifier = `nextup-episode-${alert.tmdbId}-${epCode}`;
 
-    // Fire at 9am on the air date; if today and already past 9am, fire immediately
     const fireAt = new Date(y, m - 1, d, 9, 0, 0, 0);
     const isToday = fireAt.toDateString() === now.toDateString();
     const alreadyPast = fireAt.getTime() <= now.getTime();
@@ -54,24 +58,30 @@ export async function scheduleEpisodeNotifications(alerts: EpisodeAlert[]) {
 
     const content: Notifications.NotificationContentInput = {
       title: alert.showName,
-      body: isToday && alreadyPast
-        ? `${epCode} is available now`
-        : `${epCode} airs today`,
-      data: { type: 'new-episode', showName: alert.showName },
+      body: isToday && alreadyPast ? `${epCode} is available now` : `${epCode} airs today`,
+      data: {
+        type: 'new-episode',
+        tmdbId: alert.tmdbId,
+        showName: alert.showName,
+        season: alert.season,
+        episode: alert.episode,
+      },
+      ...(Platform.OS === 'android' && { channelId: 'new-episodes' }),
     };
 
     if (isToday && alreadyPast) {
-      // Fire immediately with a short delay so the app has time to finish init
       await Notifications.scheduleNotificationAsync({
+        identifier,
         content,
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: 5,
+          seconds: 3,
           channelId: 'new-episodes',
         },
       });
     } else {
       await Notifications.scheduleNotificationAsync({
+        identifier,
         content,
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,

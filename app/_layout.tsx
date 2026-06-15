@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -54,6 +55,26 @@ function NotificationScheduler() {
   return null;
 }
 
+function NotificationTapHandler() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Handle tapping a notification when the app is foregrounded or cold-started
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as {
+        type?: string;
+        tmdbId?: number;
+      };
+      if (data?.type === 'new-episode' && data?.tmdbId) {
+        router.push(`/title/${data.tmdbId}?type=tv`);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  return null;
+}
+
 export default function RootLayout() {
   const loadUser = useAuthStore((s) => s.loadUser);
   const loadWatchlist = useWatchlistStore((s) => s.loadWatchlist);
@@ -98,6 +119,7 @@ export default function RootLayout() {
         <StatusBar style="light" hidden={statusBarHidden} animated />
         <NavigationGuard />
         <NotificationScheduler />
+        <NotificationTapHandler />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }}>
           <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />

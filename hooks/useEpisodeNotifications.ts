@@ -41,12 +41,15 @@ export function useEpisodeNotifications() {
 
       await setupNotificationChannel();
 
-      const alerts: EpisodeAlert[] = (calendarShows ?? []).map((item) => ({
-        showName: item.show.title,
-        season: item.episode.season,
-        episode: item.episode.number,
-        airDate: item.first_aired.slice(0, 10),
-      }));
+      const alerts: EpisodeAlert[] = (calendarShows ?? [])
+        .filter((item) => !!item.show.ids.tmdb)
+        .map((item) => ({
+          showName: item.show.title,
+          season: item.episode.season,
+          episode: item.episode.number,
+          airDate: item.first_aired.slice(0, 10),
+          tmdbId: item.show.ids.tmdb,
+        }));
 
       await scheduleEpisodeNotifications(alerts);
     }
