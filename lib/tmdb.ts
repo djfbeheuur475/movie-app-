@@ -147,17 +147,21 @@ export const tmdbApi = {
     return data.results;
   },
 
-  searchMovies: async (query: string, page = 1): Promise<TMDBMovie[]> => {
-    const { data } = await tmdb.get('/search/movie', { params: { query, page } });
+  searchMovies: async (query: string, page = 1, year?: number): Promise<TMDBMovie[]> => {
+    const { data } = await tmdb.get('/search/movie', {
+      params: { query, page, ...(year ? { year } : {}) },
+    });
     return data.results;
   },
 
-  searchTVShows: async (query: string, page = 1): Promise<TMDBTVShow[]> => {
-    const { data } = await tmdb.get('/search/tv', { params: { query, page } });
+  searchTVShows: async (query: string, page = 1, year?: number): Promise<TMDBTVShow[]> => {
+    const { data } = await tmdb.get('/search/tv', {
+      params: { query, page, ...(year ? { first_air_date_year: year } : {}) },
+    });
     return data.results;
   },
 
-  // Discover with filters
+  // Discover with filters (generic)
   discoverMovies: async (params: Record<string, unknown> = {}): Promise<TMDBMovie[]> => {
     const { data } = await tmdb.get('/discover/movie', { params });
     return data.results;
@@ -166,6 +170,56 @@ export const tmdbApi = {
   discoverTV: async (params: Record<string, unknown> = {}): Promise<TMDBTVShow[]> => {
     const { data } = await tmdb.get('/discover/tv', { params });
     return data.results;
+  },
+
+  // Typed discover wrappers used by Taste DNA thematic rows
+  discoverMoviesTyped: async (opts: {
+    genreIds?: number[];
+    sortBy?: string;
+    voteAverageGte?: number;
+    voteCountGte?: number;
+    releaseDateGte?: string;
+    releaseDateLte?: string;
+    page?: number;
+  }): Promise<TMDBMovie[]> => {
+    const { data } = await tmdb.get('/discover/movie', {
+      params: {
+        page: opts.page ?? 1,
+        sort_by: opts.sortBy ?? 'vote_average.desc',
+        include_adult: false,
+        include_video: false,
+        'vote_average.gte': opts.voteAverageGte,
+        'vote_count.gte': opts.voteCountGte,
+        ...(opts.genreIds?.length && { with_genres: opts.genreIds.join(',') }),
+        ...(opts.releaseDateGte && { 'primary_release_date.gte': opts.releaseDateGte }),
+        ...(opts.releaseDateLte && { 'primary_release_date.lte': opts.releaseDateLte }),
+      },
+    });
+    return data.results as TMDBMovie[];
+  },
+
+  discoverShowsTyped: async (opts: {
+    genreIds?: number[];
+    sortBy?: string;
+    voteAverageGte?: number;
+    voteCountGte?: number;
+    firstAirDateGte?: string;
+    firstAirDateLte?: string;
+    page?: number;
+  }): Promise<TMDBTVShow[]> => {
+    const { data } = await tmdb.get('/discover/tv', {
+      params: {
+        page: opts.page ?? 1,
+        sort_by: opts.sortBy ?? 'vote_average.desc',
+        include_adult: false,
+        'vote_average.gte': opts.voteAverageGte,
+        'vote_count.gte': opts.voteCountGte,
+        ...(opts.genreIds?.length && { with_genres: opts.genreIds.join(',') }),
+        ...(opts.firstAirDateGte && { 'first_air_date.gte': opts.firstAirDateGte }),
+        ...(opts.firstAirDateLte && { 'first_air_date.lte': opts.firstAirDateLte }),
+      },
+    });
+    return data.results as TMDBTVShow[];
   },
 
   // Genres
@@ -299,29 +353,39 @@ export const tmdbApi = {
   },
 
   // Indie & Critics Picks — high-quality drama/arthouse, excludes mainstream blockbusters
-  getIndieCriticsPicks: async (page = 1): Promise<{ results: TMDBMovie[]; total_pages: number }> => {
+  getIndieCriticsPicks: async (
+    page = 1,
+    opts: { dateGte?: string; dateLte?: string } = {}
+  ): Promise<{ results: TMDBMovie[]; total_pages: number }> => {
     const { data } = await tmdb.get('/discover/movie', {
       params: {
         sort_by: 'vote_average.desc',
         'vote_average.gte': 7.4,
         'vote_count.gte': 300,
-        'vote_count.lte': 450000,   // keeps out mega-blockbusters
-        with_genres: '18',           // Drama — core of arthouse/indie
-        without_genres: '10751,16',  // no Family, Animation
+        'vote_count.lte': 450000,
+        with_genres: '18',
+        without_genres: '10751,16',
+        ...(opts.dateGte && { 'primary_release_date.gte': opts.dateGte }),
+        ...(opts.dateLte && { 'primary_release_date.lte': opts.dateLte }),
         page,
       },
     });
     return { results: data.results as TMDBMovie[], total_pages: data.total_pages as number };
   },
 
-  getIndieCriticsPicksTV: async (page = 1): Promise<{ results: TMDBTVShow[]; total_pages: number }> => {
+  getIndieCriticsPicksTV: async (
+    page = 1,
+    opts: { dateGte?: string; dateLte?: string } = {}
+  ): Promise<{ results: TMDBTVShow[]; total_pages: number }> => {
     const { data } = await tmdb.get('/discover/tv', {
       params: {
         sort_by: 'vote_average.desc',
         'vote_average.gte': 7.5,
         'vote_count.gte': 100,
-        'vote_count.lte': 200000,    // keeps out mega-popular shows
-        without_genres: '10751,10762,10763,10764,10766,10767', // no family/kids/news/reality/soap/talk
+        'vote_count.lte': 200000,
+        without_genres: '10751,10762,10763,10764,10766,10767',
+        ...(opts.dateGte && { 'first_air_date.gte': opts.dateGte }),
+        ...(opts.dateLte && { 'first_air_date.lte': opts.dateLte }),
         page,
       },
     });

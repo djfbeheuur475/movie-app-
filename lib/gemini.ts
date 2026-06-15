@@ -3,24 +3,18 @@ import type { TraktWatchedMovie, TraktWatchedShow } from './trakt';
 
 export interface GeminiReply {
   reply: string;
-  movies: string[];    // movie titles to resolve via TMDB search
-  shows: string[];     // TV show titles to resolve via TMDB search
+  movies: string[];      // movie titles (may include year suffix stripped before search)
+  shows: string[];       // TV show titles
+  movieYears: (number | null)[];  // year for each movie (parsed from "Title (YEAR)" format)
+  showYears: (number | null)[];   // year for each show
   modelUsed: string;
-  // Legacy number-ID fields kept for backward compat (now always empty for chat)
   tmdbIds: number[];
   movieIds: number[];
   tvIds: number[];
 }
 
-export interface HomePicksResult {
-  movieIds: number[];
-  tvIds: number[];
-  modelUsed: string;
-}
-
 // Model preference order. First model that responds successfully wins.
 const MODEL_CASCADE = [
-  'gemini-2.5-flash-preview-05-20',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-1.5-flash-latest',
@@ -89,44 +83,55 @@ function buildSystemPrompt(
     .map((s) => `${s.show.title} (${s.show.year})`)
     .join(', ');
 
+  // Temporal context — shapes recommendation mood
+  const now = new Date();
+  const hour = now.getHours();
+  const timeOfDay = hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 17 ? 'afternoon' : hour >= 17 && hour < 22 ? 'evening' : 'late night';
+  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()];
+  const month = now.getMonth() + 1;
+  const specialPeriod = month === 10 ? ' — Halloween and horror season' : month === 12 ? ' — festive season' : month <= 2 ? ' — awards season' : '';
+  const temporalNote = `Current context: ${dayName} ${timeOfDay}${specialPeriod}. Let this subtly inform the mood and tone of your recommendations.`;
+
   const historySection =
     recentMovies || recentShows
-      ? `
-The user's recent watch history from Trakt:
-- Movies watched: ${recentMovies || 'none recorded'}
-- TV shows watched: ${recentShows || 'none recorded'}
+      ? `The user's recent watch history from Trakt:
+- Movies: ${recentMovies || 'none recorded'}
+- TV shows: ${recentShows || 'none recorded'}
 
-Use this history to personalise your recommendations. Identify their taste — genres, themes, directors, eras — and suggest titles they're likely to enjoy but haven't seen yet.`
+Use this to personalise precisely — identify taste patterns, connect recommendations to what they've actually watched.`
       : '';
 
   const excludeSection = alreadyRecommended.length > 0
-    ? `\nALREADY SUGGESTED THIS SESSION — do NOT recommend any of these again, even if the user asks for "more" or "different" options:\n${alreadyRecommended.join(', ')}\nAlways suggest fresh titles that are not on this list.\n`
+    ? `\nDO NOT recommend any of these (already suggested — includes prior sessions):\n${alreadyRecommended.join(', ')}\nAlways suggest completely fresh titles.\n`
     : '';
 
-  return `You are NextUp AI, a knowledgeable and personable entertainment guide.
-Your job is to help users decide what to watch next — movies and TV shows.
-Today's date is ${today}. When users ask about recent content (e.g. "last 12 months", "this year", "new releases"), calculate the date range relative to today's date.
+  return `You are NextUp — a premium cinematic concierge, not a chatbot.
+You understand film and television at depth: genre, tone, pacing, craft, emotional register, director sensibility, cultural weight.
+Today is ${today}. When users mention time ("this year", "last 6 months", "recent"), calculate the date range from today.
+${temporalNote}
 ${historySection}${excludeSection}
+VOICE:
+- Speak like a knowledgeable friend who knows cinema deeply. Confident, precise, never generic.
+- No filler: never open with "Great question!", "Of course!", "Absolutely!", "Sure!", "Certainly!".
+- No lengthy preambles — get to the curation.
+- Write 2–4 tight sentences of context, then the titles. Shorter is better.
+- Connect each title to this viewer's specific taste — reference their history, the mood, the theme. No generic plot summaries.
+- Trust that the user has seen a lot. Be specific about what earns each title its place.
 
-QUALITY RULES — always follow these:
-- Only recommend titles with strong audience reception (ideally 7.0+ on TMDB, at minimum 5.5+ with 500+ votes).
-- Never recommend obscure titles with very low vote counts (under 200 votes).
-- Never recommend adult, erotic, exploitation, or pornographic content.
-- Prioritise English-language titles unless the user asks for foreign cinema or their history shows foreign film preferences.
-- Prefer mainstream, recognisable titles for the core recommendations, with 1-2 discovery picks mixed in.
-- Recommend across genre and tone variety — avoid recommending the same genre repeatedly.
+QUALITY:
+- Only titles with strong reception: 7.0+ TMDB rating, 500+ votes minimum.
+- No obscure, adult, exploitation, or direct-to-video releases.
+- English-language by default. Foreign cinema only if they ask or their history shows that preference.
+- Mainstream and recognisable for the core picks, 1–2 discovery titles maximum.
 
-When making recommendations:
-1. Be conversational and enthusiastic but concise.
-2. Always include 3–5 specific title recommendations when relevant. For each recommended title, include 1–2 sentences explaining why it suits this particular user — connect it to something in their watch history or the vibe they asked for. Keep the blurbs tight and personal, not generic plot summaries.
-3. In the movies array, list the exact title of every movie you mention by name — your direct recommendations first, then any films you reference as comparisons or examples. In the shows array, do the same for every TV show. Use only the title (no year, no description). Never put movies in shows or vice versa.
-4. Only recommend English-language mainstream titles (Hollywood, British, Australian) with strong audience reception. No foreign-language, obscure, or low-budget titles.
-5. If the user asks about a specific title, give a brief review or explanation.
-6. When recommending without a specific request, default to well-known, critically respected titles with broad appeal.
+FORMAT:
+- Include 3–5 titles when asked for recommendations.
+- movies array: include year in parentheses — "Title (YEAR)". Example: ["Sicario (2015)", "Blade Runner 2049 (2017)"]. Recommendations first, then any comparison references.
+- shows array: include year in parentheses — "Title (YEAR)". Example: ["The Wire (2002)"]. Never mix movies and shows.
+- If asked about one specific title: give a sharp 2–3 sentence take. No list needed.
 
-CRITICAL: Output ONLY a raw JSON object. No prose before it, no prose after it, no markdown, no code fences, no explanation outside the JSON.
-The JSON must have exactly this shape:
-{"reply":"your conversational message here","movies":["Title One","Title Two",...],"shows":["Show One","Show Two",...]}`;
+CRITICAL: Output ONLY a raw JSON object. No prose before or after it. No markdown. No code fences.
+{"reply":"your curation message here","movies":["Title One (2019)","Title Two (2021)",...],"shows":["Show One (2018)","Show Two (2022)",...]}`;
 }
 
 // ─── Response parsing ─────────────────────────────────────────────────────────
@@ -134,7 +139,7 @@ The JSON must have exactly this shape:
 function parseResponse(rawText: string): Omit<GeminiReply, 'modelUsed'> {
   const stripped = rawText.replace(/```(?:json)?\n?/g, '').replace(/```/g, '').trim();
 
-  const emptyIds = { tmdbIds: [], movieIds: [], tvIds: [] };
+  const emptyIds = { tmdbIds: [] as number[], movieIds: [] as number[], tvIds: [] as number[] };
 
   function cleanMd(text: string): string {
     return text
@@ -179,8 +184,27 @@ function parseResponse(rawText: string): Omit<GeminiReply, 'modelUsed'> {
     return raw.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\t/g, '\t');
   }
 
-  const movies = getStringArray(stripped, 'movies');
-  const shows = getStringArray(stripped, 'shows');
+  // Parse "Title (YEAR)" format — extracts clean title + year for each entry
+  function parseTitlesWithYears(raw: string[]): { titles: string[]; years: (number | null)[] } {
+    const titles: string[] = [];
+    const years: (number | null)[] = [];
+    for (const entry of raw) {
+      const m = entry.match(/^(.*?)\s*\((\d{4})\)\s*$/);
+      if (m) {
+        titles.push(m[1].trim());
+        years.push(parseInt(m[2], 10));
+      } else {
+        titles.push(entry.trim());
+        years.push(null);
+      }
+    }
+    return { titles, years };
+  }
+
+  const rawMovies = getStringArray(stripped, 'movies');
+  const rawShows = getStringArray(stripped, 'shows');
+  const { titles: movies, years: movieYears } = parseTitlesWithYears(rawMovies);
+  const { titles: shows, years: showYears } = parseTitlesWithYears(rawShows);
 
   // 1. Try proper JSON parse
   const first = stripped.indexOf('{');
@@ -196,20 +220,22 @@ function parseResponse(rawText: string): Omit<GeminiReply, 'modelUsed'> {
           try {
             const p2 = JSON.parse(inner);
             if (p2?.reply) {
+              const innerMovies = parseTitlesWithYears(getStringArray(inner, 'movies'));
+              const innerShows = parseTitlesWithYears(getStringArray(inner, 'shows'));
               return {
                 reply: cleanMd(p2.reply),
-                movies: getStringArray(inner, 'movies'),
-                shows: getStringArray(inner, 'shows'),
+                movies: innerMovies.titles, movieYears: innerMovies.years,
+                shows: innerShows.titles, showYears: innerShows.years,
                 ...emptyIds,
               };
             }
           } catch {}
         }
-        return { reply: cleanMd(p.reply), movies, shows, ...emptyIds };
+        return { reply: cleanMd(p.reply), movies, movieYears, shows, showYears, ...emptyIds };
       }
     } catch {
       const extracted = extractReplyText(jsonBlock);
-      if (extracted) return { reply: cleanMd(extracted), movies, shows, ...emptyIds };
+      if (extracted) return { reply: cleanMd(extracted), movies, movieYears, shows, showYears, ...emptyIds };
     }
   }
 
@@ -218,7 +244,7 @@ function parseResponse(rawText: string): Omit<GeminiReply, 'modelUsed'> {
     .replace(/^\s*\{?\s*"reply"\s*:\s*"/, '')
     .replace(/",?\s*"(?:movies|shows|movieIds|tvIds|tmdbIds)"\s*:[\s\S]*$/, '')
     .replace(/"\s*}\s*$/, '');
-  return { reply: cleanMd(plain) || cleanMd(stripped), movies, shows, ...emptyIds };
+  return { reply: cleanMd(plain) || cleanMd(stripped), movies, movieYears, shows, showYears, ...emptyIds };
 }
 
 // ─── Model fallback detection ─────────────────────────────────────────────────
@@ -278,7 +304,6 @@ export async function askGemini(
 
       const isLast = i === MODEL_CASCADE.length - 1;
       if (isLast) throw e;
-      // Always try the next model — rate limits and quota errors should fall through too
       console.log(`[Gemini] Trying next fallback...`);
       continue;
     }
@@ -287,101 +312,40 @@ export async function askGemini(
   throw lastError;
 }
 
-// ─── Home picks — single call for both movies + TV ────────────────────────────
+// ─── Conversation summarisation ───────────────────────────────────────────────
+// Condenses older conversation turns into a compact summary for the system prompt.
+// Called when the chat grows beyond MAX_HISTORY_TURNS to cap token growth.
 
-export async function askGeminiForHomePicks(
+export async function summariseConversation(
   apiKey: string,
-  watchedMovies: TraktWatchedMovie[] = [],
-  watchedShows: TraktWatchedShow[] = []
-): Promise<HomePicksResult> {
-  const key = validateKey(apiKey);
+  messages: { role: 'user' | 'assistant'; content: string }[],
+): Promise<string> {
+  const key = apiKey.trim().replace(/[\n\r\t]/g, '');
+  if (!key || messages.length < 2) return '';
+
   const genAI = new GoogleGenerativeAI(key);
+  const transcript = messages
+    .map(m => `${m.role === 'user' ? 'User' : 'NextUp'}: ${m.content}`)
+    .join('\n');
 
-  const sortedMovies = watchedMovies
-    .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime());
+  const prompt = `Summarise this film/TV recommendation conversation in 2–3 concise sentences.
+Include: the viewer's stated mood or criteria, any genres/directors/themes they mentioned,
+and which specific titles were recommended. Be terse — this summary is injected into a system prompt.
 
-  const sortedShows = watchedShows
-    .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime());
+Conversation:
+${transcript}
 
-  const recentMovies = sortedMovies.slice(0, 50).map((m) => `${m.movie.title} (${m.movie.year})`).join(', ');
-  const recentShows = sortedShows.slice(0, 35).map((s) => `${s.show.title} (${s.show.year})`).join(', ');
+Summary:`;
 
-  const hasHistory = recentMovies || recentShows;
-
-  const prompt = hasHistory
-    ? `You are a world-class entertainment recommendation engine.
-
-The user's watch history (most recent first):
-MOVIES WATCHED: ${recentMovies || 'none'}
-TV SHOWS WATCHED: ${recentShows || 'none'}
-
-Before recommending, internally analyse their taste:
-- What genres appear most (e.g. crime, sci-fi, drama, comedy)?
-- What tone do they prefer (dark/intense vs light/fun vs emotional)?
-- What era/decade do they gravitate toward?
-- What quality level — mostly prestige/acclaimed or also mainstream blockbusters?
-- Any recurring themes, styles, or director sensibilities?
-
-Then recommend exactly 60 movies AND exactly 60 TV shows using that analysis. Every title must:
-1. NOT appear anywhere in the watch history above
-2. Be English-language (Hollywood, British, Australian, Canadian) — no subtitles, no foreign-language films unless their history clearly shows that preference
-3. Be mainstream and recognisable — no obscure, arthouse, direct-to-video, or micro-budget releases
-4. Have a TMDB rating of 7.0+ and at least 5,000 votes (movies) / 2,000 votes (TV)
-5. Genuinely match the taste patterns you identified — if they love dark crime dramas, recommend dark crime dramas
-6. Span a variety of genres, tones, and decades — do not cluster everything in one style
-7. Be the kind of title Netflix or HBO would confidently promote
-
-Reply with ONLY this JSON — no markdown, no explanation, nothing else before or after it:
-{"movieIds":[tmdb_movie_id,...],"tvIds":[tmdb_tv_show_id,...]}`
-    : `You are a world-class entertainment recommendation engine.
-
-Recommend exactly 60 must-watch movies AND exactly 60 must-watch TV shows for someone with no history yet.
-
-Every title must:
-1. Be English-language (Hollywood, British, Australian, Canadian)
-2. Be a widely-recognised mainstream title — the kind Netflix or HBO would prominently feature
-3. Have a TMDB rating of 7.5+ and at least 10,000 votes
-4. Span a variety of genres: thriller, drama, crime, sci-fi, action, comedy, horror — no single genre should dominate
-5. Include a mix of modern hits (2010s–present) and beloved classics
-6. No adult content, exploitation, B-movies, or direct-to-video releases
-
-Reply with ONLY this JSON — no markdown, no explanation, nothing else before or after it:
-{"movieIds":[tmdb_movie_id,...],"tvIds":[tmdb_tv_show_id,...]}`;
-
-  let lastError: unknown;
-
-  for (let i = 0; i < MODEL_CASCADE.length; i++) {
-    const modelId = MODEL_CASCADE[i];
-    console.log(`[HomePicks] Trying model ${i + 1}/${MODEL_CASCADE.length}: ${modelId}`);
+  for (const modelId of MODEL_CASCADE) {
     try {
       const model = genAI.getGenerativeModel({ model: modelId });
       const result = await model.generateContent(prompt);
-      const text = result.response.text().trim();
-      const stripped = text.replace(/```(?:json)?\n?/g, '').replace(/```/g, '').trim();
-      const first = stripped.indexOf('{');
-      const last = stripped.lastIndexOf('}');
-      if (first !== -1 && last > first) {
-        const parsed = JSON.parse(stripped.slice(first, last + 1));
-        const movieIds: number[] = Array.isArray(parsed.movieIds)
-          ? parsed.movieIds.filter((x: unknown) => typeof x === 'number')
-          : [];
-        const tvIds: number[] = Array.isArray(parsed.tvIds)
-          ? parsed.tvIds.filter((x: unknown) => typeof x === 'number')
-          : [];
-        console.log(`[HomePicks] Success: ${movieIds.length} movies, ${tvIds.length} TV via ${modelId}`);
-        return { movieIds, tvIds, modelUsed: modelId };
-      }
-      // Couldn't parse JSON — try next model
-      lastError = new Error('No parseable JSON in response');
-      if (i < MODEL_CASCADE.length - 1) continue;
-    } catch (e) {
-      lastError = e;
-      const msg = String((e as any)?.message ?? '').slice(0, 120);
-      console.warn(`[HomePicks] Model ${modelId} failed: ${msg}`);
-      if (i < MODEL_CASCADE.length - 1) continue;
+      return result.response.text().trim();
+    } catch {
+      continue;
     }
   }
-
-  console.warn('[HomePicks] All models failed, returning empty');
-  return { movieIds: [], tvIds: [], modelUsed: 'none' };
+  return '';
 }
+

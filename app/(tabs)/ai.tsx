@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -6,39 +6,73 @@ import {
 } from 'react-native';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import ChatBubble from '../../components/ai/ChatBubble';
-import { askGemini } from '../../lib/gemini';
+import { askGemini, summariseConversation } from '../../lib/gemini';
 import { traktApi } from '../../lib/trakt';
-import type { TraktWatchedMovie, TraktWatchedShow } from '../../lib/trakt';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
+import { useQuery } from '@tanstack/react-query';
 import { useApiKeysStore } from '../../store/apiKeysStore';
+import { useAuthStore } from '../../store/authStore';
+import {
+  getTemporalContext, loadAiSeenTitles, saveAiSeenTitles,
+  loadLatestAiSummary, saveAiConversationToCloud,
+} from '../../lib/tasteDna';
 import type { ChatMessage, ContentItem } from '../../types';
 
 const MOOD_CHIPS = [
-  { icon: '😴', label: 'Easy watch' },
-  { icon: '⚡', label: 'Action' },
-  { icon: '😂', label: 'Laugh' },
-  { icon: '💕', label: 'Romance' },
-  { icon: '😱', label: 'Horror' },
+  { icon: '🌧', label: 'Rainy night mood' },
+  { icon: '🔪', label: 'Tense thriller' },
+  { icon: '🎭', label: 'Prestige drama' },
+  { icon: '🌌', label: 'Mind-bending sci-fi' },
+  { icon: '😂', label: 'Feel-good comedy' },
 ];
 
 const CONTEXT_CHIPS = [
-  { icon: '🏆', label: 'Award-winners' },
-  { icon: '🔍', label: 'Hidden gems' },
-  { icon: '🎬', label: 'Classic cinema' },
-  { icon: '⭐', label: 'Trending now' },
+  { icon: '🏆', label: 'Film festival picks' },
+  { icon: '🔍', label: 'Overlooked gems' },
+  { icon: '🎬', label: '70s-80s classics' },
+  { icon: '🔥', label: 'Best of the decade' },
 ];
 
 let msgId = 0;
 const newId = () => String(++msgId);
 
+// Maximum turns sent raw to Gemini before we start summarising older context
+const MAX_RAW_TURNS = 8;
+
 export default function AITabScreen() {
   const { geminiKey, traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? null;
+
+  const temporal = getTemporalContext();
+  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
+
+  // ─── Trakt via React Query (shared cache with home tab) ───────────────────
+  const { data: traktMovies } = useQuery({
+    queryKey: ['trakt-watched-movies', traktClientId, traktUsername, traktAccessToken],
+    queryFn: () =>
+      traktAccessToken
+        ? traktApi.getWatchedMovies(traktClientId, traktAccessToken)
+        : traktApi.getUserWatchedMovies(traktUsername, traktClientId),
+    enabled: hasTrakt,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const { data: traktShows } = useQuery({
+    queryKey: ['trakt-watched-shows', traktClientId, traktUsername, traktAccessToken],
+    queryFn: () =>
+      traktAccessToken
+        ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
+        : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+    enabled: hasTrakt,
+    staleTime: 1000 * 60 * 30,
+  });
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: newId(),
       role: 'assistant',
-      content: "Hi! I'm your AI movie guide. Tell me what you're in the mood for and I'll find the perfect watch for you. ✦",
+      content: "What are you in the mood for? Tell me the vibe, a genre, a director, a feeling — and I'll find exactly the right watch for you. ✦",
       timestamp: new Date(),
     },
   ]);
@@ -48,34 +82,40 @@ export default function AITabScreen() {
   const isSendingRef = useRef(false);
   const isInitialState = messages.length === 1;
 
-  const traktCache = useRef<{ movies: TraktWatchedMovie[]; shows: TraktWatchedShow[] } | null>(null);
+  // Conversation summary — condenses turns older than MAX_RAW_TURNS
+  const conversationSummaryRef = useRef<string>('');
 
-  const fetchTraktHistory = useCallback(async () => {
-    if (traktCache.current) return traktCache.current;
-    if (!traktClientId) return { movies: [], shows: [] };
-
-    try {
-      let movies: TraktWatchedMovie[] = [];
-      let shows: TraktWatchedShow[] = [];
-
-      if (traktAccessToken) {
-        [movies, shows] = await Promise.all([
-          traktApi.getWatchedMovies(traktClientId, traktAccessToken),
-          traktApi.getWatchedShows(traktClientId, traktAccessToken),
-        ]);
-      } else if (traktUsername) {
-        [movies, shows] = await Promise.all([
-          traktApi.getUserWatchedMovies(traktUsername, traktClientId),
-          traktApi.getUserWatchedShows(traktUsername, traktClientId),
-        ]);
-      }
-
-      traktCache.current = { movies, shows };
-      return traktCache.current;
-    } catch {
-      return { movies: [], shows: [] };
+  // Cross-session seen titles + prior session AI summary
+  const crossSessionSeenRef = useRef<string[]>([]);
+  useEffect(() => {
+    loadAiSeenTitles().then(titles => { crossSessionSeenRef.current = titles; });
+    if (userId) {
+      loadLatestAiSummary(userId).then(result => {
+        if (result?.summary) {
+          conversationSummaryRef.current = result.summary;
+          // Merge prior session titles into seen list
+          const merged = [...new Set([...result.titles, ...crossSessionSeenRef.current])].slice(0, 60);
+          crossSessionSeenRef.current = merged;
+        }
+      });
     }
-  }, [traktClientId, traktUsername, traktAccessToken]);
+  }, [userId]);
+
+  // Trigger conversation summarisation when history grows beyond MAX_RAW_TURNS
+  useEffect(() => {
+    const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
+    if (!cleanKey || messages.length <= MAX_RAW_TURNS + 2) return;
+
+    const toSummarise = messages.slice(0, -MAX_RAW_TURNS);
+    if (toSummarise.length < 2) return;
+
+    summariseConversation(
+      cleanKey,
+      toSummarise.map(m => ({ role: m.role, content: m.content })),
+    ).then(summary => {
+      if (summary) conversationSummaryRef.current = summary;
+    }).catch(() => {});
+  }, [messages.length]);
 
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -100,66 +140,82 @@ export default function AITabScreen() {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
-      const history = [...messages, userMsg];
-      const { movies, shows } = await fetchTraktHistory();
+      const allMessages = [...messages, userMsg];
 
-      // Collect every title already shown as a card this session so Gemini doesn't repeat them
-      const alreadyRecommended = [
-        ...new Set(
-          messages
-            .filter((m) => m.role === 'assistant' && m.recommendations?.length)
-            .flatMap((m) => m.recommendations!.map((r) => r.title))
-            .filter(Boolean)
-        ),
-      ];
+      // Only send the last MAX_RAW_TURNS messages raw; older context is in the summary
+      const recentTurns = allMessages.slice(-MAX_RAW_TURNS);
+      const historyForGemini: { role: 'user' | 'assistant'; content: string }[] =
+        conversationSummaryRef.current
+          ? [
+              { role: 'user', content: `[Context from earlier in our conversation: ${conversationSummaryRef.current}]` },
+              ...recentTurns.map(m => ({ role: m.role, content: m.content })),
+            ]
+          : recentTurns.map(m => ({ role: m.role, content: m.content }));
 
-      const { reply, movies: movieTitles, shows: showTitles } = await askGemini(
+      const movies = traktMovies ?? [];
+      const shows = traktShows ?? [];
+
+      // Merge in-session + cross-session seen titles
+      const inSessionTitles = messages
+        .filter(m => m.role === 'assistant' && m.recommendations?.length)
+        .flatMap(m => m.recommendations!.map(r => r.title))
+        .filter(Boolean);
+      const alreadyRecommended = [...new Set([...crossSessionSeenRef.current, ...inSessionTitles])];
+
+      const { reply, movies: movieTitles, movieYears, shows: showTitles, showYears } = await askGemini(
         cleanKey,
-        history.map((m) => ({ role: m.role, content: m.content })),
+        historyForGemini,
         movies,
         shows,
-        alreadyRecommended
+        alreadyRecommended,
       );
 
       const PREFERRED_LANGS = new Set(['en', 'es', 'fr', 'ko', 'ja']);
       const fulfilled = <T,>(r: PromiseSettledResult<T>): r is PromiseFulfilledResult<T> => r.status === 'fulfilled';
 
-      // Search TMDB by title — far more reliable than asking Gemini for IDs
+      // Year-aware TMDB search — dramatically reduces title disambiguation errors
       const [movieSearchRes, showSearchRes] = await Promise.all([
         Promise.allSettled(
-          movieTitles.slice(0, 10).map((title) =>
-            tmdbApi.searchMovies(title).then((results) => results[0] ? normalizeMovie(results[0]) : null)
+          movieTitles.slice(0, 10).map((title, i) =>
+            tmdbApi.searchMovies(title, 1, movieYears[i] ?? undefined)
+              .then(results => results[0] ? normalizeMovie(results[0]) : null)
           )
         ),
         Promise.allSettled(
-          showTitles.slice(0, 10).map((title) =>
-            tmdbApi.searchTVShows(title).then((results) => results[0] ? normalizeTVShow(results[0]) : null)
+          showTitles.slice(0, 10).map((title, i) =>
+            tmdbApi.searchTVShows(title, 1, showYears[i] ?? undefined)
+              .then(results => results[0] ? normalizeTVShow(results[0]) : null)
           )
         ),
       ]);
 
-      const allMovies = movieSearchRes.filter(fulfilled).map((r) => r.value).filter((v): v is ContentItem => !!v);
-      const allShows = showSearchRes.filter(fulfilled).map((r) => r.value).filter((v): v is ContentItem => !!v);
+      const allMovies = movieSearchRes.filter(fulfilled).map(r => r.value).filter((v): v is ContentItem => !!v);
+      const allShows = showSearchRes.filter(fulfilled).map(r => r.value).filter((v): v is ContentItem => !!v);
 
-      // First 5 quality-passing results become poster cards; all resolved items enable inline linking
       const posterItems = [...allMovies, ...allShows]
-        .filter((item) => !!item.posterPath && PREFERRED_LANGS.has(item.originalLanguage ?? 'en'))
+        .filter(item => !!item.posterPath && PREFERRED_LANGS.has(item.originalLanguage ?? 'en'))
         .slice(0, 6);
 
-      // Append any items that didn't make the poster cut — still needed for inline title links
-      const posterIds = new Set(posterItems.map((i) => i.id));
-      const linkOnlyItems = [...allMovies, ...allShows].filter((i) => !posterIds.has(i.id));
-
+      const posterIds = new Set(posterItems.map(i => i.id));
+      const linkOnlyItems = [...allMovies, ...allShows].filter(i => !posterIds.has(i.id));
       const recItems: ContentItem[] = [...posterItems, ...linkOnlyItems];
 
-      setMessages((prev) => [
-        ...prev,
+      // Persist newly seen titles across sessions
+      const newTitles = [...movieTitles, ...showTitles];
+      if (newTitles.length > 0) {
+        const updated = [...new Set([...newTitles, ...crossSessionSeenRef.current])].slice(0, 60);
+        crossSessionSeenRef.current = updated;
+        saveAiSeenTitles(newTitles, crossSessionSeenRef.current);
+      }
+
+      const updatedMessages: ChatMessage[] = [
+        ...allMessages,
         {
           id: newId(),
           role: 'assistant',
@@ -167,8 +223,15 @@ export default function AITabScreen() {
           timestamp: new Date(),
           recommendations: recItems,
         },
-      ]);
+      ];
+      setMessages(updatedMessages);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+
+      // Persist AI conversation summary to cloud after each exchange
+      if (userId && newTitles.length > 0) {
+        const sessionSummary = `User asked: "${trimmed}". AI recommended: ${newTitles.join(', ')}.`;
+        saveAiConversationToCloud(userId, sessionSummary, newTitles);
+      }
     } catch (e: any) {
       const msg = e?.message ?? '';
       const userFacing = msg.includes('No Gemini API key') || msg.includes('Invalid API key format')
@@ -180,22 +243,15 @@ export default function AITabScreen() {
         : msg.includes('PERMISSION_DENIED') || msg.includes('403')
         ? "Permission denied — check your Gemini API key has the Generative Language API enabled."
         : "Something went wrong reaching the AI. Check your Gemini API key in Settings.";
-      setMessages((prev) => [
+      setMessages(prev => [
         ...prev,
-        {
-          id: newId(),
-          role: 'assistant',
-          content: userFacing,
-          timestamp: new Date(),
-        },
+        { id: newId(), role: 'assistant', content: userFacing, timestamp: new Date() },
       ]);
     } finally {
       isSendingRef.current = false;
       setIsLoading(false);
     }
-  }, [messages, geminiKey, fetchTraktHistory]);
-
-  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
+  }, [messages, geminiKey, traktMovies, traktShows, userId]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -210,11 +266,11 @@ export default function AITabScreen() {
             <TouchableOpacity
               style={styles.resetBtn}
               onPress={() => {
-                traktCache.current = null;
+                conversationSummaryRef.current = '';
                 setMessages([{
                   id: newId(),
                   role: 'assistant',
-                  content: "Hi! I'm your AI movie guide. Tell me what you're in the mood for and I'll find the perfect watch for you. ✦",
+                  content: "What are you in the mood for? Tell me the vibe, a genre, a director, a feeling — and I'll find exactly the right watch for you. ✦",
                   timestamp: new Date(),
                 }]);
                 setInput('');
@@ -241,22 +297,37 @@ export default function AITabScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Hero section */}
+            {/* Hero section — time-aware copy */}
             <View style={styles.heroSection}>
               <View style={styles.heroIconWrapper}>
                 <Text style={styles.heroIcon}>✦</Text>
               </View>
-              <Text style={styles.heroTitle}>What should{'\n'}you watch?</Text>
+              <Text style={styles.heroTitle}>
+                {temporal.timeOfDay === 'morning' ? 'Start the day\nright.' :
+                 temporal.timeOfDay === 'afternoon' ? 'An afternoon\nwell spent.' :
+                 temporal.timeOfDay === 'late-night' ? 'Late night\ncinema.' :
+                 temporal.dayType === 'weekend' ? 'Your weekend\nwatch.' :
+                 'Tonight\'s\nperfect watch.'}
+              </Text>
               <Text style={styles.heroSub}>
-                {hasTrakt
-                  ? 'Personalised recommendations based on your Trakt watch history'
-                  : 'Your intelligent entertainment concierge'}
+                {temporal.specialPeriod
+                  ? `${temporal.specialPeriod.split(' ')[0]} picks, curated for your taste.`
+                  : hasTrakt
+                  ? 'Curated for your taste. Powered by your Trakt history.'
+                  : 'Tell me the vibe and I\'ll find exactly the right watch.'}
               </Text>
             </View>
 
-            {/* Tonight's Picks chip section */}
+            {/* Mood chips */}
             <View style={styles.chipsSection}>
-              <Text style={styles.chipsLabel}>Tonight's Picks</Text>
+              <Text style={styles.chipsLabel}>
+                {temporal.specialPeriod?.includes('Halloween') ? 'Horror season picks' :
+                 temporal.specialPeriod?.includes('awards') ? 'Awards season' :
+                 temporal.specialPeriod?.includes('festive') ? 'Festive picks' :
+                 temporal.timeOfDay === 'late-night' ? 'Late night vibes' :
+                 temporal.dayType === 'weekend' ? 'Weekend mood' :
+                 'What\'s the mood?'}
+              </Text>
 
               {/* Row 1 — mood chips */}
               <ScrollView

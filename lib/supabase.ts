@@ -63,6 +63,48 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['watchlist']['Row'], 'id' | 'added_at'>;
         Update: Partial<Database['public']['Tables']['watchlist']['Insert']>;
       };
+      taste_dna: {
+        Row: {
+          user_id: string;
+          taste_profile: string | null;
+          taste_mode: string | null;
+          rows: unknown;
+          fingerprint: string | null;
+          genre_affinity: unknown;
+          generated_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['taste_dna']['Row'], 'generated_at' | 'updated_at'> & {
+          generated_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['taste_dna']['Insert']>;
+      };
+      shown_rows: {
+        Row: {
+          id: string;
+          user_id: string;
+          row_title: string;
+          shown_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['shown_rows']['Row'], 'id' | 'shown_at'> & {
+          shown_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['shown_rows']['Insert']>;
+      };
+      ai_conversations: {
+        Row: {
+          id: string;
+          user_id: string;
+          summary: string;
+          titles_mentioned: string[];
+          session_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['ai_conversations']['Row'], 'id' | 'session_at'> & {
+          session_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['ai_conversations']['Insert']>;
+      };
     };
   };
 };

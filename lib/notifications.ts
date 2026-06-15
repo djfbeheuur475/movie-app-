@@ -38,9 +38,9 @@ export interface EpisodeAlert {
 }
 
 export async function scheduleEpisodeNotifications(alerts: EpisodeAlert[]) {
-  // Clear everything — scheduled queue + notification tray — so we start fresh
+  // Cancel pending scheduled notifications so we can reschedule cleanly.
+  // Deterministic identifiers (below) prevent duplicates in the delivered tray.
   await Notifications.cancelAllScheduledNotificationsAsync();
-  await Notifications.dismissAllNotificationsAsync();
 
   const now = new Date();
 

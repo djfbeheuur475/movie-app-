@@ -206,7 +206,8 @@ export default function DiscoverScreen() {
               queryKey={['discover-trending-movies']}
               fetchPage={fetchMovieTrending}
             />
-            <IndiePicksRow />
+            <IndiePicksRow variant="recent" />
+            <IndiePicksRow variant="classic" />
             <InfiniteRow
               title="New in Cinemas"
               subtitle="Fresh releases worth seeing now"
@@ -231,7 +232,8 @@ export default function DiscoverScreen() {
               queryKey={['discover-trending-tv']}
               fetchPage={fetchTVTrending}
             />
-            <IndiePicksRow mediaType="tv" />
+            <IndiePicksRow mediaType="tv" variant="recent" />
+            <IndiePicksRow mediaType="tv" variant="classic" />
             <InfiniteRow
               title="New Episodes Airing"
               subtitle="Fresh episodes dropping this week"

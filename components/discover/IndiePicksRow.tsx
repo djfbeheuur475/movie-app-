@@ -22,12 +22,31 @@ import WatchedBadge from '../common/WatchedBadge';
 import type { ContentItem } from '../../types';
 
 const CARD_WIDTH = 152;
-const CARD_HEIGHT = CARD_WIDTH * 1.5; // 228px — 2:3 poster ratio
+const CARD_HEIGHT = CARD_WIDTH * 1.5;
 
 const FESTIVAL_SOURCES = [
   'Cannes', 'Sundance', 'TIFF', 'Venice', 'Berlinale',
   'SXSW', 'Tribeca', 'Oscars', 'BAFTA', 'Spirit Awards',
 ];
+
+// Returns date strings for the two cutoffs, computed at call time
+function getDateCutoffs() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const today = `${y}-${mm}-${dd}`;
+
+  const recentFrom = new Date(now);
+  recentFrom.setFullYear(y - 3);
+  const recentFromStr = recentFrom.toISOString().slice(0, 10);
+
+  const classicBefore = new Date(now);
+  classicBefore.setFullYear(y - 5);
+  const classicBeforeStr = classicBefore.toISOString().slice(0, 10);
+
+  return { recentFrom: recentFromStr, classicBefore: classicBeforeStr, today };
+}
 
 // ─── Individual poster card ────────────────────────────────────────────────────
 
@@ -45,7 +64,6 @@ function IndiePosterCard({ item }: { item: ContentItem }) {
       onPress={() => router.push(`/title/${item.id}?type=${item.mediaType}`)}
       activeOpacity={0.72}
     >
-      {/* Poster */}
       <View style={styles.posterWrap}>
         {posterUrl ? (
           <Image
@@ -60,13 +78,11 @@ function IndiePosterCard({ item }: { item: ContentItem }) {
           </View>
         )}
 
-        {/* Bottom gradient — softens badge readability */}
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.82)']}
           style={styles.posterGradient}
         />
 
-        {/* Star rating — top right */}
         {item.rating > 0 && (
           <View style={styles.ratingChip}>
             <Text style={styles.ratingStar}>★</Text>
@@ -74,7 +90,6 @@ function IndiePosterCard({ item }: { item: ContentItem }) {
           </View>
         )}
 
-        {/* Curated badge — bottom left on gradient */}
         {badge && (
           <View style={[styles.badgeChip, { borderColor: badge.color + '55' }]}>
             <Text style={[styles.badgeLabel, { color: badge.color }]}>{badge.label}</Text>
@@ -84,35 +99,65 @@ function IndiePosterCard({ item }: { item: ContentItem }) {
         {watched && <WatchedBadge />}
       </View>
 
-      {/* Title + year */}
       <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
       {year ? <Text style={styles.year}>{year}</Text> : null}
     </TouchableOpacity>
   );
 }
 
+// ─── Row config per variant ────────────────────────────────────────────────────
+
+type Variant = 'recent' | 'classic';
+
+function getVariantConfig(variant: Variant, mediaType: 'movie' | 'tv') {
+  const { recentFrom, classicBefore } = getDateCutoffs();
+
+  if (variant === 'recent') {
+    return {
+      icon: '🎬',
+      title: `Recent Indie & Critics' Picks${mediaType === 'tv' ? ' — TV' : ''}`,
+      sub: `Last 3 years · Festival darlings · Award winners`,
+      dateGte: recentFrom,
+      dateLte: undefined as string | undefined,
+      queryKeySuffix: `recent-${recentFrom.slice(0, 7)}`, // month-level granularity
+    };
+  }
+  return {
+    icon: '🎞',
+    title: `Classic Indie & Critics' Picks${mediaType === 'tv' ? ' — TV' : ''}`,
+    sub: `5+ years ago · Essential arthouse · Critics' favourites`,
+    dateGte: undefined as string | undefined,
+    dateLte: classicBefore,
+    queryKeySuffix: `classic-${classicBefore.slice(0, 4)}`, // year-level granularity
+  };
+}
+
 // ─── Section row ───────────────────────────────────────────────────────────────
 
 interface RowProps {
   mediaType?: 'movie' | 'tv';
+  variant: Variant;
 }
 
-export default function IndiePicksRow({ mediaType = 'movie' }: RowProps) {
+export default function IndiePicksRow({ mediaType = 'movie', variant }: RowProps) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(14)).current;
   const hasAnimated = useRef(false);
 
+  const config = getVariantConfig(variant, mediaType);
+
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useInfiniteQuery({
-      queryKey: ['discover-indie-critics-picks', mediaType],
+      queryKey: ['discover-indie-critics-picks', mediaType, config.queryKeySuffix],
       queryFn: async ({ pageParam }) => {
         const page = pageParam as number;
+        const opts = { dateGte: config.dateGte, dateLte: config.dateLte };
         if (mediaType === 'tv') {
-          const { results, total_pages } = await tmdbApi.getIndieCriticsPicksTV(page);
+          const { results, total_pages } = await tmdbApi.getIndieCriticsPicksTV(page, opts);
           const items = results.map(normalizeTVShow).filter(hasGoodMetadata);
           return { items, nextPage: page < total_pages ? page + 1 : null };
         }
-        const { results, total_pages } = await tmdbApi.getIndieCriticsPicks(page);
+        const { results, total_pages } = await tmdbApi.getIndieCriticsPicks(page, opts);
         const items = results.map(normalizeMovie).filter(hasGoodMetadata);
         return { items, nextPage: page < total_pages ? page + 1 : null };
       },
@@ -140,18 +185,14 @@ export default function IndiePicksRow({ mediaType = 'movie' }: RowProps) {
 
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
-      {/* ── Section header ── */}
       <View style={styles.header}>
         <View style={styles.accentBar} />
         <View style={styles.headerText}>
-          <Text style={styles.sectionTitle}>🎬 Indie & Critics Picks</Text>
-          <Text style={styles.sectionSub}>
-            Festival darlings · Award winners · World cinema
-          </Text>
+          <Text style={styles.sectionTitle}>{config.icon} {config.title}</Text>
+          <Text style={styles.sectionSub}>{config.sub}</Text>
         </View>
       </View>
 
-      {/* ── Festival source chips ── */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -164,7 +205,6 @@ export default function IndiePicksRow({ mediaType = 'movie' }: RowProps) {
         ))}
       </ScrollView>
 
-      {/* ── Poster list ── */}
       {isLoading ? (
         <FlatList
           data={Array(8).fill(null)}
@@ -179,7 +219,7 @@ export default function IndiePicksRow({ mediaType = 'movie' }: RowProps) {
           data={items}
           horizontal
           showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => `indie-${item.id}`}
+          keyExtractor={(item) => `indie-${variant}-${item.id}`}
           contentContainerStyle={styles.list}
           renderItem={renderItem}
           onEndReached={hasNextPage ? () => fetchNextPage() : undefined}
@@ -203,8 +243,6 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: Spacing.xl,
   },
-
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -235,8 +273,6 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     letterSpacing: 0.1,
   },
-
-  // Festival source chips
   festivalRow: {
     flexDirection: 'row',
     gap: 6,
@@ -257,8 +293,6 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     letterSpacing: 0.4,
   },
-
-  // Poster list
   list: {
     paddingHorizontal: Spacing.lg,
   },
@@ -267,8 +301,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // Card
   card: {
     width: CARD_WIDTH,
     marginRight: 12,
@@ -302,8 +334,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: '52%',
   },
-
-  // Star rating chip — top right
   ratingChip: {
     position: 'absolute',
     top: 6,
@@ -327,8 +357,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.primary,
   },
-
-  // Curated badge — bottom left
   badgeChip: {
     position: 'absolute',
     bottom: 8,
@@ -344,8 +372,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
   },
-
-  // Below-card text
   title: {
     fontSize: 12,
     fontWeight: '700',

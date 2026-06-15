@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useCallback } from 'react';
 import {
   ScrollView,
   View,
@@ -16,14 +16,22 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { traktApi } from '../../lib/trakt';
-import { askGeminiForHomePicks } from '../../lib/gemini';
 import { filterAndRankContent, passesQualityFilter } from '../../lib/quality';
+import {
+  generateTasteDNA, loadCachedDNA, saveDNA, computeFingerprint,
+  getTemporalContext, loadRecentRowTitles, saveShownRowTitles,
+  computeGenreAffinity, deterministicPage,
+  loadDNAFromCloud, saveDNAToCloud, loadShownRowsFromCloud, saveShownRowsToCloud,
+  loadItemCooldowns, saveItemCooldowns,
+} from '../../lib/tasteDna';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
+import { useAuthStore } from '../../store/authStore';
 import HeroSection from '../../components/home/HeroSection';
 import ContentRow from '../../components/home/ContentRow';
 import NewEpsRow from '../../components/home/NewEpsRow';
 import RecentlyWatchedRow from '../../components/home/RecentlyWatchedRow';
+import TasteModeChip from '../../components/home/TasteModeChip';
 import LoadingSkeleton from '../../components/common/LoadingSkeleton';
 import type { ContentItem } from '../../types';
 
@@ -34,6 +42,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const { traktClientId, traktUsername, traktAccessToken, geminiKey } = useApiKeysStore();
   const { items: watchlistItems } = useWatchlistStore();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? null;
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
   const hasGemini = !!(geminiKey?.trim());
 
@@ -78,26 +88,44 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  // Merge movies + shows, sort by most recently watched, deduplicate, take top 12
+  // tmdbId → play count from Trakt (used for affinity weighting)
+  const playsMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const m of traktMovies ?? []) {
+      if (m.movie.ids.tmdb) map.set(m.movie.ids.tmdb, m.plays);
+    }
+    for (const s of traktShows ?? []) {
+      if (s.show.ids.tmdb) map.set(s.show.ids.tmdb, s.plays);
+    }
+    return map;
+  }, [traktMovies, traktShows]);
+
+  // Merge movies + shows, sort by play-count × recency, deduplicate, take top 12
   const recentIds = useMemo(() => {
+    const recencyWeight = (watchedAt: string) => {
+      const days = (Date.now() - new Date(watchedAt).getTime()) / 86400000;
+      return Math.exp(-days / 90);
+    };
     const combined = [
       ...(traktMovies ?? []).map((m) => ({
         tmdbId: m.movie.ids.tmdb,
         mediaType: 'movie' as const,
         watchedAt: m.last_watched_at,
         title: m.movie.title,
+        score: m.plays * recencyWeight(m.last_watched_at),
       })),
       ...(traktShows ?? []).map((s) => ({
         tmdbId: s.show.ids.tmdb,
         mediaType: 'tv' as const,
         watchedAt: s.last_watched_at,
         title: s.show.title,
+        score: s.plays * recencyWeight(s.last_watched_at),
       })),
     ];
     const seen = new Set<number>();
     return combined
       .filter(({ tmdbId }) => !!tmdbId)
-      .sort((a, b) => new Date(b.watchedAt).getTime() - new Date(a.watchedAt).getTime())
+      .sort((a, b) => b.score - a.score)
       .filter(({ tmdbId }) => {
         if (seen.has(tmdbId)) return false;
         seen.add(tmdbId);
@@ -201,77 +229,167 @@ export default function HomeScreen() {
       });
   }, [newEpsShowDetails]);
 
-  // ─── AI Picks ─────────────────────────────────────────────────────────────
-  // Fingerprint the first 10 Trakt IDs so the query key changes when history loads.
+  // Genre affinity — play-weighted from historyItems (full TMDB metadata with genre_ids)
+  const genreAffinity = useMemo(
+    () => computeGenreAffinity(historyItems ?? [], playsMap),
+    [historyItems, playsMap]
+  );
+
+  // ─── Thematic rows (Taste DNA) ────────────────────────────────────────────
+  // Temporal context drives row rotation — dateKey changes every 6h
+  const temporal = useMemo(() => getTemporalContext(), []);
+
   const traktMovieFingerprint = (traktMovies ?? []).slice(0, 10).map((m) => m.movie.ids.tmdb).join(',');
   const traktShowFingerprint = (traktShows ?? []).slice(0, 10).map((s) => s.show.ids.tmdb).join(',');
 
-  // If Trakt is connected, wait until both queries have settled (success OR failure)
-  // before firing so Gemini gets real history — but don't block forever on a Trakt error.
+  // Wait until Trakt has settled before firing so DNA gets real history
   const traktReady = !hasTrakt || (traktMoviesFetched && traktShowsFetched);
 
-  // Single Gemini call returns both movieIds and tvIds, avoiding rate-limit issues
-  const { data: aiPicksData, isLoading: aiPicksLoading } = useQuery({
-    queryKey: ['home-ai-picks-v8', geminiKey, traktMovieFingerprint, traktShowFingerprint],
+  const { data: thematicData, isLoading: thematicLoading, refetch: refetchThematic } = useQuery({
+    queryKey: ['thematic-rows-v2', geminiKey, traktMovieFingerprint, traktShowFingerprint, temporal.dateKey],
     queryFn: async () => {
       const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
       const movies = traktMovies ?? [];
       const shows = traktShows ?? [];
-      console.log('[AI Picks] firing — history:', movies.length, 'movies,', shows.length, 'shows');
-      const { movieIds, tvIds, modelUsed } = await askGeminiForHomePicks(cleanKey, movies, shows);
-      console.log('[AI Picks] via', modelUsed, '— movieIds:', movieIds.length, 'tvIds:', tvIds.length);
 
-      // Hard-filter watched IDs that Gemini may have included anyway
-      const watchedMovieIds = new Set(movies.map((m) => m.movie.ids.tmdb).filter(Boolean));
-      const watchedShowIds = new Set(shows.map((s) => s.show.ids.tmdb).filter(Boolean));
-      const unseenMovieIds = movieIds.filter((id) => !watchedMovieIds.has(id));
-      const unseenTvIds = tvIds.filter((id) => !watchedShowIds.has(id));
+      // Load recently-shown row themes (local + cloud) for avoidance prompt
+      const [localTitles, cloudTitles] = await Promise.all([
+        loadRecentRowTitles(),
+        userId ? loadShownRowsFromCloud(userId) : Promise.resolve([] as string[]),
+      ]);
+      const recentRowTitles = [...new Set([...cloudTitles, ...localTitles])].slice(0, 20);
 
-      const [movieResults, tvResults] = await Promise.all([
-        Promise.allSettled(unseenMovieIds.slice(0, 60).map((id) => tmdbApi.getMovieDetail(id).then(normalizeMovie))),
-        Promise.allSettled(unseenTvIds.slice(0, 60).map((id) => tmdbApi.getTVDetail(id).then(normalizeTVShow))),
+      // Check local cache first, then Supabase cloud cache
+      const fingerprint = computeFingerprint(movies, shows, temporal);
+      let dna = await loadCachedDNA(fingerprint);
+      if (!dna && userId) {
+        const cloudDna = await loadDNAFromCloud(userId);
+        if (cloudDna?.fingerprint === fingerprint) {
+          dna = cloudDna;
+          console.log('[ThematicRows] Restored DNA from cloud');
+        }
+      }
+
+      if (!dna) {
+        console.log(`[ThematicRows] Generating DNA for ${temporal.description}...`);
+        dna = await generateTasteDNA(
+          cleanKey, movies, shows, temporal,
+          recentRowTitles, genreAffinity, playsMap,
+        );
+        await saveDNA(dna);
+        if (userId) saveDNAToCloud(userId, dna); // non-blocking
+      } else {
+        console.log('[ThematicRows] Using cached DNA');
+      }
+
+      const watchedIds = new Set<number>([
+        ...movies.map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
+        ...shows.map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
       ]);
 
-      const PREFERRED_LANGS = new Set(['en', 'es', 'fr', 'ko', 'ja']);
+      // Load 7-day item-level cooldowns to suppress recently surfaced titles
+      const cooldownIds = await loadItemCooldowns();
 
-      const movieItems = movieResults
-        .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
+      const rowResults = await Promise.allSettled(
+        dna.rows.map(async (row, rowIndex) => {
+          // Deterministic page 1–3 per row, changes every 6h — prevents stale top-20
+          const page = deterministicPage(temporal.dateKey, rowIndex);
+          const raw = row.type === 'movie'
+            ? (await tmdbApi.discoverMoviesTyped({
+                genreIds: row.genreIds,
+                sortBy: row.sortBy,
+                voteAverageGte: row.voteAverageGte,
+                voteCountGte: row.voteCountGte,
+                releaseDateGte: row.releaseDateGte,
+                releaseDateLte: row.releaseDateLte,
+                page,
+              })).map(normalizeMovie)
+            : (await tmdbApi.discoverShowsTyped({
+                genreIds: row.genreIds,
+                sortBy: row.sortBy,
+                voteAverageGte: row.voteAverageGte,
+                voteCountGte: row.voteCountGte,
+                firstAirDateGte: row.releaseDateGte,
+                firstAirDateLte: row.releaseDateLte,
+                page,
+              })).map(normalizeTVShow);
+
+          const items = raw
+            .filter((item) => !watchedIds.has(item.id))
+            .filter((item) => !cooldownIds.has(item.id))
+            .filter((item) => passesQualityFilter(item, 'discover'))
+            .slice(0, 20);
+
+          return { ...row, items };
+        })
+      );
+
+      // Cross-row dedup — same TMDB ID can't appear in two rows
+      const seenIds = new Set<number>();
+      const rows = rowResults
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
         .map((r) => r.value)
-        .filter((item) =>
-          !!item.posterPath &&
-          (item.voteCount ?? 0) >= 500 &&
-          (item.rating ?? 0) >= 6.5 &&
-          PREFERRED_LANGS.has(item.originalLanguage ?? 'en')
-        )
-        .slice(0, 20);
+        .map((row) => ({
+          ...row,
+          items: row.items.filter((item: ContentItem) => {
+            if (seenIds.has(item.id)) return false;
+            seenIds.add(item.id);
+            return true;
+          }),
+        }))
+        .filter((r) => r.items.length > 0);
 
-      const tvItems = tvResults
-        .filter((r): r is PromiseFulfilledResult<ContentItem> => r.status === 'fulfilled')
-        .map((r) => r.value)
-        .filter((item) =>
-          !!item.posterPath &&
-          (item.voteCount ?? 0) >= 200 &&
-          (item.rating ?? 0) >= 6.5 &&
-          PREFERRED_LANGS.has(item.originalLanguage ?? 'en')
-        )
-        .slice(0, 20);
-
-      console.log('[AI Picks] resolved:', movieItems.length, 'movies,', tvItems.length, 'shows');
-      return { movies: movieItems, shows: tvItems };
+      console.log(`[ThematicRows] ${rows.length} rows loaded, mode=${dna.tasteMode}`);
+      return { tasteProfile: dna.tasteProfile, tasteMode: dna.tasteMode, rows };
     },
     enabled: hasGemini && traktReady,
-    staleTime: 1000 * 60 * 120,
-    retry: 2,
-    retryDelay: 3000,
+    staleTime: 1000 * 60 * 60 * 6,
+    retry: 1,
   });
 
-  const aiMovieItems = aiPicksData?.movies ?? [];
-  const aiTVItems = aiPicksData?.shows ?? [];
-  // Cover the full wait: Trakt fetching → Gemini call → TMDB resolution.
-  // Without this, the rows show blank (no skeleton) while Trakt is still loading.
-  const aiPicksWaiting = hasGemini && (!traktReady || aiPicksLoading);
-  const aiMoviesLoading = aiPicksWaiting;
-  const aiTVLoading = aiPicksWaiting;
+  const thematicRows = thematicData?.rows ?? [];
+  const tasteMode = thematicData?.tasteMode ?? null;
+
+  // Save shown row titles + surfaced item cooldowns after data loads
+  useEffect(() => {
+    if (thematicRows.length > 0) {
+      const titles = thematicRows.map((r: any) => r.title);
+      saveShownRowTitles(titles);
+      if (userId) saveShownRowsToCloud(userId, titles);
+
+      const surfacedIds = thematicRows.flatMap((r: any) => r.items.map((i: ContentItem) => i.id));
+      if (surfacedIds.length > 0) saveItemCooldowns(surfacedIds);
+    }
+  }, [thematicData, userId]);
+  const thematicWaiting = hasGemini && (!traktReady || thematicLoading);
+
+  // ─── Because You Watched ───────────────────────────────────────────────────
+  // Seed from the highest play-count × recency item (already sorted that way in recentIds)
+  // Prefer an item watched more than once — signals genuine affinity over a one-off watch
+  const seedItem = useMemo(() => {
+    const rewatched = recentIds.find(i => (playsMap.get(i.tmdbId) ?? 1) >= 2);
+    return rewatched ?? recentIds[0] ?? null;
+  }, [recentIds, playsMap]);
+
+  const { data: becauseYouWatchedItems } = useQuery({
+    queryKey: ['because-you-watched', seedItem?.tmdbId, seedItem?.mediaType],
+    queryFn: async () => {
+      if (!seedItem) return [];
+      const watchedSet = new Set<number>([
+        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
+        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
+      ]);
+      const raw = seedItem.mediaType === 'movie'
+        ? (await tmdbApi.getMovieRecommendations(seedItem.tmdbId)).map(normalizeMovie)
+        : (await tmdbApi.getTVRecommendations(seedItem.tmdbId)).map(normalizeTVShow);
+      return raw
+        .filter((item) => !watchedSet.has(item.id))
+        .filter((item) => passesQualityFilter(item, 'discover'))
+        .slice(0, 20);
+    },
+    enabled: !!seedItem && traktReady,
+    staleTime: 1000 * 60 * 60,
+  });
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
@@ -299,7 +417,14 @@ export default function HomeScreen() {
     [popularShows]
   );
 
-  const isRefreshing = trendingLoading;
+  const [isManualRefreshing, setIsManualRefreshing] = React.useState(false);
+  const isRefreshing = trendingLoading || isManualRefreshing;
+
+  const onRefresh = useCallback(async () => {
+    setIsManualRefreshing(true);
+    await Promise.all([refetchTrending(), refetchThematic()]);
+    setIsManualRefreshing(false);
+  }, [refetchTrending, refetchThematic]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -309,7 +434,7 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
-            onRefresh={refetchTrending}
+            onRefresh={onRefresh}
             tintColor={Colors.primary}
           />
         }
@@ -351,43 +476,85 @@ export default function HomeScreen() {
           <HeroSection item={heroItem} />
         ) : null}
 
+        {/* Taste Mode chip — shown when DNA has loaded */}
+        {tasteMode && <TasteModeChip mode={tasteMode} />}
+
+        {/* Because You Watched */}
+        {becauseYouWatchedItems && becauseYouWatchedItems.length > 0 && seedItem && (
+          <ContentRow
+            title={`Because You Watched ${seedItem.title}`}
+            subtitle="Recommendations based on your last watch"
+            items={becauseYouWatchedItems}
+            isLoading={false}
+            showRating
+          />
+        )}
+
         {/* Rows */}
         <View style={styles.rows}>
-          <ContentRow
-            title="Popular Movies"
-            subtitle="Trending with audiences worldwide"
-            items={popularMovieItems}
-            isLoading={moviesLoading}
-            showRating
-          />
-          <ContentRow
-            title="Top Series"
-            subtitle="Binge-worthy shows everyone's talking about"
-            items={popularShowItems}
-            isLoading={showsLoading}
-            showRating
-          />
-          {hasGemini && (
-            <ContentRow
-              title="✦ AI Picks: Movies"
-              subtitle="Curated by AI based on great taste"
-              items={aiMovieItems ?? []}
-              isLoading={aiMoviesLoading}
-              showRating
-              cardWidth={130}
-              accent
-            />
-          )}
-          {hasGemini && (
-            <ContentRow
-              title="✦ AI Picks: TV Shows"
-              subtitle="Curated by AI based on great taste"
-              items={aiTVItems ?? []}
-              isLoading={aiTVLoading}
-              showRating
-              cardWidth={130}
-              accent
-            />
+          {hasGemini ? (
+            thematicWaiting ? (
+              // Skeleton rows while DNA is being generated
+              [0, 1, 2, 3, 4].map((i) => (
+                <ContentRow
+                  key={`skeleton-${i}`}
+                  title="✦ Curating your picks..."
+                  subtitle=""
+                  items={[]}
+                  isLoading
+                  showRating
+                  accent
+                />
+              ))
+            ) : thematicRows.length > 0 ? (
+              thematicRows.map((row, i) => (
+                <ContentRow
+                  key={`thematic-${i}`}
+                  title={`✦ ${row.title}`}
+                  subtitle={row.subtitle}
+                  items={row.items}
+                  isLoading={false}
+                  showRating
+                  accent
+                />
+              ))
+            ) : (
+              // Gemini configured but rows empty — fallback to popular
+              <>
+                <ContentRow
+                  title="Popular Movies"
+                  subtitle="Trending with audiences worldwide"
+                  items={popularMovieItems}
+                  isLoading={moviesLoading}
+                  showRating
+                />
+                <ContentRow
+                  title="Top Series"
+                  subtitle="Binge-worthy shows everyone's talking about"
+                  items={popularShowItems}
+                  isLoading={showsLoading}
+                  showRating
+                />
+              </>
+            )
+          ) : (
+            // No Gemini key — standard popular rows
+            <>
+              <ContentRow
+                title="Popular Movies"
+                subtitle="Trending with audiences worldwide"
+                items={popularMovieItems}
+                isLoading={moviesLoading}
+                showRating
+              />
+              <ContentRow
+                title="Top Series"
+                subtitle="Binge-worthy shows everyone's talking about"
+                items={popularShowItems}
+                isLoading={showsLoading}
+                showRating
+              />
+            </>
           )}
           {(newEpsLoading || newEpsThisWeek.length > 0) && (
             <NewEpsRow
