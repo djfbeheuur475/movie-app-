@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { useApiKeysStore } from './apiKeysStore';
 import { useWatchlistStore } from './watchlistStore';
+import { usePreferencesStore } from './preferencesStore';
 
 export interface LocalUser {
   id: string;
@@ -60,18 +61,29 @@ export const useAuthStore = create<AuthState>((set) => ({
       avatarUrl: u.user_metadata?.avatar_url ?? null,
     };
 
-    // Upsert base profile — only updates identity fields
-    await supabase
+    // Insert profile row for new users; update only identity fields for returning users
+    const { error: insertError } = await supabase
       .from('profiles')
-      .upsert(
-        {
-          id: u.id,
-          email: localUser.email,
+      .insert({
+        id: u.id,
+        display_name: localUser.displayName,
+        avatar_url: localUser.avatarUrl,
+        trakt_connected: false,
+        setup_done: false,
+      });
+    if (insertError?.code === '23505') {
+      // Row exists — update identity fields only, preserve trakt_connected/setup_done
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
           display_name: localUser.displayName,
           avatar_url: localUser.avatarUrl,
-        },
-        { onConflict: 'id' }
-      );
+        })
+        .eq('id', u.id);
+      if (updateError) console.warn('[Auth] Profile update failed:', updateError.message);
+    } else if (insertError) {
+      console.warn('[Auth] Profile insert failed:', insertError.message, insertError.code);
+    }
 
     // Check user_settings for stored API keys
     const { data: settings } = await supabase
@@ -80,11 +92,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       .eq('id', u.id)
       .single();
 
-    // Existing user with keys: restore to device SecureStore + load watchlist
+    // Existing user with keys: restore to device SecureStore + load watchlist + restore preferences
     if (settings?.setup_done || settings?.tmdb_key) {
       await useApiKeysStore.getState().restoreFromCloud(settings);
       await useWatchlistStore.getState().syncFromCloud(u.id);
     }
+    // Always restore preferences (non-blocking)
+    usePreferencesStore.getState().restoreFromCloud(u.id).catch(() => {});
 
     set({ user: localUser, isAuthenticated: true, isLoaded: true });
   },

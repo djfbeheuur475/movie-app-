@@ -21,7 +21,6 @@ export type Database = {
       profiles: {
         Row: {
           id: string;
-          email: string;
           display_name: string | null;
           avatar_url: string | null;
           trakt_connected: boolean;
@@ -33,9 +32,21 @@ export type Database = {
           gemini_api_key: string | null;
           setup_done: boolean;
           created_at: string;
+          updated_at: string;
         };
-        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at'>;
+        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+      };
+      user_preferences: {
+        Row: {
+          id: string;
+          favorite_genres: number[];
+          notifications_enabled: boolean;
+          region: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['user_preferences']['Row'], 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['user_preferences']['Insert']>;
       };
       user_settings: {
         Row: {
@@ -71,6 +82,7 @@ export type Database = {
           rows: unknown;
           fingerprint: string | null;
           genre_affinity: unknown;
+          profile_metadata: unknown;
           generated_at: string;
           updated_at: string;
         };

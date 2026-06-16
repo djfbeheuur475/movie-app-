@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useCallback } from 'react';
+import React, { useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   ScrollView,
   View,
@@ -18,15 +18,21 @@ import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { traktApi } from '../../lib/trakt';
 import { filterAndRankContent, passesQualityFilter } from '../../lib/quality';
 import {
-  generateTasteDNA, loadCachedDNA, saveDNA, computeFingerprint,
   getTemporalContext, loadRecentRowTitles, saveShownRowTitles,
-  computeGenreAffinity, deterministicPage,
-  loadDNAFromCloud, saveDNAToCloud, loadShownRowsFromCloud, saveShownRowsToCloud,
+  computeGenreAffinity, computeTasteProfile, deterministicPage,
+  computeContentFingerprint, inferTasteMode,
+  loadShownRowsFromCloud, saveShownRowsToCloud,
   loadItemCooldowns, saveItemCooldowns,
+  loadDiscoverCache, saveDiscoverCache,
+  saveProfileSnapshot,
+  loadTasteNeighborhood, saveTasteNeighborhood,
 } from '../../lib/tasteDna';
+import type { GenreAffinity, TasteProfile } from '../../lib/tasteDna';
+import { selectRowTemplates, buildTasteNarration, applyProfileToTemplate } from '../../lib/templateSelector';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useAuthStore } from '../../store/authStore';
+import { usePreferencesStore } from '../../store/preferencesStore';
 import HeroSection from '../../components/home/HeroSection';
 import ContentRow from '../../components/home/ContentRow';
 import NewEpsRow from '../../components/home/NewEpsRow';
@@ -38,11 +44,125 @@ import type { ContentItem } from '../../types';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_SKELETON_HEIGHT = SCREEN_HEIGHT * 0.55;
 
+// ─── Niche content mismatch filter ───────────────────────────────────────────
+// Niche genres and eras bleed into broad queries because TMDB applies them as
+// secondary tags. Suppress content outside these niches unless the user's
+// history shows real affinity for them. Default: assume NOT interested.
+
+function isMismatchedNiche(
+  item: ContentItem,
+  templateGenreIds: number[],
+  genreAffinity: GenreAffinity,
+  profile?: TasteProfile,
+  templateEraFit?: 'classic' | 'nineties' | 'modern',
+): boolean {
+  const itemGenres = new Set(item.genres ?? []);
+  const templateGenres = new Set(templateGenreIds);
+  const hasHistory = Object.keys(genreAffinity).length > 0;
+
+  // Animation (16): filter unless the user has demonstrated real affinity (>10% of history).
+  // When no history yet, still filter — animation almost never belongs in BYW or thematic rows
+  // that didn't request it. Users who love animation will quickly cross the threshold.
+  if (itemGenres.has(16) && !templateGenres.has(16)) {
+    if (!hasHistory || (genreAffinity[16] ?? 0) < 0.10) return true;
+  }
+  // Family (10751): same logic, lower threshold
+  if (itemGenres.has(10751) && !templateGenres.has(10751)) {
+    if (!hasHistory || (genreAffinity[10751] ?? 0) < 0.08) return true;
+  }
+  // Kids TV (10762): always filter unless explicitly requested
+  if (itemGenres.has(10762) && !templateGenres.has(10762)) {
+    if (!hasHistory || (genreAffinity[10762] ?? 0) < 0.05) return true;
+  }
+
+  // Classic era (pre-1980): treat like animation — a niche the user must earn.
+  // Skip this check for templates that explicitly target classic/vintage content
+  // (new-hollywood, classic-cinema) so those rows still work for classic fans.
+  if (templateEraFit !== 'classic') {
+    const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : 2020;
+    if (year < 1980) {
+      const classicAffinity = profile?.eraAffinity.classic ?? 0;
+      // Filter unless at least 15% of their history is classic-era content
+      if (!hasHistory || classicAffinity < 0.15) return true;
+    }
+  }
+
+  return false;
+}
+
+// ─── Behavioural ranking ───────────────────────────────────────────────────────
+// Re-ranks TMDB Discover results by taste fit rather than generic quality sort.
+// Quality becomes a floor (via voteAverageGte) rather than the ranking mechanism.
+
+function rankItemsByProfile(
+  items: ContentItem[],
+  profile: TasteProfile | undefined,
+  genreAffinity: GenreAffinity,
+  tasteNeighborhood: Set<number>,
+): ContentItem[] {
+  if (!profile && Object.keys(genreAffinity).length === 0) return items;
+
+  const affinityEntries = Object.entries(genreAffinity)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10)
+    .map(([id, w]) => [Number(id), w] as [number, number]);
+  const totalAffinity = affinityEntries.reduce((s, [, w]) => s + w, 0);
+
+  const darkness  = profile?.darknessScore    ?? 0.3;
+  const novelty   = profile?.noveltyTolerance ?? 0.3;
+  const prestige  = profile?.prestigeScore    ?? 0.5;
+  const eraAff    = profile?.eraAffinity      ?? { classic: 0.1, nineties: 0.15, modern: 0.75 };
+
+  const scored = items.map(item => {
+    const genres = new Set(item.genres ?? []);
+
+    // 1. Genre affinity match (normalised 0–1)
+    const matched = affinityEntries.reduce((s, [id, w]) => s + (genres.has(id) ? w : 0), 0);
+    const affinityScore = totalAffinity > 0 ? matched / totalAffinity : 0;
+
+    // 2. Era fit
+    const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : 2010;
+    const era = year < 1990 ? 'classic' : year < 2000 ? 'nineties' : 'modern';
+    const eraScore = eraAff[era] ?? 0.3;
+
+    // 3. Quality fit — calibrated by prestige preference so high-prestige users rank by rating,
+    //    while mainstream users aren't penalised for preferring popular films over obscure gems.
+    const rating = item.rating ?? 0;
+    const ratingNorm = Math.max(0, Math.min((rating - 6.0) / 4.0, 1));
+    const qualityScore = ratingNorm * (0.4 + prestige * 0.6);
+
+    // 4. Novelty fit — matches obscure vs popular content to user's tolerance.
+    const votes = Math.max(item.voteCount ?? 0, 1);
+    const popularityRatio = Math.min(Math.log10(votes) / Math.log10(100000), 1);
+    const noveltyScore = novelty > 0.50 ? (1 - popularityRatio) : popularityRatio;
+
+    // 5. Darkness fit
+    const isDark = genres.has(27) || genres.has(53) || genres.has(80) || genres.has(9648);
+    const darknessScore = isDark ? darkness : Math.max(0, 1 - darkness * 2);
+
+    // 6. Taste neighbourhood bonus — items TMDB recommends based on films you've actually watched.
+    const neighborBonus = tasteNeighborhood.has(item.id) ? 1 : 0;
+
+    return {
+      item,
+      score: affinityScore  * 0.30
+           + qualityScore   * 0.20
+           + eraScore       * 0.12
+           + noveltyScore   * 0.13
+           + darknessScore  * 0.10
+           + neighborBonus  * 0.15,
+    };
+  });
+
+  return scored.sort((a, b) => b.score - a.score).map(x => x.item);
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { traktClientId, traktUsername, traktAccessToken, geminiKey } = useApiKeysStore();
   const { items: watchlistItems } = useWatchlistStore();
   const { user } = useAuthStore();
+  const { favoriteGenres } = usePreferencesStore();
   const userId = user?.id ?? null;
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
   const hasGemini = !!(geminiKey?.trim());
@@ -119,7 +239,8 @@ export default function HomeScreen() {
         mediaType: 'tv' as const,
         watchedAt: s.last_watched_at,
         title: s.show.title,
-        score: s.plays * recencyWeight(s.last_watched_at),
+        // Cap TV plays at 12 — episode count otherwise inflates score vs movies
+        score: Math.min(s.plays, 12) * recencyWeight(s.last_watched_at),
       })),
     ];
     const seen = new Set<number>();
@@ -229,11 +350,33 @@ export default function HomeScreen() {
       });
   }, [newEpsShowDetails]);
 
-  // Genre affinity — play-weighted from historyItems (full TMDB metadata with genre_ids)
-  const genreAffinity = useMemo(
-    () => computeGenreAffinity(historyItems ?? [], playsMap),
-    [historyItems, playsMap]
-  );
+  // Genre affinity — play-weighted from Trakt history; falls back to stated preferences
+  const genreAffinity = useMemo((): GenreAffinity => {
+    const fromHistory = computeGenreAffinity(historyItems ?? [], playsMap);
+    if (Object.keys(fromHistory).length > 0 || favoriteGenres.length === 0) return fromHistory;
+    // No Trakt history — bootstrap from user's stated genre preferences
+    const weight = 1 / favoriteGenres.length;
+    const synthetic: GenreAffinity = {};
+    for (const id of favoriteGenres) synthetic[id] = weight;
+    return synthetic;
+  }, [historyItems, playsMap, favoriteGenres]);
+
+  // Recent-shift affinity — genre affinity from items watched in the last 3 weeks only.
+  // Used to boost template rows matching the user's current mood over their lifetime history.
+  const recentGenreAffinity = useMemo((): GenreAffinity => {
+    if (!historyItems?.length || !recentIds.length) return {};
+    const threeWeeksMs = 21 * 24 * 60 * 60 * 1000;
+    const recentIdSet = new Set(
+      recentIds
+        .filter(r => Date.now() - new Date(r.watchedAt).getTime() < threeWeeksMs)
+        .map(r => r.tmdbId)
+    );
+    const recentItems = historyItems.filter(item => recentIdSet.has(item.id));
+    if (recentItems.length === 0) return {};
+    // Uniform weight per item — recency signal, not play count
+    const uniformPlays = new Map(recentItems.map(item => [item.id, 1]));
+    return computeGenreAffinity(recentItems, uniformPlays);
+  }, [historyItems, recentIds]);
 
   // ─── Thematic rows (Taste DNA) ────────────────────────────────────────────
   // Temporal context drives row rotation — dateKey changes every 6h
@@ -246,41 +389,64 @@ export default function HomeScreen() {
   const traktReady = !hasTrakt || (traktMoviesFetched && traktShowsFetched);
 
   const { data: thematicData, isLoading: thematicLoading, refetch: refetchThematic } = useQuery({
-    queryKey: ['thematic-rows-v2', geminiKey, traktMovieFingerprint, traktShowFingerprint, temporal.dateKey],
+    // Removed geminiKey from queryKey — homepage no longer calls Gemini
+    queryKey: ['thematic-rows-v10', traktMovieFingerprint, traktShowFingerprint, temporal.dateKey],
     queryFn: async () => {
-      const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
       const movies = traktMovies ?? [];
       const shows = traktShows ?? [];
 
-      // Load recently-shown row themes (local + cloud) for avoidance prompt
+      // Load recently-shown row themes (local + cloud) to avoid repetition
       const [localTitles, cloudTitles] = await Promise.all([
         loadRecentRowTitles(),
         userId ? loadShownRowsFromCloud(userId) : Promise.resolve([] as string[]),
       ]);
       const recentRowTitles = [...new Set([...cloudTitles, ...localTitles])].slice(0, 20);
 
-      // Check local cache first, then Supabase cloud cache
-      const fingerprint = computeFingerprint(movies, shows, temporal);
-      let dna = await loadCachedDNA(fingerprint);
-      if (!dna && userId) {
-        const cloudDna = await loadDNAFromCloud(userId);
-        if (cloudDna?.fingerprint === fingerprint) {
-          dna = cloudDna;
-          console.log('[ThematicRows] Restored DNA from cloud');
+      // Compute profile deterministically — no Gemini call
+      const hasRewatches = movies.some(m => m.plays > 1) || shows.some(s => s.plays > 1);
+      const tasteMode = inferTasteMode(genreAffinity, temporal, hasRewatches);
+      const profile: TasteProfile | undefined = historyItems && historyItems.length > 0
+        ? computeTasteProfile(historyItems, playsMap, genreAffinity)
+        : undefined;
+
+      // Build taste neighbourhood from TMDB recommendations for top-played items.
+      // Cached 24h — these IDs become a ranking bonus signal inside each row.
+      let tasteNeighborhood: Set<number> = (await loadTasteNeighborhood()) ?? new Set();
+      if (tasteNeighborhood.size === 0 && historyItems && historyItems.length > 0) {
+        const seeds = [...historyItems]
+          .sort((a, b) => (playsMap.get(b.id) ?? 1) - (playsMap.get(a.id) ?? 1))
+          .slice(0, 5);
+        const neighborResults = await Promise.allSettled(
+          seeds.map(item =>
+            item.mediaType === 'movie'
+              ? tmdbApi.getMovieRecommendations(item.id).then(r => r.map(normalizeMovie))
+              : tmdbApi.getTVRecommendations(item.id).then(r => r.map(normalizeTVShow))
+          )
+        );
+        const ids: number[] = [];
+        for (const r of neighborResults) {
+          if (r.status === 'fulfilled') r.value.forEach(item => ids.push(item.id));
+        }
+        if (ids.length > 0) {
+          tasteNeighborhood = new Set(ids);
+          saveTasteNeighborhood(ids); // non-blocking
         }
       }
 
-      if (!dna) {
-        console.log(`[ThematicRows] Generating DNA for ${temporal.description}...`);
-        dna = await generateTasteDNA(
-          cleanKey, movies, shows, temporal,
-          recentRowTitles, genreAffinity, playsMap,
-        );
-        await saveDNA(dna);
-        if (userId) saveDNAToCloud(userId, dna); // non-blocking
-      } else {
-        console.log('[ThematicRows] Using cached DNA');
+      // Select templates deterministically — ZERO Gemini calls
+      // Fallback: if dedup exhausts all eligible templates, run again without the exclusion list
+      let selectedTemplates = selectRowTemplates(profile, genreAffinity, temporal, recentRowTitles, recentGenreAffinity);
+      if (selectedTemplates.length === 0) {
+        selectedTemplates = selectRowTemplates(profile, genreAffinity, temporal, [], recentGenreAffinity);
       }
+      console.log(`[ThematicRows] ${selectedTemplates.length} templates, neighborhood=${tasteNeighborhood.size} ids, mode=${tasteMode}`);
+
+      // Build taste narration without Gemini
+      const tasteProfile = buildTasteNarration(profile, genreAffinity, tasteMode);
+
+      // Save profile snapshot for AI tab (replaces DNA persistence on this path)
+      const fingerprint = computeContentFingerprint(movies, shows);
+      saveProfileSnapshot({ profile, genreAffinity, tasteMode, tasteProfile, fingerprint, savedAt: Date.now() });
 
       const watchedIds = new Set<number>([
         ...movies.map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
@@ -288,39 +454,70 @@ export default function HomeScreen() {
       ]);
 
       // Load 7-day item-level cooldowns to suppress recently surfaced titles
-      const cooldownIds = await loadItemCooldowns();
+      const cooldownIds = await loadItemCooldowns(userId);
 
       const rowResults = await Promise.allSettled(
-        dna.rows.map(async (row, rowIndex) => {
-          // Deterministic page 1–3 per row, changes every 6h — prevents stale top-20
-          const page = deterministicPage(temporal.dateKey, rowIndex);
-          const raw = row.type === 'movie'
-            ? (await tmdbApi.discoverMoviesTyped({
-                genreIds: row.genreIds,
-                sortBy: row.sortBy,
-                voteAverageGte: row.voteAverageGte,
-                voteCountGte: row.voteCountGte,
-                releaseDateGte: row.releaseDateGte,
-                releaseDateLte: row.releaseDateLte,
-                page,
-              })).map(normalizeMovie)
-            : (await tmdbApi.discoverShowsTyped({
-                genreIds: row.genreIds,
-                sortBy: row.sortBy,
-                voteAverageGte: row.voteAverageGte,
-                voteCountGte: row.voteCountGte,
-                firstAirDateGte: row.releaseDateGte,
-                firstAirDateLte: row.releaseDateLte,
-                page,
-              })).map(normalizeTVShow);
+        selectedTemplates.map(async (rawTemplate, rowIndex) => {
+          // Apply profile-driven parameter modulation — same template, different content pool per user
+          const row = applyProfileToTemplate(rawTemplate, profile);
 
-          const items = raw
+          // Fetch 3 pages (60 candidates) so heavy watchedIds filters still leave enough items
+          const offsetPage = deterministicPage(temporal.dateKey, rowIndex); // 1–3
+          const pages = offsetPage === 1 ? [1, 2, 3] : [1, offsetPage, Math.min(offsetPage + 1, 5)];
+
+          async function fetchPage(p: number) {
+            const cacheParams = {
+              type: row.type, genreIds: row.genreIds, excludeGenres: row.excludeGenres ?? null,
+              withKeywords: row.withKeywords ?? null, sortBy: row.sortBy,
+              voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
+              releaseDateGte: row.releaseDateGte ?? null, releaseDateLte: row.releaseDateLte ?? null,
+              runtimeGte: row.runtimeGte ?? null, runtimeLte: row.runtimeLte ?? null,
+              originCountry: row.originCountry ?? null, page: p,
+            };
+            const cached = await loadDiscoverCache(cacheParams);
+            if (cached) return cached as ContentItem[];
+
+            const results = row.type === 'movie'
+              ? (await tmdbApi.discoverMoviesTyped({
+                  genreIds: row.genreIds, excludeGenres: row.excludeGenres,
+                  withKeywords: row.withKeywords, sortBy: row.sortBy,
+                  voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
+                  releaseDateGte: row.releaseDateGte, releaseDateLte: row.releaseDateLte,
+                  runtimeGte: row.runtimeGte, runtimeLte: row.runtimeLte,
+                  originCountry: row.originCountry, page: p,
+                })).map(normalizeMovie)
+              : (await tmdbApi.discoverShowsTyped({
+                  genreIds: row.genreIds, excludeGenres: row.excludeGenres,
+                  withKeywords: row.withKeywords, sortBy: row.sortBy,
+                  voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
+                  firstAirDateGte: row.releaseDateGte, firstAirDateLte: row.releaseDateLte,
+                  originCountry: row.originCountry, page: p,
+                })).map(normalizeTVShow);
+
+            saveDiscoverCache(cacheParams, results); // non-blocking
+            return results;
+          }
+
+          const pageResults = await Promise.all(pages.map(fetchPage));
+
+          const seen = new Set<number>();
+          const merged = pageResults.flat().filter(item => {
+            if (seen.has(item.id)) return false;
+            seen.add(item.id);
+            return true;
+          });
+
+          const filtered = merged
             .filter((item) => !watchedIds.has(item.id))
             .filter((item) => !cooldownIds.has(item.id))
             .filter((item) => passesQualityFilter(item, 'discover'))
+            .filter((item) => !isMismatchedNiche(item, rawTemplate.genreIds, genreAffinity, profile, rawTemplate.eraFit));
+
+          // Re-rank by behavioural fit — shifts from "best rated in genre" to "best for you"
+          const items = rankItemsByProfile(filtered, profile, genreAffinity, tasteNeighborhood)
             .slice(0, 20);
 
-          return { ...row, items };
+          return { ...rawTemplate, items };
         })
       );
 
@@ -337,12 +534,12 @@ export default function HomeScreen() {
             return true;
           }),
         }))
-        .filter((r) => r.items.length > 0);
+        .filter((r) => r.items.length >= 3);
 
-      console.log(`[ThematicRows] ${rows.length} rows loaded, mode=${dna.tasteMode}`);
-      return { tasteProfile: dna.tasteProfile, tasteMode: dna.tasteMode, rows };
+      console.log(`[ThematicRows] ${rows.length} rows ready`);
+      return { tasteProfile, tasteMode, rows, profile };
     },
-    enabled: hasGemini && traktReady,
+    enabled: traktReady, // no longer requires Gemini key
     staleTime: 1000 * 60 * 60 * 6,
     retry: 1,
   });
@@ -350,46 +547,291 @@ export default function HomeScreen() {
   const thematicRows = thematicData?.rows ?? [];
   const tasteMode = thematicData?.tasteMode ?? null;
 
+  // Track which row titles have already been saved to cloud this session
+  const savedCloudRowTitlesRef = useRef<Set<string>>(new Set());
+
   // Save shown row titles + surfaced item cooldowns after data loads
   useEffect(() => {
     if (thematicRows.length > 0) {
       const titles = thematicRows.map((r: any) => r.title);
       saveShownRowTitles(titles);
-      if (userId) saveShownRowsToCloud(userId, titles);
+
+      // Only insert cloud rows that haven't been saved yet this session
+      if (userId) {
+        const newTitles = titles.filter((t: string) => !savedCloudRowTitlesRef.current.has(t));
+        if (newTitles.length > 0) {
+          saveShownRowsToCloud(userId, newTitles);
+          newTitles.forEach((t: string) => savedCloudRowTitlesRef.current.add(t));
+        }
+      }
 
       const surfacedIds = thematicRows.flatMap((r: any) => r.items.map((i: ContentItem) => i.id));
-      if (surfacedIds.length > 0) saveItemCooldowns(surfacedIds);
+      if (surfacedIds.length > 0) saveItemCooldowns(surfacedIds, userId);
     }
   }, [thematicData, userId]);
-  const thematicWaiting = hasGemini && (!traktReady || thematicLoading);
+  const thematicWaiting = !traktReady || thematicLoading;
 
-  // ─── Because You Watched ───────────────────────────────────────────────────
-  // Seed from the highest play-count × recency item (already sorted that way in recentIds)
-  // Prefer an item watched more than once — signals genuine affinity over a one-off watch
-  const seedItem = useMemo(() => {
-    const rewatched = recentIds.find(i => (playsMap.get(i.tmdbId) ?? 1) >= 2);
-    return rewatched ?? recentIds[0] ?? null;
-  }, [recentIds, playsMap]);
+  // ─── If You Liked… ────────────────────────────────────────────────────────
+  // Pick 2 seeds from the top-6 history pool. Seed2 is chosen to be as different
+  // as possible from seed1 — prefer a different media type, then different top genre.
+  // Both rotate daily so the pair changes overnight.
+  const [seed1, seed2] = useMemo(() => {
+    const pool = recentIds.slice(0, Math.min(6, recentIds.length));
+    if (pool.length === 0) return [null, null] as const;
 
-  const { data: becauseYouWatchedItems } = useQuery({
-    queryKey: ['because-you-watched', seedItem?.tmdbId, seedItem?.mediaType],
+    const dayKey = temporal.dateKey.slice(0, 10);
+    const dayHash = dayKey.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    const i1 = dayHash % pool.length;
+    const s1 = pool[i1];
+    if (pool.length === 1) return [s1, null] as const;
+
+    // Build a quick genre lookup from historyItems
+    const historyGenres = new Map<number, Set<number>>(
+      (historyItems ?? []).map(item => [item.id, new Set(item.genres ?? [])])
+    );
+    const s1Genres = historyGenres.get(s1.tmdbId) ?? new Set<number>();
+
+    // Score each candidate for seed2: prefer different type, then fewer shared genres
+    const candidates = pool
+      .map((item, i) => {
+        if (i === i1) return null;
+        const typeDiff = item.mediaType !== s1.mediaType ? 2 : 0;
+        const genres = historyGenres.get(item.tmdbId) ?? new Set<number>();
+        const sharedGenres = [...s1Genres].filter(g => genres.has(g)).length;
+        // Higher score = more different from seed1
+        return { item, diversity: typeDiff + Math.max(0, 4 - sharedGenres) };
+      })
+      .filter((x): x is { item: typeof pool[0]; diversity: number } => x !== null);
+
+    candidates.sort((a, b) => b.diversity - a.diversity || 0);
+    // Among equally diverse candidates, rotate daily
+    const topDiversity = candidates[0]?.diversity ?? 0;
+    const topCandidates = candidates.filter(c => c.diversity === topDiversity);
+    const s2 = topCandidates[dayHash % topCandidates.length]?.item ?? candidates[0]?.item ?? null;
+
+    return [s1, s2] as const;
+  }, [recentIds, temporal.dateKey, historyItems]);
+
+  // Prevents caching unfiltered results when historyItems loads after first fire
+  const bywAffinityKey = Object.keys(genreAffinity).length > 0 ? 'history' : 'empty';
+
+  const { data: ifYouLikedRows } = useQuery({
+    queryKey: ['if-you-liked-v1', seed1?.tmdbId, seed2?.tmdbId, bywAffinityKey],
     queryFn: async () => {
-      if (!seedItem) return [];
+      const seeds = [seed1, seed2].filter((s): s is NonNullable<typeof s> => s != null);
+      if (seeds.length === 0) return [];
+
       const watchedSet = new Set<number>([
         ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
         ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
       ]);
-      const raw = seedItem.mediaType === 'movie'
-        ? (await tmdbApi.getMovieRecommendations(seedItem.tmdbId)).map(normalizeMovie)
-        : (await tmdbApi.getTVRecommendations(seedItem.tmdbId)).map(normalizeTVShow);
-      return raw
-        .filter((item) => !watchedSet.has(item.id))
-        .filter((item) => passesQualityFilter(item, 'discover'))
-        .slice(0, 20);
+
+      const dominant = Object.entries(genreAffinity)
+        .sort(([, a], [, b]) => b - a).slice(0, 4).map(([id]) => Number(id));
+      const profile = thematicData?.profile as TasteProfile | undefined;
+
+      async function fetchSimilarItems(seed: typeof seeds[0]): Promise<ContentItem[]> {
+        // /similar uses genre+keyword metadata; /recommendations uses collaborative filtering.
+        // Merge with /similar prioritised — more accurate for niche content.
+        const [similarRaw, recsRaw] = await Promise.all(
+          seed.mediaType === 'movie'
+            ? [
+                tmdbApi.getMovieSimilar(seed.tmdbId).then(r => r.map(normalizeMovie)),
+                tmdbApi.getMovieRecommendations(seed.tmdbId).then(r => r.map(normalizeMovie)),
+              ]
+            : [
+                tmdbApi.getTVSimilar(seed.tmdbId).then(r => r.map(normalizeTVShow)),
+                tmdbApi.getTVRecommendations(seed.tmdbId).then(r => r.map(normalizeTVShow)),
+              ]
+        );
+
+        const seen = new Set<number>();
+        const merged: ContentItem[] = [];
+        for (const item of [...similarRaw, ...recsRaw]) {
+          if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
+        }
+
+        const filtered = merged
+          .filter((item) => !watchedSet.has(item.id))
+          .filter((item) => passesQualityFilter(item, 'discover'))
+          .filter((item) => !isMismatchedNiche(item, [], genreAffinity, profile));
+
+        if (dominant.length === 0) return filtered.slice(0, 20);
+
+        const ranked = filtered.map(item => {
+          const itemGenres = new Set(item.genres ?? []);
+          const genreMatch = dominant.filter(g => itemGenres.has(g)).length / dominant.length;
+          const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : 2010;
+          const era = profile?.eraAffinity ?? { classic: 0.1, nineties: 0.15, modern: 0.75 };
+          const eraScore = year < 1990 ? era.classic : year < 2000 ? era.nineties : era.modern;
+          const prestige = profile?.prestigeScore ?? 0.5;
+          const qualityBonus = prestige > 0.45 ? Math.max(0, ((item.rating ?? 0) - 7.0) / 3.0) * prestige : 0;
+          const novelty = profile?.noveltyTolerance ?? 0.3;
+          const popularityFit = novelty > 0.5
+            ? Math.max(0, 1 - (item.voteCount ?? 0) / 8000) * 0.1
+            : Math.min((item.voteCount ?? 0) / 5000, 1) * 0.1;
+          return { item, score: genreMatch * 0.5 + eraScore * 0.15 + qualityBonus * 0.25 + popularityFit };
+        });
+
+        return ranked.sort((a, b) => b.score - a.score).map(x => x.item).slice(0, 20);
+      }
+
+      const rowData = await Promise.all(seeds.map(fetchSimilarItems));
+
+      // Cross-row dedup: an item can only appear in the first "if you liked" row it fits
+      const seenAcrossRows = new Set<number>();
+      return seeds.map((seed, i) => ({
+        seed,
+        items: rowData[i].filter(item => {
+          if (seenAcrossRows.has(item.id)) return false;
+          seenAcrossRows.add(item.id);
+          return true;
+        }),
+      })).filter(r => r.items.length >= 3);
     },
-    enabled: !!seedItem && traktReady,
+    enabled: !!seed1 && traktReady,
     staleTime: 1000 * 60 * 60,
   });
+
+  // ─── Because You Watched row ──────────────────────────────────────────────
+  // Seeded from the single most recently watched item. Always pinned to recentIds[0]
+  // so it tracks what you just finished, unlike the rotating "If You Liked" seeds.
+  const bywSeed = recentIds[0] ?? null;
+
+  const { data: bywItems } = useQuery({
+    queryKey: ['because-you-watched-v1', bywSeed?.tmdbId, bywSeed?.mediaType, bywAffinityKey],
+    queryFn: async () => {
+      if (!bywSeed) return [];
+      const watchedSet = new Set<number>([
+        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
+        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
+      ]);
+      const profile = thematicData?.profile as TasteProfile | undefined;
+
+      const [similarRaw, recsRaw] = await Promise.all(
+        bywSeed.mediaType === 'movie'
+          ? [
+              tmdbApi.getMovieSimilar(bywSeed.tmdbId).then(r => r.map(normalizeMovie)),
+              tmdbApi.getMovieRecommendations(bywSeed.tmdbId).then(r => r.map(normalizeMovie)),
+            ]
+          : [
+              tmdbApi.getTVSimilar(bywSeed.tmdbId).then(r => r.map(normalizeTVShow)),
+              tmdbApi.getTVRecommendations(bywSeed.tmdbId).then(r => r.map(normalizeTVShow)),
+            ]
+      );
+
+      const seen = new Set<number>([bywSeed.tmdbId]);
+      const merged: ContentItem[] = [];
+      for (const item of [...similarRaw, ...recsRaw]) {
+        if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
+      }
+
+      const dominant = Object.entries(genreAffinity)
+        .sort(([, a], [, b]) => b - a).slice(0, 4).map(([id]) => Number(id));
+
+      const filtered = merged
+        .filter(item => !watchedSet.has(item.id))
+        .filter(item => passesQualityFilter(item, 'discover'))
+        .filter(item => !isMismatchedNiche(item, [], genreAffinity, profile));
+
+      if (dominant.length === 0) return filtered.slice(0, 20);
+
+      return filtered
+        .map(item => {
+          const itemGenres = new Set(item.genres ?? []);
+          const genreMatch = dominant.filter(g => itemGenres.has(g)).length / dominant.length;
+          const prestige = profile?.prestigeScore ?? 0.5;
+          const qualityBonus = prestige > 0.45 ? Math.max(0, ((item.rating ?? 0) - 7.0) / 3.0) * prestige : 0;
+          return { item, score: genreMatch * 0.6 + qualityBonus * 0.4 };
+        })
+        .sort((a, b) => b.score - a.score)
+        .map(x => x.item)
+        .slice(0, 20);
+    },
+    enabled: !!bywSeed && traktReady,
+    staleTime: 1000 * 60 * 60,
+  });
+
+  // ─── Watchlist-seeded row ─────────────────────────────────────────────────
+  // Explicit intent: the user bookmarked this — find similar content they'd also want.
+  // Seed = most recently added watchlist item not already watched.
+  const watchlistSeed = useMemo(() => {
+    if (!watchlistItems.length) return null;
+    const watchedSet = new Set<number>([
+      ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
+      ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
+    ]);
+    return [...watchlistItems]
+      .sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime())
+      .find(item => !watchedSet.has(item.tmdb_id)) ?? null;
+  }, [watchlistItems, traktMovies, traktShows]);
+
+  const { data: watchlistSeedItems } = useQuery({
+    queryKey: ['watchlist-seed-v1', watchlistSeed?.tmdb_id, watchlistSeed?.media_type, bywAffinityKey],
+    queryFn: async () => {
+      if (!watchlistSeed) return [];
+      const watchedSet = new Set<number>([
+        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
+        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
+      ]);
+      const profile = thematicData?.profile as TasteProfile | undefined;
+
+      const [similarRaw, recsRaw] = await Promise.all(
+        watchlistSeed.media_type === 'movie'
+          ? [
+              tmdbApi.getMovieSimilar(watchlistSeed.tmdb_id).then(r => r.map(normalizeMovie)),
+              tmdbApi.getMovieRecommendations(watchlistSeed.tmdb_id).then(r => r.map(normalizeMovie)),
+            ]
+          : [
+              tmdbApi.getTVSimilar(watchlistSeed.tmdb_id).then(r => r.map(normalizeTVShow)),
+              tmdbApi.getTVRecommendations(watchlistSeed.tmdb_id).then(r => r.map(normalizeTVShow)),
+            ]
+      );
+
+      const seen = new Set<number>([watchlistSeed.tmdb_id]);
+      const merged: ContentItem[] = [];
+      for (const item of [...similarRaw, ...recsRaw]) {
+        if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
+      }
+
+      return merged
+        .filter(item => !watchedSet.has(item.id))
+        .filter(item => passesQualityFilter(item, 'discover'))
+        .filter(item => !isMismatchedNiche(item, [], genreAffinity, profile))
+        .slice(0, 20);
+    },
+    enabled: !!watchlistSeed,
+    staleTime: 1000 * 60 * 60,
+  });
+
+  // ─── Cross-row dedup (render-time) ────────────────────────────────────────
+  // "If You Liked" rows are rendered first (above thematic rows). BYW and watchlist
+  // seed rows are rendered last. Filter each successive row against all previously
+  // rendered item IDs so the same title never appears twice on screen.
+
+  const iylIds = useMemo(() => {
+    const ids = new Set<number>();
+    ifYouLikedRows?.forEach(r => r.items.forEach((i: ContentItem) => ids.add(i.id)));
+    return ids;
+  }, [ifYouLikedRows]);
+
+  const thematicIds = useMemo(() => {
+    const ids = new Set<number>();
+    thematicRows.forEach((r: any) => r.items.forEach((i: ContentItem) => ids.add(i.id)));
+    return ids;
+  }, [thematicRows]);
+
+  const filteredBywItems = useMemo(() =>
+    (bywItems ?? []).filter(i => !iylIds.has(i.id) && !thematicIds.has(i.id)),
+    [bywItems, iylIds, thematicIds]
+  );
+
+  const filteredWatchlistSeedItems = useMemo(() => {
+    const bywIds = new Set(filteredBywItems.map(i => i.id));
+    return (watchlistSeedItems ?? []).filter(
+      i => !iylIds.has(i.id) && !thematicIds.has(i.id) && !bywIds.has(i.id)
+    );
+  }, [watchlistSeedItems, iylIds, thematicIds, filteredBywItems]);
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
@@ -476,69 +918,52 @@ export default function HomeScreen() {
           <HeroSection item={heroItem} />
         ) : null}
 
-        {/* Taste Mode chip — shown when DNA has loaded */}
-        {tasteMode && <TasteModeChip mode={tasteMode} />}
-
-        {/* Because You Watched */}
-        {becauseYouWatchedItems && becauseYouWatchedItems.length > 0 && seedItem && (
+        {/* If You Liked… rows */}
+        {ifYouLikedRows?.map(({ seed, items }) => (
           <ContentRow
-            title={`Because You Watched ${seedItem.title}`}
-            subtitle="Recommendations based on your last watch"
-            items={becauseYouWatchedItems}
+            key={`if-you-liked-${seed.tmdbId}`}
+            title={`If you liked ${seed.title}...`}
+            titleComponent={
+              <>
+                {'If you liked '}
+                <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
+                {'...'}
+              </>
+            }
+            subtitle="You might also like these"
+            items={items}
             isLoading={false}
             showRating
           />
-        )}
+        ))}
 
         {/* Rows */}
         <View style={styles.rows}>
-          {hasGemini ? (
-            thematicWaiting ? (
-              // Skeleton rows while DNA is being generated
-              [0, 1, 2, 3, 4].map((i) => (
-                <ContentRow
-                  key={`skeleton-${i}`}
-                  title="✦ Curating your picks..."
-                  subtitle=""
-                  items={[]}
-                  isLoading
-                  showRating
-                  accent
-                />
-              ))
-            ) : thematicRows.length > 0 ? (
-              thematicRows.map((row, i) => (
-                <ContentRow
-                  key={`thematic-${i}`}
-                  title={`✦ ${row.title}`}
-                  subtitle={row.subtitle}
-                  items={row.items}
-                  isLoading={false}
-                  showRating
-                  accent
-                />
-              ))
-            ) : (
-              // Gemini configured but rows empty — fallback to popular
-              <>
-                <ContentRow
-                  title="Popular Movies"
-                  subtitle="Trending with audiences worldwide"
-                  items={popularMovieItems}
-                  isLoading={moviesLoading}
-                  showRating
-                />
-                <ContentRow
-                  title="Top Series"
-                  subtitle="Binge-worthy shows everyone's talking about"
-                  items={popularShowItems}
-                  isLoading={showsLoading}
-                  showRating
-                />
-              </>
-            )
+          {thematicWaiting ? (
+            [0, 1, 2, 3, 4].map((i) => (
+              <ContentRow
+                key={`skeleton-${i}`}
+                title="✦ Curating your picks..."
+                subtitle=""
+                items={[]}
+                isLoading
+                showRating
+                accent
+              />
+            ))
+          ) : thematicRows.length > 0 ? (
+            thematicRows.map((row, i) => (
+              <ContentRow
+                key={`thematic-${i}`}
+                title={`✦ ${row.title}`}
+                subtitle={row.subtitle}
+                items={row.items}
+                isLoading={false}
+                showRating
+                accent
+              />
+            ))
           ) : (
-            // No Gemini key — standard popular rows
             <>
               <ContentRow
                 title="Popular Movies"
@@ -568,6 +993,36 @@ export default function HomeScreen() {
               items={historyItems ?? []}
               isLoading={historyLoading}
               lastEpisodes={lastEpisodes}
+            />
+          )}
+          {bywSeed && filteredBywItems.length >= 3 && (
+            <ContentRow
+              title={`Because you watched ${bywSeed.title}`}
+              titleComponent={
+                <>
+                  {'Because you watched '}
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{bywSeed.title}</Text>
+                </>
+              }
+              subtitle="More like what you just finished"
+              items={filteredBywItems}
+              isLoading={false}
+              showRating
+            />
+          )}
+          {watchlistSeed && filteredWatchlistSeedItems.length >= 3 && (
+            <ContentRow
+              title={`Because you saved ${watchlistSeed.title}`}
+              titleComponent={
+                <>
+                  {'Because you saved '}
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{watchlistSeed.title}</Text>
+                </>
+              }
+              subtitle="Similar titles you haven't seen yet"
+              items={filteredWatchlistSeedItems}
+              isLoading={false}
+              showRating
             />
           )}
         </View>

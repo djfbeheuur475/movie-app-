@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
 
 interface PreferencesState {
   favoriteGenres: number[];
@@ -7,12 +8,14 @@ interface PreferencesState {
   notificationsEnabled: boolean;
   region: string;
 
-  setFavoriteGenres: (genres: number[]) => void;
+  setFavoriteGenres: (genres: number[], userId?: string) => void;
   addRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
-  setNotificationsEnabled: (enabled: boolean) => void;
-  setRegion: (region: string) => void;
+  setNotificationsEnabled: (enabled: boolean, userId?: string) => void;
+  setRegion: (region: string, userId?: string) => void;
   loadFromStorage: () => Promise<void>;
+  syncToCloud: (userId: string) => Promise<void>;
+  restoreFromCloud: (userId: string) => Promise<void>;
 }
 
 const STORAGE_KEY = 'nextup_preferences';
@@ -23,9 +26,10 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   notificationsEnabled: true,
   region: 'US',
 
-  setFavoriteGenres: (favoriteGenres) => {
+  setFavoriteGenres: (favoriteGenres, userId) => {
     set({ favoriteGenres });
-    persist(get);
+    persistLocal(get);
+    if (userId) syncPrefs(userId, get);
   },
 
   addRecentSearch: (query) => {
@@ -34,36 +38,68 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
     set((s) => ({
       recentSearches: [trimmed, ...s.recentSearches.filter((q) => q !== trimmed)].slice(0, 10),
     }));
-    persist(get);
+    persistLocal(get);
   },
 
   clearRecentSearches: () => {
     set({ recentSearches: [] });
-    persist(get);
+    persistLocal(get);
   },
 
-  setNotificationsEnabled: (notificationsEnabled) => {
+  setNotificationsEnabled: (notificationsEnabled, userId) => {
     set({ notificationsEnabled });
-    persist(get);
+    persistLocal(get);
+    if (userId) syncPrefs(userId, get);
   },
 
-  setRegion: (region) => {
+  setRegion: (region, userId) => {
     set({ region });
-    persist(get);
+    persistLocal(get);
+    if (userId) syncPrefs(userId, get);
   },
 
   loadFromStorage: async () => {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        set(saved);
-      }
+      if (raw) set(JSON.parse(raw));
     } catch {}
+  },
+
+  syncToCloud: async (userId) => {
+    await syncPrefs(userId, get);
+  },
+
+  restoreFromCloud: async (userId) => {
+    const { data, error } = await supabase
+      .from('user_preferences')
+      .select('favorite_genres, notifications_enabled, region')
+      .eq('id', userId)
+      .single();
+
+    if (error || !data) return;
+
+    const update = {
+      favoriteGenres: (data.favorite_genres as number[]) ?? [],
+      notificationsEnabled: data.notifications_enabled ?? true,
+      region: data.region ?? 'US',
+    };
+    set(update);
+    persistLocal(get);
   },
 }));
 
-function persist(get: () => PreferencesState) {
+function persistLocal(get: () => PreferencesState) {
   const { favoriteGenres, recentSearches, notificationsEnabled, region } = get();
   AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ favoriteGenres, recentSearches, notificationsEnabled, region }));
+}
+
+async function syncPrefs(userId: string, get: () => PreferencesState) {
+  const { favoriteGenres, notificationsEnabled, region } = get();
+  const { error } = await supabase
+    .from('user_preferences')
+    .upsert(
+      { id: userId, favorite_genres: favoriteGenres, notifications_enabled: notificationsEnabled, region },
+      { onConflict: 'id' }
+    );
+  if (error) console.warn('[Prefs] Supabase sync failed:', error.message);
 }

@@ -20,6 +20,11 @@ async function persist(items: WatchlistItem[]) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
+// Supabase PostgrestBuilder only has .then(), not .catch() — use this wrapper
+function supabaseQuery(promise: PromiseLike<any>) {
+  Promise.resolve(promise).then(null, (e) => console.warn('[Watchlist] Supabase error:', e?.message ?? e));
+}
+
 export const useWatchlistStore = create<WatchlistState>((set, get) => ({
   items: [],
   isLoading: false,
@@ -52,16 +57,18 @@ export const useWatchlistStore = create<WatchlistState>((set, get) => ({
     await persist(updated);
 
     if (userId) {
-      supabase.from('watchlist').upsert(
-        {
-          user_id: userId,
-          tmdb_id: item.tmdb_id,
-          media_type: item.media_type,
-          title: item.title,
-          poster_path: item.poster_path ?? null,
-        },
-        { onConflict: 'user_id,tmdb_id,media_type' }
-      ).catch(console.warn);
+      supabaseQuery(
+        supabase.from('watchlist').upsert(
+          {
+            user_id: userId,
+            tmdb_id: item.tmdb_id,
+            media_type: item.media_type,
+            title: item.title,
+            poster_path: item.poster_path ?? null,
+          },
+          { onConflict: 'user_id,tmdb_id,media_type' }
+        )
+      );
     }
   },
 
@@ -73,19 +80,19 @@ export const useWatchlistStore = create<WatchlistState>((set, get) => ({
     await persist(updated);
 
     if (userId) {
-      supabase.from('watchlist')
-        .delete()
-        .eq('user_id', userId)
-        .eq('tmdb_id', tmdbId)
-        .eq('media_type', mediaType)
-        .catch(console.warn);
+      supabaseQuery(
+        supabase.from('watchlist')
+          .delete()
+          .eq('user_id', userId)
+          .eq('tmdb_id', tmdbId)
+          .eq('media_type', mediaType)
+      );
     }
   },
 
   isInWatchlist: (tmdbId, mediaType) =>
     get().items.some((i) => i.tmdb_id === tmdbId && i.media_type === mediaType),
 
-  // Called on login for existing users — replaces local data with cloud data
   syncFromCloud: async (userId) => {
     const { data, error } = await supabase
       .from('watchlist')

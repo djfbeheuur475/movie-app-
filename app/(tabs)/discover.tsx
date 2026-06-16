@@ -163,7 +163,6 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Discover</Text>
-        <Text style={styles.headerSub}>Curated picks for every mood</Text>
       </View>
 
       <View style={styles.mediaToggle}>
@@ -262,7 +261,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.xl,
   },
   headerTitle: {
     fontSize: 28,

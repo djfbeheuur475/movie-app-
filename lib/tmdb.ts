@@ -175,11 +175,16 @@ export const tmdbApi = {
   // Typed discover wrappers used by Taste DNA thematic rows
   discoverMoviesTyped: async (opts: {
     genreIds?: number[];
+    excludeGenres?: number[];
+    withKeywords?: string;
     sortBy?: string;
     voteAverageGte?: number;
     voteCountGte?: number;
     releaseDateGte?: string;
     releaseDateLte?: string;
+    runtimeGte?: number;
+    runtimeLte?: number;
+    originCountry?: string;
     page?: number;
   }): Promise<TMDBMovie[]> => {
     const { data } = await tmdb.get('/discover/movie', {
@@ -191,8 +196,13 @@ export const tmdbApi = {
         'vote_average.gte': opts.voteAverageGte,
         'vote_count.gte': opts.voteCountGte,
         ...(opts.genreIds?.length && { with_genres: opts.genreIds.join(',') }),
+        ...(opts.excludeGenres?.length && { without_genres: opts.excludeGenres.join(',') }),
+        ...(opts.withKeywords && { with_keywords: opts.withKeywords }),
         ...(opts.releaseDateGte && { 'primary_release_date.gte': opts.releaseDateGte }),
         ...(opts.releaseDateLte && { 'primary_release_date.lte': opts.releaseDateLte }),
+        ...(opts.runtimeGte && { 'with_runtime.gte': opts.runtimeGte }),
+        ...(opts.runtimeLte && { 'with_runtime.lte': opts.runtimeLte }),
+        ...(opts.originCountry && { with_origin_country: opts.originCountry }),
       },
     });
     return data.results as TMDBMovie[];
@@ -200,11 +210,14 @@ export const tmdbApi = {
 
   discoverShowsTyped: async (opts: {
     genreIds?: number[];
+    excludeGenres?: number[];
+    withKeywords?: string;
     sortBy?: string;
     voteAverageGte?: number;
     voteCountGte?: number;
     firstAirDateGte?: string;
     firstAirDateLte?: string;
+    originCountry?: string;
     page?: number;
   }): Promise<TMDBTVShow[]> => {
     const { data } = await tmdb.get('/discover/tv', {
@@ -215,8 +228,11 @@ export const tmdbApi = {
         'vote_average.gte': opts.voteAverageGte,
         'vote_count.gte': opts.voteCountGte,
         ...(opts.genreIds?.length && { with_genres: opts.genreIds.join(',') }),
+        ...(opts.excludeGenres?.length && { without_genres: opts.excludeGenres.join(',') }),
+        ...(opts.withKeywords && { with_keywords: opts.withKeywords }),
         ...(opts.firstAirDateGte && { 'first_air_date.gte': opts.firstAirDateGte }),
         ...(opts.firstAirDateLte && { 'first_air_date.lte': opts.firstAirDateLte }),
+        ...(opts.originCountry && { with_origin_country: opts.originCountry }),
       },
     });
     return data.results as TMDBTVShow[];
@@ -233,7 +249,7 @@ export const tmdbApi = {
     return data.genres as { id: number; name: string }[];
   },
 
-  // Recommendations by title id
+  // Recommendations by title id (collaborative filtering — viewers who watched X also watched Y)
   getMovieRecommendations: async (id: number): Promise<TMDBMovie[]> => {
     const { data } = await tmdb.get(`/movie/${id}/recommendations`);
     return data.results;
@@ -241,6 +257,18 @@ export const tmdbApi = {
 
   getTVRecommendations: async (id: number): Promise<TMDBTVShow[]> => {
     const { data } = await tmdb.get(`/tv/${id}/recommendations`);
+    return data.results;
+  },
+
+  // Similar titles (genre + keyword metadata matching — more accurate than recommendations
+  // for niche/reality/documentary content where CF produces genre-adjacent noise)
+  getMovieSimilar: async (id: number): Promise<TMDBMovie[]> => {
+    const { data } = await tmdb.get(`/movie/${id}/similar`);
+    return data.results;
+  },
+
+  getTVSimilar: async (id: number): Promise<TMDBTVShow[]> => {
+    const { data } = await tmdb.get(`/tv/${id}/similar`);
     return data.results;
   },
 

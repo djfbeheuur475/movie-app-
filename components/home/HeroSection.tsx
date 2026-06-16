@@ -37,11 +37,11 @@ export default function HeroSection({ item, aiExplanation }: Props) {
     }).start();
   }, [item.id]);
 
-  const handlePress = () => {
-    router.push(`/title/${item.id}?type=${item.mediaType}`);
-  };
-
   return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => router.push(`/title/${item.id}?type=${item.mediaType}`)}
+    >
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <Image
         source={{ uri: backdropUrl ?? posterUrl ?? '' }}
@@ -80,16 +80,9 @@ export default function HeroSection({ item, aiExplanation }: Props) {
           <Text style={styles.metaText}>{item.releaseDate?.slice(0, 4)}</Text>
         </View>
 
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.playButton} onPress={handlePress} activeOpacity={0.8}>
-            <Text style={styles.playButtonText}>▶  More Info</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.addButton} onPress={handlePress} activeOpacity={0.8}>
-            <Text style={styles.addButtonText}>+ Watchlist</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </Animated.View>
+    </TouchableOpacity>
   );
 }
 
@@ -172,36 +165,5 @@ const styles = StyleSheet.create({
   star: {
     color: Colors.accent,
     fontSize: 12,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  playButton: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 11,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.md,
-    flex: 1,
-    alignItems: 'center',
-  },
-  playButtonText: {
-    ...Typography.subheading,
-    color: Colors.background,
-    fontWeight: '700',
-  },
-  addButton: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingVertical: 11,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.md,
-    flex: 1,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  addButtonText: {
-    ...Typography.subheading,
-    color: Colors.text,
   },
 });

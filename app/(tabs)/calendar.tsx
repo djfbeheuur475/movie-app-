@@ -140,7 +140,10 @@ export default function CalendarScreen() {
 
   // ── Watchlist TV shows → details ─────────────────────────────────────────
 
-  const watchlistShowIds = watchlist.filter((w) => w.media_type === 'tv').map((w) => w.tmdb_id);
+  const watchlistShowIds = useMemo(
+    () => watchlist.filter((w) => w.media_type === 'tv').map((w) => w.tmdb_id),
+    [watchlist]
+  );
 
   const { data: watchlistShowDetails } = useQuery({
     queryKey: ['watchlist-show-details', watchlistShowIds],
@@ -347,13 +350,20 @@ export default function CalendarScreen() {
     );
   }, [traktWatchedShows]);
 
+  const watchlistTvIdSet = useMemo(
+    () => new Set(watchlistShowIds),
+    [watchlistShowIds]
+  );
+
   const filteredEntries = useMemo(() => {
     const base = allEntries.filter(
       (e) => isAfter(e.airDate, addDays(today, -1)) || isSameDay(e.airDate, today)
     );
     if (!watchedOnly) return base;
-    return base.filter((e) => e.mediaType === 'tv' && watchedShowTmdbIds.has(e.tmdbId));
-  }, [allEntries, today, watchedOnly, watchedShowTmdbIds]);
+    return base.filter(
+      (e) => e.mediaType === 'tv' && (watchedShowTmdbIds.has(e.tmdbId) || watchlistTvIdSet.has(e.tmdbId))
+    );
+  }, [allEntries, today, watchedOnly, watchedShowTmdbIds, watchlistTvIdSet]);
 
   const sections = useMemo(() => groupByDate(filteredEntries), [filteredEntries]);
 
@@ -371,9 +381,6 @@ export default function CalendarScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Calendar</Text>
-          <Text style={styles.subtitle}>
-            {watchedOnly ? 'Shows you\'re watching' : 'Next 12 months'}
-          </Text>
         </View>
         <TouchableOpacity
           style={styles.settingsBtn}
@@ -510,7 +517,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xs,
+    paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xl,
   },
   title: { fontSize: 28, fontWeight: '800', color: Colors.text, letterSpacing: -0.5 },
   subtitle: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },

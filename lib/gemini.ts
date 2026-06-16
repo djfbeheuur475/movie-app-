@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { TraktWatchedMovie, TraktWatchedShow } from './trakt';
+import { GENRE_NAMES } from './tasteDna';
+import type { TasteDNA } from './tasteDna';
 
 export interface GeminiReply {
   reply: string;
@@ -60,28 +62,13 @@ export async function logAvailableModels(apiKey: string): Promise<void> {
 function buildSystemPrompt(
   watchedMovies: TraktWatchedMovie[],
   watchedShows: TraktWatchedShow[],
-  alreadyRecommended: string[] = []
+  alreadyRecommended: string[] = [],
+  favoriteGenres: number[] = [],
+  tasteDNA?: TasteDNA,
 ): string {
   const today = new Date().toLocaleDateString('en-AU', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
-  const recentMovies = watchedMovies
-    .sort(
-      (a, b) =>
-        new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime()
-    )
-    .slice(0, 30)
-    .map((m) => `${m.movie.title} (${m.movie.year})`)
-    .join(', ');
-
-  const recentShows = watchedShows
-    .sort(
-      (a, b) =>
-        new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime()
-    )
-    .slice(0, 20)
-    .map((s) => `${s.show.title} (${s.show.year})`)
-    .join(', ');
 
   // Temporal context — shapes recommendation mood
   const now = new Date();
@@ -90,44 +77,158 @@ function buildSystemPrompt(
   const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()];
   const month = now.getMonth() + 1;
   const specialPeriod = month === 10 ? ' — Halloween and horror season' : month === 12 ? ' — festive season' : month <= 2 ? ' — awards season' : '';
-  const temporalNote = `Current context: ${dayName} ${timeOfDay}${specialPeriod}. Let this subtly inform the mood and tone of your recommendations.`;
+  const temporalNote = `Current context: ${dayName} ${timeOfDay}${specialPeriod}. Let this subtly inform mood and tone.`;
 
-  const historySection =
-    recentMovies || recentShows
-      ? `The user's recent watch history from Trakt:
-- Movies: ${recentMovies || 'none recorded'}
-- TV shows: ${recentShows || 'none recorded'}
+  // Recent watches (last 30 movies / 20 shows by date)
+  const sortedMovies = [...watchedMovies].sort(
+    (a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime()
+  );
+  const sortedShows = [...watchedShows].sort(
+    (a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime()
+  );
 
-Use this to personalise precisely — identify taste patterns, connect recommendations to what they've actually watched.`
-      : '';
+  const recentMovies = sortedMovies.slice(0, 30).map(m => `${m.movie.title} (${m.movie.year})`).join(', ');
+  const recentShows = sortedShows.slice(0, 20).map(s => `${s.show.title} (${s.show.year})`).join(', ');
+
+  // Most-replayed content — strongest signal for genuine taste (play count > 1 = rewatched)
+  const lovedMovies = [...watchedMovies]
+    .filter(m => m.plays > 1)
+    .sort((a, b) => b.plays - a.plays)
+    .slice(0, 8)
+    .map(m => `${m.movie.title} (×${m.plays})`)
+    .join(', ');
+
+  // For TV: cap plays at 20 to prevent episode-heavy shows dominating; filter shows they got deep into
+  const lovedShows = [...watchedShows]
+    .sort((a, b) => Math.min(b.plays, 20) - Math.min(a.plays, 20))
+    .slice(0, 6)
+    .map(s => `${s.show.title} (${Math.min(s.plays, 20)} eps)`)
+    .join(', ');
+
+  const hasHistory = !!(recentMovies || recentShows);
+
+  // Genre DNA from computed affinity scores — most precise taste signal available
+  let genreDnaSection = '';
+  if (tasteDNA?.genreAffinity && Object.keys(tasteDNA.genreAffinity).length > 0) {
+    const sorted = Object.entries(tasteDNA.genreAffinity)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 8);
+    const total = sorted.reduce((sum, [, w]) => sum + w, 0);
+    if (total > 0) {
+      const dist = sorted
+        .map(([id, w]) => `${GENRE_NAMES[Number(id)] ?? `genre-${id}`} ${Math.round((w / total) * 100)}%`)
+        .join(', ');
+      genreDnaSection = `\nGENRE DNA (computed from full viewing history — use as the primary filter for every recommendation):\n${dist}\n`;
+    }
+  } else if (!hasHistory && favoriteGenres.length > 0) {
+    genreDnaSection = `\nStated genre preferences: ${favoriteGenres.map(id => GENRE_NAMES[id] ?? `Genre ${id}`).join(', ')}\n`;
+  }
+
+  const historySection = hasHistory ? `
+VIEWING HISTORY (from Trakt — do not recommend titles already here):
+- Recently watched movies: ${recentMovies || 'none'}
+- Recently watched TV: ${recentShows || 'none'}
+${lovedMovies ? `- Most rewatched movies (genuine favourites): ${lovedMovies}` : ''}
+${lovedShows ? `- Most-watched TV shows (deepest engagement): ${lovedShows}` : ''}
+` : '';
 
   const excludeSection = alreadyRecommended.length > 0
-    ? `\nDO NOT recommend any of these (already suggested — includes prior sessions):\n${alreadyRecommended.join(', ')}\nAlways suggest completely fresh titles.\n`
+    ? `\nALREADY RECOMMENDED (do not suggest again — includes prior sessions):\n${alreadyRecommended.join(', ')}\n`
     : '';
+
+  // Cinematic identity — computed deterministically from viewing behaviour
+  const dnaSection = tasteDNA ? (() => {
+    const p = tasteDNA.profile;
+    if (!p) return '';
+
+    const eraTop = Object.entries(p.eraAffinity).sort(([, a], [, b]) => b - a)[0];
+    const eraLabel = eraTop[0] === 'classic'
+      ? `classic/pre-1990 (${Math.round(eraTop[1] * 100)}% of history)`
+      : eraTop[0] === 'nineties'
+      ? `90s cinema (${Math.round(eraTop[1] * 100)}% of history)`
+      : `contemporary/post-2000 (${Math.round(eraTop[1] * 100)}% of history)`;
+
+    const darkness = p.darknessScore;
+    const toneLabel = darkness > 0.65
+      ? 'dark, morally complex, bleak — actively prefers difficult content'
+      : darkness > 0.40
+      ? 'balanced with a pull toward moral complexity and tension'
+      : darkness < 0.20
+      ? 'light, accessible — avoid gratuitously dark or disturbing content'
+      : 'moderate tone, comfortable with occasional darkness';
+
+    const prestige = p.prestigeScore;
+    const prestigeLabel = prestige > 0.70
+      ? 'very high — almost exclusively watches acclaimed, award-circuit or critically-championed titles'
+      : prestige > 0.50
+      ? 'high — strongly prefers well-reviewed, substantive work over populist fare'
+      : prestige > 0.30
+      ? 'moderate — appreciates quality but open to mainstream picks'
+      : 'mainstream-leaning — prioritise recognisable, broadly popular titles';
+
+    const novelty = p.noveltyTolerance;
+    const noveltyLabel = novelty > 0.60
+      ? 'high novelty tolerance — actively seeks out lesser-known, under-the-radar titles'
+      : novelty < 0.25
+      ? 'low novelty tolerance — stick to well-known, widely-seen titles'
+      : 'moderate — one discovery title per batch is enough';
+
+    const pacing = p.pacingPreference;
+    const pacingLabel = pacing === 'slow'
+      ? 'slow-burn, patient storytelling — avoid rapid-cut action or pure crowd-pleasers'
+      : pacing === 'fast'
+      ? 'fast-paced, kinetic — avoid slow arthouse or contemplative films'
+      : 'medium pacing — comfortable across a range of styles';
+
+    return `
+CINEMATIC IDENTITY (computed from full viewing history — treat as authoritative):
+- Tone preference: ${toneLabel}
+- Prestige affinity: ${prestigeLabel}
+- Discovery appetite: ${noveltyLabel}
+- Pacing preference: ${pacingLabel}
+- Era: ${eraLabel}
+- Taste summary: ${tasteDNA.tasteProfile || 'eclectic cinephile'}
+${p.emotionalProfile?.length ? `- Emotional register: ${p.emotionalProfile.join(', ')}` : ''}
+${tasteDNA.thematicInterests?.length ? `- Thematic interests: ${tasteDNA.thematicInterests.join(', ')}` : ''}
+${tasteDNA.recentShift ? `- Recent taste shift detected: ${tasteDNA.recentShift}` : ''}
+
+Every recommendation must pass through this identity. Do not default to generic popular titles — calibrate to this specific viewer.`;
+  })() : '';
+
+  // Language tolerance: if the user has watched non-English content, note it
+  const hasNonEnglishHistory = [...watchedMovies, ...watchedShows].some(item => {
+    const title = 'movie' in item ? item.movie.title : item.show.title;
+    // Simple heuristic: if they've watched known non-English flagships
+    return false; // Conservative — let the history speak for itself
+  });
+  const languageNote = hasHistory
+    ? 'Foreign-language films/shows: recommend if the viewing history includes non-English content, or if the user asks.'
+    : 'English-language by default unless the user requests otherwise.';
 
   return `You are NextUp — a premium cinematic concierge, not a chatbot.
 You understand film and television at depth: genre, tone, pacing, craft, emotional register, director sensibility, cultural weight.
 Today is ${today}. When users mention time ("this year", "last 6 months", "recent"), calculate the date range from today.
 ${temporalNote}
-${historySection}${excludeSection}
+${genreDnaSection}${historySection}${dnaSection}${excludeSection}
 VOICE:
 - Speak like a knowledgeable friend who knows cinema deeply. Confident, precise, never generic.
 - No filler: never open with "Great question!", "Of course!", "Absolutely!", "Sure!", "Certainly!".
-- No lengthy preambles — get to the curation.
+- No lengthy preambles — get to the curation immediately.
 - Write 2–4 tight sentences of context, then the titles. Shorter is better.
-- Connect each title to this viewer's specific taste — reference their history, the mood, the theme. No generic plot summaries.
+- Connect each title to THIS viewer's specific genre DNA and cinematic identity — not generic plot summaries.
+- Reference their actual taste: if they love crime and high prestige, name that. If they're a slow-burn arthouse watcher, speak to that.
 - Trust that the user has seen a lot. Be specific about what earns each title its place.
 
 QUALITY:
 - Only titles with strong reception: 7.0+ TMDB rating, 500+ votes minimum.
 - No obscure, adult, exploitation, or direct-to-video releases.
-- English-language by default. Foreign cinema only if they ask or their history shows that preference.
-- Mainstream and recognisable for the core picks, 1–2 discovery titles maximum.
+- ${languageNote}
+- Match discovery depth to their novelty tolerance (see cinematic identity above).
 
 FORMAT:
 - Include 3–5 titles when asked for recommendations.
-- movies array: include year in parentheses — "Title (YEAR)". Example: ["Sicario (2015)", "Blade Runner 2049 (2017)"]. Recommendations first, then any comparison references.
-- shows array: include year in parentheses — "Title (YEAR)". Example: ["The Wire (2002)"]. Never mix movies and shows.
+- movies array: include year in parentheses — "Title (YEAR)". Example: ["Sicario (2015)", "Blade Runner 2049 (2017)"].
+- shows array: include year in parentheses — "Title (YEAR)". Example: ["The Wire (2002)"]. Never mix movies and shows in the same array.
 - If asked about one specific title: give a sharp 2–3 sentence take. No list needed.
 
 CRITICAL: Output ONLY a raw JSON object. No prose before or after it. No markdown. No code fences.
@@ -269,11 +370,13 @@ export async function askGemini(
   messages: { role: 'user' | 'assistant'; content: string }[],
   watchedMovies: TraktWatchedMovie[] = [],
   watchedShows: TraktWatchedShow[] = [],
-  alreadyRecommended: string[] = []
+  alreadyRecommended: string[] = [],
+  favoriteGenres: number[] = [],
+  tasteDNA?: TasteDNA,
 ): Promise<GeminiReply> {
   const key = validateKey(apiKey);
   const genAI = new GoogleGenerativeAI(key);
-  const systemInstruction = buildSystemPrompt(watchedMovies, watchedShows, alreadyRecommended);
+  const systemInstruction = buildSystemPrompt(watchedMovies, watchedShows, alreadyRecommended, favoriteGenres, tasteDNA);
 
   // Gemini requires chat history to start with 'user'. Drop any leading assistant messages.
   const allHistory = messages.slice(0, -1).map((m) => ({

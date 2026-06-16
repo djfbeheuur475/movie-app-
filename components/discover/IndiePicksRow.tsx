@@ -42,7 +42,7 @@ function getDateCutoffs() {
   const recentFromStr = recentFrom.toISOString().slice(0, 10);
 
   const classicBefore = new Date(now);
-  classicBefore.setFullYear(y - 5);
+  classicBefore.setFullYear(y - 3);
   const classicBeforeStr = classicBefore.toISOString().slice(0, 10);
 
   return { recentFrom: recentFromStr, classicBefore: classicBeforeStr, today };
@@ -114,21 +114,17 @@ function getVariantConfig(variant: Variant, mediaType: 'movie' | 'tv') {
 
   if (variant === 'recent') {
     return {
-      icon: '🎬',
       title: `Recent Indie & Critics' Picks${mediaType === 'tv' ? ' — TV' : ''}`,
-      sub: `Last 3 years · Festival darlings · Award winners`,
       dateGte: recentFrom,
       dateLte: undefined as string | undefined,
-      queryKeySuffix: `recent-${recentFrom.slice(0, 7)}`, // month-level granularity
+      queryKeySuffix: `recent-${recentFrom.slice(0, 7)}`,
     };
   }
   return {
-    icon: '🎞',
     title: `Classic Indie & Critics' Picks${mediaType === 'tv' ? ' — TV' : ''}`,
-    sub: `5+ years ago · Essential arthouse · Critics' favourites`,
     dateGte: undefined as string | undefined,
     dateLte: classicBefore,
-    queryKeySuffix: `classic-${classicBefore.slice(0, 4)}`, // year-level granularity
+    queryKeySuffix: `classic3yr-${classicBefore.slice(0, 7)}`,
   };
 }
 
@@ -186,11 +182,7 @@ export default function IndiePicksRow({ mediaType = 'movie', variant }: RowProps
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
       <View style={styles.header}>
-        <View style={styles.accentBar} />
-        <View style={styles.headerText}>
-          <Text style={styles.sectionTitle}>{config.icon} {config.title}</Text>
-          <Text style={styles.sectionSub}>{config.sub}</Text>
-        </View>
+        <Text style={styles.sectionTitle}>{config.title}</Text>
       </View>
 
       <ScrollView
@@ -244,34 +236,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
-    gap: 10,
-  },
-  accentBar: {
-    width: 3,
-    height: 38,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-    marginTop: 2,
-  },
-  headerText: {
-    flex: 1,
-    gap: 3,
+    marginBottom: Spacing.md,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    ...Typography.heading,
     color: Colors.text,
-    letterSpacing: 0.1,
-  },
-  sectionSub: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    fontWeight: '400',
-    letterSpacing: 0.1,
   },
   festivalRow: {
     flexDirection: 'row',

@@ -15,6 +15,7 @@ import type { ContentItem } from '../../types';
 
 interface Props {
   title: string;
+  titleComponent?: React.ReactNode; // renders instead of title when provided
   subtitle?: string;
   items: ContentItem[];
   isLoading?: boolean;
@@ -28,6 +29,7 @@ interface Props {
 
 export default function ContentRow({
   title,
+  titleComponent,
   subtitle,
   items,
   isLoading,
@@ -61,7 +63,10 @@ export default function ContentRow({
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
       <View style={[styles.header, accent && styles.headerAccent]}>
         <View style={styles.titleBlock}>
-          <Text style={[styles.title, accent && styles.titleAccent]}>{title}</Text>
+          {titleComponent
+            ? <Text style={[styles.title, accent && styles.titleAccent]}>{titleComponent}</Text>
+            : <Text style={[styles.title, accent && styles.titleAccent]}>{title}</Text>
+          }
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
         {onSeeAll && (

@@ -22,7 +22,7 @@ import type { WatchlistItem } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_GAP = Spacing.sm;
-const CARD_WIDTH = (SCREEN_WIDTH - Spacing.lg * 2 - CARD_GAP) / 2;
+const CARD_WIDTH = (SCREEN_WIDTH - Spacing.lg * 2 - CARD_GAP * 2) / 3;
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
 
 type FilterTab = 'all' | 'watchlist' | 'watching' | 'watched';
@@ -158,9 +158,6 @@ export default function WatchlistScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>My Watchlist</Text>
-          <Text style={styles.headerSub}>
-            {items.length} titles · {movieCount} movies · {tvCount} shows
-          </Text>
         </View>
         <TouchableOpacity
           style={styles.settingsBtn}
@@ -222,7 +219,7 @@ export default function WatchlistScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(item) => `${item.media_type}-${item.tmdb_id}`}
-          numColumns={2}
+          numColumns={3}
           columnWrapperStyle={styles.gridRow}
           contentContainerStyle={styles.gridContent}
           showsVerticalScrollIndicator={false}
@@ -261,7 +258,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.xl,
   },
   headerTitle: {
     fontSize: 28,

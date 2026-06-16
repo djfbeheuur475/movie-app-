@@ -12,10 +12,12 @@ import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { useQuery } from '@tanstack/react-query';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useAuthStore } from '../../store/authStore';
+import { usePreferencesStore } from '../../store/preferencesStore';
 import {
   getTemporalContext, loadAiSeenTitles, saveAiSeenTitles,
-  loadLatestAiSummary, saveAiConversationToCloud,
+  loadLatestAiSummary, saveAiConversationToCloud, loadCachedAnyDNA,
 } from '../../lib/tasteDna';
+import type { TasteDNA } from '../../lib/tasteDna';
 import type { ChatMessage, ContentItem } from '../../types';
 
 const MOOD_CHIPS = [
@@ -43,6 +45,7 @@ export default function AITabScreen() {
   const { geminiKey, traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
   const { user } = useAuthStore();
   const userId = user?.id ?? null;
+  const { favoriteGenres } = usePreferencesStore();
 
   const temporal = getTemporalContext();
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
@@ -85,10 +88,14 @@ export default function AITabScreen() {
   // Conversation summary — condenses turns older than MAX_RAW_TURNS
   const conversationSummaryRef = useRef<string>('');
 
-  // Cross-session seen titles + prior session AI summary
+  // Cross-session seen titles + prior session AI summary + shared Taste DNA
   const crossSessionSeenRef = useRef<string[]>([]);
+  const tasteDnaRef = useRef<TasteDNA | undefined>(undefined);
+
   useEffect(() => {
-    loadAiSeenTitles().then(titles => { crossSessionSeenRef.current = titles; });
+    loadAiSeenTitles(userId).then(titles => { crossSessionSeenRef.current = titles; });
+    // Load shared Taste DNA — same identity system as the home tab
+    loadCachedAnyDNA().then(dna => { if (dna) tasteDnaRef.current = dna; });
     if (userId) {
       loadLatestAiSummary(userId).then(result => {
         if (result?.summary) {
@@ -174,6 +181,8 @@ export default function AITabScreen() {
         movies,
         shows,
         alreadyRecommended,
+        favoriteGenres,
+        tasteDnaRef.current,
       );
 
       const PREFERRED_LANGS = new Set(['en', 'es', 'fr', 'ko', 'ja']);
