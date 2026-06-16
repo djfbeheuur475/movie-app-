@@ -805,9 +805,9 @@ export default function HomeScreen() {
   });
 
   // ─── Cross-row dedup (render-time) ────────────────────────────────────────
-  // "If You Liked" rows are rendered first (above thematic rows). BYW and watchlist
-  // seed rows are rendered last. Filter each successive row against all previously
-  // rendered item IDs so the same title never appears twice on screen.
+  // Thematic rows render first, then "If You Liked" rows below Recently Watched,
+  // then BYW and watchlist-seed rows last. Filter each successive row against all
+  // previously computed item IDs so the same title never appears twice on screen.
 
   const iylIds = useMemo(() => {
     const ids = new Set<number>();
@@ -918,25 +918,6 @@ export default function HomeScreen() {
           <HeroSection item={heroItem} />
         ) : null}
 
-        {/* If You Liked… rows */}
-        {ifYouLikedRows?.map(({ seed, items }) => (
-          <ContentRow
-            key={`if-you-liked-${seed.tmdbId}`}
-            title={`If you liked ${seed.title}...`}
-            titleComponent={
-              <>
-                {'If you liked '}
-                <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
-                {'...'}
-              </>
-            }
-            subtitle="You might also like these"
-            items={items}
-            isLoading={false}
-            showRating
-          />
-        ))}
-
         {/* Rows */}
         <View style={styles.rows}>
           {thematicWaiting ? (
@@ -995,6 +976,23 @@ export default function HomeScreen() {
               lastEpisodes={lastEpisodes}
             />
           )}
+          {ifYouLikedRows?.map(({ seed, items }) => (
+            <ContentRow
+              key={`if-you-liked-${seed.tmdbId}`}
+              title={`If you liked ${seed.title}...`}
+              titleComponent={
+                <>
+                  {'If you liked '}
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
+                  {'...'}
+                </>
+              }
+              subtitle="You might also like these"
+              items={items}
+              isLoading={false}
+              showRating
+            />
+          ))}
           {bywSeed && filteredBywItems.length >= 3 && (
             <ContentRow
               title={`Because you watched ${bywSeed.title}`}
