@@ -7,7 +7,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors, BorderRadius, Typography, Shadow } from '../../constants/theme';
 import { getPosterUrl } from '../../lib/tmdb';
@@ -79,12 +78,10 @@ function PosterCard({ item, width = 120, showTitle = false, showRating = false, 
           {watched ? (
             <WatchedBadge />
           ) : showType ? (
-            <View style={styles.typeBadge}>
-              <Ionicons
-                name={item.mediaType === 'tv' ? 'tv-outline' : 'film-outline'}
-                size={10}
-                color="#fff"
-              />
+            <View style={[styles.typeBadge, item.mediaType === 'tv' ? styles.typeBadgeTV : styles.typeBadgeMovie]}>
+              <Text style={[styles.typeBadgeText, item.mediaType === 'tv' ? styles.typeBadgeTextTV : styles.typeBadgeTextMovie]}>
+                {item.mediaType === 'tv' ? 'TV' : 'Movie'}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -148,9 +145,28 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 6,
     left: 6,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    borderRadius: BorderRadius.sm,
-    padding: 4,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  typeBadgeMovie: {
+    backgroundColor: Colors.primary,
+  },
+  typeBadgeTV: {
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  typeBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  typeBadgeTextMovie: {
+    color: Colors.background,
+  },
+  typeBadgeTextTV: {
+    color: Colors.text,
   },
   ratingText: {
     fontSize: 10,

@@ -1055,6 +1055,17 @@ export default function HomeScreen() {
     return qualified[seed % Math.min(3, qualified.length)];
   }, [trending]);
 
+  // Trending row — mixed movies + TV, hero item excluded to avoid duplication
+  const trendingItems: ContentItem[] = useMemo(() => {
+    if (!trending?.length) return [];
+    const heroId = heroItem?.id;
+    return (trending as any[])
+      .map((item: any) => ('title' in item ? normalizeMovie(item) : normalizeTVShow(item)))
+      .filter((item) => passesQualityFilter(item, 'trending'))
+      .filter((item) => item.id !== heroId)
+      .slice(0, 20);
+  }, [trending, heroItem]);
+
   const popularMovieItems: ContentItem[] = useMemo(
     () => filterAndRankContent((popularMovies ?? []).map(normalizeMovie), 'default', 20),
     [popularMovies]
@@ -1126,7 +1137,18 @@ export default function HomeScreen() {
 
         {/* Rows */}
         <View style={styles.rows}>
-          {/* Personal rows first — most relevant to the user's current taste */}
+          {/* Trending — always at the top so users can browse what's current */}
+          {(trendingLoading || trendingItems.length > 0) && (
+            <ContentRow
+              title="Trending Now"
+              subtitle="What everyone's watching this week"
+              items={trendingItems}
+              isLoading={trendingLoading}
+              showRating
+              showType
+            />
+          )}
+          {/* Personal rows — most relevant to the user's current taste */}
           {(bywRows ?? []).map(({ seed, items }) => (
             <ContentRow
               key={`byw-${seed.tmdbId}`}

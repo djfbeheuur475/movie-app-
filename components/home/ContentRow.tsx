@@ -24,6 +24,7 @@ interface Props {
   onSeeAll?: () => void;
   cardWidth?: number;
   showRating?: boolean;
+  showType?: boolean;
   accent?: boolean;
 }
 
@@ -38,6 +39,7 @@ export default function ContentRow({
   onSeeAll,
   cardWidth = 120,
   showRating = false,
+  showType = false,
   accent = false,
 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -56,8 +58,8 @@ export default function ContentRow({
   }, [isLoading, items.length]);
 
   const renderItem = useCallback(({ item }: { item: ContentItem }) => (
-    <PosterCard item={item} width={cardWidth} showRating={showRating} />
-  ), [cardWidth, showRating]);
+    <PosterCard item={item} width={cardWidth} showRating={showRating} showType={showType} />
+  ), [cardWidth, showRating, showType]);
 
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
