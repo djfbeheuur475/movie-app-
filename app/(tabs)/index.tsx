@@ -709,62 +709,76 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 60,
   });
 
-  // ─── Because You Watched row ──────────────────────────────────────────────
-  // Seeded from the single most recently watched item. Always pinned to recentIds[0]
-  // so it tracks what you just finished, unlike the rotating "If You Liked" seeds.
-  const bywSeed = recentIds[0] ?? null;
+  // ─── Because You Watched rows ─────────────────────────────────────────────
+  // Three independent seeds from the top of the recent-watch list, each
+  // producing its own row titled with the actual show/movie name.
+  const bywSeeds = recentIds.slice(0, 3);
 
-  const { data: bywItems } = useQuery({
-    queryKey: ['because-you-watched-v1', bywSeed?.tmdbId, bywSeed?.mediaType, bywAffinityKey],
+  const { data: bywRows } = useQuery({
+    queryKey: ['because-you-watched-v2', bywSeeds.map(s => `${s.tmdbId}-${s.mediaType}`).join(','), bywAffinityKey],
     queryFn: async () => {
-      if (!bywSeed) return [];
+      if (bywSeeds.length === 0) return [];
       const watchedSet = new Set<number>([
         ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
         ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
       ]);
       const profile = thematicData?.profile as TasteProfile | undefined;
-
-      const [similarRaw, recsRaw] = await Promise.all(
-        bywSeed.mediaType === 'movie'
-          ? [
-              tmdbApi.getMovieSimilar(bywSeed.tmdbId).then(r => r.map(normalizeMovie)),
-              tmdbApi.getMovieRecommendations(bywSeed.tmdbId).then(r => r.map(normalizeMovie)),
-            ]
-          : [
-              tmdbApi.getTVSimilar(bywSeed.tmdbId).then(r => r.map(normalizeTVShow)),
-              tmdbApi.getTVRecommendations(bywSeed.tmdbId).then(r => r.map(normalizeTVShow)),
-            ]
-      );
-
-      const seen = new Set<number>([bywSeed.tmdbId]);
-      const merged: ContentItem[] = [];
-      for (const item of [...similarRaw, ...recsRaw]) {
-        if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
-      }
-
       const dominant = Object.entries(genreAffinity)
         .sort(([, a], [, b]) => b - a).slice(0, 4).map(([id]) => Number(id));
 
-      const filtered = merged
-        .filter(item => !watchedSet.has(item.id))
-        .filter(item => passesQualityFilter(item, 'discover'))
-        .filter(item => !isMismatchedNiche(item, [], genreAffinity, profile));
+      async function fetchSeedItems(seed: typeof bywSeeds[0]): Promise<ContentItem[]> {
+        const [similarRaw, recsRaw] = await Promise.all(
+          seed.mediaType === 'movie'
+            ? [
+                tmdbApi.getMovieSimilar(seed.tmdbId).then(r => r.map(normalizeMovie)),
+                tmdbApi.getMovieRecommendations(seed.tmdbId).then(r => r.map(normalizeMovie)),
+              ]
+            : [
+                tmdbApi.getTVSimilar(seed.tmdbId).then(r => r.map(normalizeTVShow)),
+                tmdbApi.getTVRecommendations(seed.tmdbId).then(r => r.map(normalizeTVShow)),
+              ]
+        );
 
-      if (dominant.length === 0) return filtered.slice(0, 20);
+        const seen = new Set<number>([seed.tmdbId]);
+        const merged: ContentItem[] = [];
+        for (const item of [...similarRaw, ...recsRaw]) {
+          if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
+        }
 
-      return filtered
-        .map(item => {
-          const itemGenres = new Set(item.genres ?? []);
-          const genreMatch = dominant.filter(g => itemGenres.has(g)).length / dominant.length;
-          const prestige = profile?.prestigeScore ?? 0.5;
-          const qualityBonus = prestige > 0.45 ? Math.max(0, ((item.rating ?? 0) - 7.0) / 3.0) * prestige : 0;
-          return { item, score: genreMatch * 0.6 + qualityBonus * 0.4 };
-        })
-        .sort((a, b) => b.score - a.score)
-        .map(x => x.item)
-        .slice(0, 20);
+        const filtered = merged
+          .filter(item => !watchedSet.has(item.id))
+          .filter(item => passesQualityFilter(item, 'discover'))
+          .filter(item => !isMismatchedNiche(item, [], genreAffinity, profile));
+
+        if (dominant.length === 0) return filtered.slice(0, 20);
+
+        return filtered
+          .map(item => {
+            const itemGenres = new Set(item.genres ?? []);
+            const genreMatch = dominant.filter(g => itemGenres.has(g)).length / dominant.length;
+            const prestige = profile?.prestigeScore ?? 0.5;
+            const qualityBonus = prestige > 0.45 ? Math.max(0, ((item.rating ?? 0) - 7.0) / 3.0) * prestige : 0;
+            return { item, score: genreMatch * 0.6 + qualityBonus * 0.4 };
+          })
+          .sort((a, b) => b.score - a.score)
+          .map(x => x.item)
+          .slice(0, 20);
+      }
+
+      const rowData = await Promise.all(bywSeeds.map(fetchSeedItems));
+
+      // Cross-row dedup: a title can only appear in the first BYW row it fits
+      const seenAcrossRows = new Set<number>();
+      return bywSeeds.map((seed, i) => ({
+        seed,
+        items: rowData[i].filter(item => {
+          if (seenAcrossRows.has(item.id)) return false;
+          seenAcrossRows.add(item.id);
+          return true;
+        }),
+      })).filter(r => r.items.length >= 3);
     },
-    enabled: !!bywSeed && traktReady,
+    enabled: bywSeeds.length > 0 && traktReady,
     staleTime: 1000 * 60 * 60,
   });
 
@@ -826,9 +840,9 @@ export default function HomeScreen() {
 
   const bywIds = useMemo(() => {
     const ids = new Set<number>();
-    (bywItems ?? []).forEach(i => ids.add(i.id));
+    (bywRows ?? []).forEach(r => r.items.forEach((i: ContentItem) => ids.add(i.id)));
     return ids;
-  }, [bywItems]);
+  }, [bywRows]);
 
   const filteredIylRows = useMemo(() =>
     (ifYouLikedRows ?? [])
@@ -949,21 +963,22 @@ export default function HomeScreen() {
         {/* Rows */}
         <View style={styles.rows}>
           {/* Personal rows first — most relevant to the user's current taste */}
-          {bywSeed && (bywItems ?? []).length >= 3 && (
+          {(bywRows ?? []).map(({ seed, items }) => (
             <ContentRow
-              title={`Because you watched ${bywSeed.title}`}
+              key={`byw-${seed.tmdbId}`}
+              title={`Because you watched ${seed.title}`}
               titleComponent={
                 <>
                   {'Because you watched '}
-                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{bywSeed.title}</Text>
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
                 </>
               }
               subtitle="More like what you just finished"
-              items={bywItems ?? []}
+              items={items}
               isLoading={false}
               showRating
             />
-          )}
+          ))}
           {filteredIylRows.map(({ seed, items }) => (
             <ContentRow
               key={`if-you-liked-${seed.tmdbId}`}
