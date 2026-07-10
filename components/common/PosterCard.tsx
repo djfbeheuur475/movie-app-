@@ -75,15 +75,14 @@ function PosterCard({ item, width = 120, showTitle = false, showRating = false, 
               <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
             </View>
           )}
-          {watched ? (
-            <WatchedBadge />
-          ) : showType ? (
+          {watched && <WatchedBadge />}
+          {showType && (
             <View style={[styles.typeBadge, item.mediaType === 'tv' ? styles.typeBadgeTV : styles.typeBadgeMovie]}>
               <Text style={[styles.typeBadgeText, item.mediaType === 'tv' ? styles.typeBadgeTextTV : styles.typeBadgeTextMovie]}>
                 {item.mediaType === 'tv' ? 'TV' : 'Movie'}
               </Text>
             </View>
-          ) : null}
+          )}
         </View>
         {showTitle && (
           <Text style={styles.title} numberOfLines={2}>
