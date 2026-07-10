@@ -28,7 +28,7 @@ import {
   loadTasteNeighborhood, saveTasteNeighborhood,
 } from '../../lib/tasteDna';
 import type { GenreAffinity, TasteProfile } from '../../lib/tasteDna';
-import { selectRowTemplates, buildTasteNarration, applyProfileToTemplate } from '../../lib/templateSelector';
+import { selectRowTemplates, buildTasteNarration, applyProfileToTemplate, GENRE_LABELS } from '../../lib/templateSelector';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useAuthStore } from '../../store/authStore';
@@ -393,6 +393,15 @@ export default function HomeScreen() {
     const uniformPlays = new Map(recentItems.map(item => [item.id, 1]));
     return computeGenreAffinity(recentItems, uniformPlays);
   }, [historyItems, recentIds]);
+
+  // Top 2 genre IDs by affinity weight — used for the Trending in [Genre] row
+  const topGenreEntries = useMemo(() =>
+    Object.entries(genreAffinity)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 2)
+      .map(([id]) => Number(id)),
+    [genreAffinity]
+  );
 
   // ─── Thematic rows (Taste DNA) ────────────────────────────────────────────
   // Temporal context drives row rotation — dateKey changes every 6h
@@ -782,6 +791,72 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 60,
   });
 
+  // ─── Trending in [Your Genre] row ────────────────────────────────────────
+  // Discovers popular recent content filtered to the user's top 2 genres.
+  // Title is dynamic: "Trending in Crime & Thriller".
+  const { data: trendingInGenreData } = useQuery({
+    queryKey: ['trending-in-genre-v1', topGenreEntries.join(',')],
+    queryFn: async () => {
+      const genreLabel = topGenreEntries
+        .map(id => GENRE_LABELS[id])
+        .filter(Boolean)
+        .map(l => l!.charAt(0).toUpperCase() + l!.slice(1))
+        .join(' & ');
+
+      const threeYearsAgo = new Date();
+      threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+      const dateGte = threeYearsAgo.toISOString().slice(0, 10);
+
+      const watchedSet = new Set<number>([
+        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
+        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
+      ]);
+
+      const [movieResults, tvResults] = await Promise.all([
+        tmdbApi.discoverMoviesTyped({
+          genreIds: topGenreEntries,
+          sortBy: 'popularity.desc',
+          voteAverageGte: 6.5,
+          voteCountGte: 500,
+          releaseDateGte: dateGte,
+        }).then(r => r.map(normalizeMovie)),
+        tmdbApi.discoverShowsTyped({
+          genreIds: topGenreEntries,
+          sortBy: 'popularity.desc',
+          voteAverageGte: 7.0,
+          voteCountGte: 200,
+          firstAirDateGte: dateGte,
+        }).then(r => r.map(normalizeTVShow)),
+      ]);
+
+      // Interleave movies and TV to vary media type across the row
+      const seen = new Set<number>();
+      const merged: ContentItem[] = [];
+      const maxLen = Math.max(movieResults.length, tvResults.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (movieResults[i] && !seen.has(movieResults[i].id)) {
+          seen.add(movieResults[i].id);
+          merged.push(movieResults[i]);
+        }
+        if (tvResults[i] && !seen.has(tvResults[i].id)) {
+          seen.add(tvResults[i].id);
+          merged.push(tvResults[i]);
+        }
+      }
+
+      const profile = thematicData?.profile as TasteProfile | undefined;
+      const items = merged
+        .filter(item => !watchedSet.has(item.id))
+        .filter(item => passesQualityFilter(item, 'discover'))
+        .filter(item => !isMismatchedNiche(item, topGenreEntries, genreAffinity, profile))
+        .slice(0, 24);
+
+      return { title: `Trending in ${genreLabel || 'Your Genre'}`, items };
+    },
+    enabled: topGenreEntries.length > 0 && traktReady,
+    staleTime: 1000 * 60 * 60 * 4,
+  });
+
   // ─── Watchlist-seeded row ─────────────────────────────────────────────────
   // Explicit intent: the user bookmarked this — find similar content they'd also want.
   // Seed = most recently added watchlist item not already watched.
@@ -862,11 +937,24 @@ export default function HomeScreen() {
     [watchlistSeedItems, bywIds, iylIds]
   );
 
-  const personalIds = useMemo(() => {
-    const ids = new Set<number>([...bywIds, ...iylIds]);
+  const watchlistIds = useMemo(() => {
+    const ids = new Set<number>();
     filteredWatchlistSeedItems.forEach(i => ids.add(i.id));
     return ids;
-  }, [bywIds, iylIds, filteredWatchlistSeedItems]);
+  }, [filteredWatchlistSeedItems]);
+
+  const filteredTrendingGenreItems = useMemo(() =>
+    (trendingInGenreData?.items ?? []).filter(
+      i => !bywIds.has(i.id) && !iylIds.has(i.id) && !watchlistIds.has(i.id)
+    ),
+    [trendingInGenreData, bywIds, iylIds, watchlistIds]
+  );
+
+  const personalIds = useMemo(() => {
+    const ids = new Set<number>([...bywIds, ...iylIds, ...watchlistIds]);
+    filteredTrendingGenreItems.forEach(i => ids.add(i.id));
+    return ids;
+  }, [bywIds, iylIds, watchlistIds, filteredTrendingGenreItems]);
 
   const filteredThematicRows = useMemo(() =>
     thematicRows
@@ -1007,6 +1095,15 @@ export default function HomeScreen() {
               }
               subtitle="Similar titles you haven't seen yet"
               items={filteredWatchlistSeedItems}
+              isLoading={false}
+              showRating
+            />
+          )}
+          {trendingInGenreData && filteredTrendingGenreItems.length >= 3 && (
+            <ContentRow
+              title={trendingInGenreData.title}
+              subtitle="Popular right now in the genres you love"
+              items={filteredTrendingGenreItems}
               isLoading={false}
               showRating
             />

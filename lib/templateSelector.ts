@@ -172,7 +172,7 @@ export function selectRowTemplates(
 // Replaces the Gemini-generated tasteProfile string with a computed description.
 // No AI call required.
 
-const GENRE_LABELS: Record<number, string> = {
+export const GENRE_LABELS: Record<number, string> = {
   28: 'action', 12: 'adventure', 35: 'comedy', 80: 'crime', 99: 'documentary',
   18: 'drama', 14: 'fantasy', 27: 'horror', 9648: 'mystery', 10749: 'romance',
   878: 'science fiction', 53: 'thriller', 37: 'western', 36: 'historical drama',
