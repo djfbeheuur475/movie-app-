@@ -5,17 +5,17 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   RefreshControl,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
-import { traktApi } from '../../lib/trakt';
+import { traktApi, TraktUnauthorizedError } from '../../lib/trakt';
 import { filterAndRankContent, passesQualityFilter } from '../../lib/quality';
 import {
   getTemporalContext, loadRecentRowTitles, saveShownRowTitles,
@@ -159,7 +159,7 @@ function rankItemsByProfile(
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { traktClientId, traktUsername, traktAccessToken, geminiKey } = useApiKeysStore();
+  const { traktClientId, traktUsername, traktAccessToken, geminiKey, handleTraktUnauthorized } = useApiKeysStore();
   const { items: watchlistItems } = useWatchlistStore();
   const { user } = useAuthStore();
   const { favoriteGenres } = usePreferencesStore();
@@ -188,7 +188,9 @@ export default function HomeScreen() {
 
   // ─── Trakt watch history ───────────────────────────────────────────────────
 
-  const { data: traktMovies, isFetched: traktMoviesFetched } = useQuery({
+  const queryClient = useQueryClient();
+
+  const { data: traktMovies, isFetched: traktMoviesFetched, error: traktMoviesError } = useQuery({
     queryKey: ['trakt-watched-movies', traktClientId, traktUsername, traktAccessToken],
     queryFn: () =>
       traktAccessToken
@@ -196,6 +198,7 @@ export default function HomeScreen() {
         : traktApi.getUserWatchedMovies(traktUsername, traktClientId),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
+    retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
   });
 
   const { data: traktShows, isFetched: traktShowsFetched } = useQuery({
@@ -206,7 +209,20 @@ export default function HomeScreen() {
         : traktApi.getUserWatchedShows(traktUsername, traktClientId),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
+    retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
   });
+
+  // When Trakt returns 401, try to refresh the token silently then re-fetch
+  useEffect(() => {
+    if (traktMoviesError instanceof TraktUnauthorizedError) {
+      handleTraktUnauthorized().then((refreshed) => {
+        if (refreshed) {
+          queryClient.invalidateQueries({ queryKey: ['trakt-watched-movies'] });
+          queryClient.invalidateQueries({ queryKey: ['trakt-watched-shows'] });
+        }
+      });
+    }
+  }, [traktMoviesError]);
 
   // tmdbId → play count from Trakt (used for affinity weighting)
   const playsMap = useMemo(() => {
@@ -805,33 +821,45 @@ export default function HomeScreen() {
   });
 
   // ─── Cross-row dedup (render-time) ────────────────────────────────────────
-  // Thematic rows render first, then "If You Liked" rows below Recently Watched,
-  // then BYW and watchlist-seed rows last. Filter each successive row against all
-  // previously computed item IDs so the same title never appears twice on screen.
+  // Personal rows take priority over thematic editorial rows.
+  // Dedup order: BYW > IYL > watchlist-seed > thematic.
+
+  const bywIds = useMemo(() => {
+    const ids = new Set<number>();
+    (bywItems ?? []).forEach(i => ids.add(i.id));
+    return ids;
+  }, [bywItems]);
+
+  const filteredIylRows = useMemo(() =>
+    (ifYouLikedRows ?? [])
+      .map(r => ({ ...r, items: r.items.filter((i: ContentItem) => !bywIds.has(i.id)) }))
+      .filter(r => r.items.length >= 3),
+    [ifYouLikedRows, bywIds]
+  );
 
   const iylIds = useMemo(() => {
     const ids = new Set<number>();
-    ifYouLikedRows?.forEach(r => r.items.forEach((i: ContentItem) => ids.add(i.id)));
+    filteredIylRows.forEach(r => r.items.forEach((i: ContentItem) => ids.add(i.id)));
     return ids;
-  }, [ifYouLikedRows]);
+  }, [filteredIylRows]);
 
-  const thematicIds = useMemo(() => {
-    const ids = new Set<number>();
-    thematicRows.forEach((r: any) => r.items.forEach((i: ContentItem) => ids.add(i.id)));
-    return ids;
-  }, [thematicRows]);
-
-  const filteredBywItems = useMemo(() =>
-    (bywItems ?? []).filter(i => !iylIds.has(i.id) && !thematicIds.has(i.id)),
-    [bywItems, iylIds, thematicIds]
+  const filteredWatchlistSeedItems = useMemo(() =>
+    (watchlistSeedItems ?? []).filter(i => !bywIds.has(i.id) && !iylIds.has(i.id)),
+    [watchlistSeedItems, bywIds, iylIds]
   );
 
-  const filteredWatchlistSeedItems = useMemo(() => {
-    const bywIds = new Set(filteredBywItems.map(i => i.id));
-    return (watchlistSeedItems ?? []).filter(
-      i => !iylIds.has(i.id) && !thematicIds.has(i.id) && !bywIds.has(i.id)
-    );
-  }, [watchlistSeedItems, iylIds, thematicIds, filteredBywItems]);
+  const personalIds = useMemo(() => {
+    const ids = new Set<number>([...bywIds, ...iylIds]);
+    filteredWatchlistSeedItems.forEach(i => ids.add(i.id));
+    return ids;
+  }, [bywIds, iylIds, filteredWatchlistSeedItems]);
+
+  const filteredThematicRows = useMemo(() =>
+    thematicRows
+      .map((row: any) => ({ ...row, items: row.items.filter((i: ContentItem) => !personalIds.has(i.id)) }))
+      .filter((r: any) => r.items.length >= 3),
+    [thematicRows, personalIds]
+  );
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
@@ -869,7 +897,7 @@ export default function HomeScreen() {
   }, [refetchTrending, refetchThematic]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -920,8 +948,71 @@ export default function HomeScreen() {
 
         {/* Rows */}
         <View style={styles.rows}>
+          {/* Personal rows first — most relevant to the user's current taste */}
+          {bywSeed && (bywItems ?? []).length >= 3 && (
+            <ContentRow
+              title={`Because you watched ${bywSeed.title}`}
+              titleComponent={
+                <>
+                  {'Because you watched '}
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{bywSeed.title}</Text>
+                </>
+              }
+              subtitle="More like what you just finished"
+              items={bywItems ?? []}
+              isLoading={false}
+              showRating
+            />
+          )}
+          {filteredIylRows.map(({ seed, items }) => (
+            <ContentRow
+              key={`if-you-liked-${seed.tmdbId}`}
+              title={`If you liked ${seed.title}...`}
+              titleComponent={
+                <>
+                  {'If you liked '}
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
+                  {'...'}
+                </>
+              }
+              subtitle="You might also like these"
+              items={items}
+              isLoading={false}
+              showRating
+            />
+          ))}
+          {watchlistSeed && filteredWatchlistSeedItems.length >= 3 && (
+            <ContentRow
+              title={`Because you saved ${watchlistSeed.title}`}
+              titleComponent={
+                <>
+                  {'Because you saved '}
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{watchlistSeed.title}</Text>
+                </>
+              }
+              subtitle="Similar titles you haven't seen yet"
+              items={filteredWatchlistSeedItems}
+              isLoading={false}
+              showRating
+            />
+          )}
+          {hasTrakt && (
+            <RecentlyWatchedRow
+              items={historyItems ?? []}
+              isLoading={historyLoading}
+              lastEpisodes={lastEpisodes}
+            />
+          )}
+          {(newEpsLoading || newEpsThisWeek.length > 0) && (
+            <NewEpsRow
+              title="New Eps This Week"
+              shows={newEpsThisWeek}
+              isLoading={newEpsLoading}
+            />
+          )}
+          {/* Editorial/thematic rows below personal content */}
           {thematicWaiting ? (
-            [0, 1, 2, 3, 4].map((i) => (
+            [0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
               <ContentRow
                 key={`skeleton-${i}`}
                 title="✦ Curating your picks..."
@@ -932,8 +1023,8 @@ export default function HomeScreen() {
                 accent
               />
             ))
-          ) : thematicRows.length > 0 ? (
-            thematicRows.map((row, i) => (
+          ) : filteredThematicRows.length > 0 ? (
+            filteredThematicRows.map((row, i) => (
               <ContentRow
                 key={`thematic-${i}`}
                 title={`✦ ${row.title}`}
@@ -961,67 +1052,6 @@ export default function HomeScreen() {
                 showRating
               />
             </>
-          )}
-          {(newEpsLoading || newEpsThisWeek.length > 0) && (
-            <NewEpsRow
-              title="New Eps This Week"
-              shows={newEpsThisWeek}
-              isLoading={newEpsLoading}
-            />
-          )}
-          {hasTrakt && (
-            <RecentlyWatchedRow
-              items={historyItems ?? []}
-              isLoading={historyLoading}
-              lastEpisodes={lastEpisodes}
-            />
-          )}
-          {ifYouLikedRows?.map(({ seed, items }) => (
-            <ContentRow
-              key={`if-you-liked-${seed.tmdbId}`}
-              title={`If you liked ${seed.title}...`}
-              titleComponent={
-                <>
-                  {'If you liked '}
-                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
-                  {'...'}
-                </>
-              }
-              subtitle="You might also like these"
-              items={items}
-              isLoading={false}
-              showRating
-            />
-          ))}
-          {bywSeed && filteredBywItems.length >= 3 && (
-            <ContentRow
-              title={`Because you watched ${bywSeed.title}`}
-              titleComponent={
-                <>
-                  {'Because you watched '}
-                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{bywSeed.title}</Text>
-                </>
-              }
-              subtitle="More like what you just finished"
-              items={filteredBywItems}
-              isLoading={false}
-              showRating
-            />
-          )}
-          {watchlistSeed && filteredWatchlistSeedItems.length >= 3 && (
-            <ContentRow
-              title={`Because you saved ${watchlistSeed.title}`}
-              titleComponent={
-                <>
-                  {'Because you saved '}
-                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{watchlistSeed.title}</Text>
-                </>
-              }
-              subtitle="Similar titles you haven't seen yet"
-              items={filteredWatchlistSeedItems}
-              isLoading={false}
-              showRating
-            />
           )}
         </View>
       </ScrollView>

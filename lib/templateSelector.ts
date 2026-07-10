@@ -112,7 +112,7 @@ export function selectRowTemplates(
   temporal: TemporalContext,
   recentRowTitles: string[],
   recentGenreAffinity: GenreAffinity = {},
-  count = 5,
+  count = 8,
 ): RowTemplate[] {
   const recentSet = new Set(recentRowTitles.map(t => t.toLowerCase()));
 
