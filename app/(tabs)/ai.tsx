@@ -21,7 +21,9 @@ import {
 import type { TasteDNA } from '../../lib/tasteDna';
 import type { ChatMessage, ContentItem } from '../../types';
 
-const MOOD_CHIPS = [
+type Chip = { icon: string; label: string };
+
+const DEFAULT_MOOD_CHIPS: Chip[] = [
   { icon: '🌧', label: 'Rainy night mood' },
   { icon: '🔪', label: 'Tense thriller' },
   { icon: '🎭', label: 'Prestige drama' },
@@ -29,12 +31,67 @@ const MOOD_CHIPS = [
   { icon: '😂', label: 'Feel-good comedy' },
 ];
 
-const CONTEXT_CHIPS = [
+const DEFAULT_CONTEXT_CHIPS: Chip[] = [
   { icon: '🏆', label: 'Film festival picks' },
   { icon: '🔍', label: 'Overlooked gems' },
   { icon: '🎬', label: '70s-80s classics' },
   { icon: '🔥', label: 'Best of the decade' },
 ];
+
+// Genre ID → chips that fit a viewer with high affinity for that genre
+const GENRE_MOOD_CHIPS: Record<number, Chip[]> = {
+  80:    [{ icon: '🕵️', label: 'Crime with moral weight' }, { icon: '🔪', label: 'Dark crime thriller' }],
+  53:    [{ icon: '😰', label: 'Slow-burn psychological' }, { icon: '🧠', label: 'Paranoid thriller' }],
+  18:    [{ icon: '🎭', label: 'Character-driven drama' }, { icon: '💭', label: 'Emotionally heavy' }],
+  878:   [{ icon: '🌌', label: 'Mind-bending sci-fi' }, { icon: '🤖', label: 'Cerebral sci-fi' }],
+  27:    [{ icon: '👁️', label: 'Psychological horror' }, { icon: '🌙', label: 'Late night horror' }],
+  35:    [{ icon: '😂', label: 'Sharp comedy' }, { icon: '😄', label: 'Feel-good watch' }],
+  28:    [{ icon: '💥', label: 'High-stakes action' }, { icon: '⚡', label: 'Adrenaline thriller' }],
+  9648:  [{ icon: '🔍', label: 'Gripping mystery' }, { icon: '🧩', label: 'Puzzle-box story' }],
+  10749: [{ icon: '❤️', label: 'Romantic drama' }, { icon: '💔', label: 'Bittersweet love story' }],
+  12:    [{ icon: '🌏', label: 'Epic adventure' }, { icon: '🗺️', label: 'Journey film' }],
+  14:    [{ icon: '✨', label: 'Dark fantasy' }, { icon: '🐉', label: 'Fantasy epic' }],
+  99:    [{ icon: '🎥', label: 'Documentary pick' }, { icon: '📽️', label: 'Real story film' }],
+  10765: [{ icon: '🌌', label: 'Sci-fi & fantasy' }, { icon: '🧬', label: 'Speculative drama' }],
+  10759: [{ icon: '⚔️', label: 'Action & adventure' }, { icon: '💥', label: 'High-octane series' }],
+};
+
+function buildPersonalizedChips(dna: TasteDNA): { mood: Chip[]; context: Chip[] } {
+  const affinity = dna.genreAffinity ?? {};
+  const topGenres = Object.entries(affinity)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+    .map(([id]) => Number(id));
+
+  const seen = new Set<string>();
+  const mood: Chip[] = [];
+
+  for (const id of topGenres) {
+    for (const chip of GENRE_MOOD_CHIPS[id] ?? []) {
+      if (!seen.has(chip.label) && mood.length < 5) {
+        seen.add(chip.label);
+        mood.push(chip);
+      }
+    }
+  }
+  for (const chip of DEFAULT_MOOD_CHIPS) {
+    if (mood.length >= 5) break;
+    if (!seen.has(chip.label)) { seen.add(chip.label); mood.push(chip); }
+  }
+
+  const p = dna.profile;
+  const context: Chip[] = [];
+  if ((p?.noveltyTolerance ?? 0) > 0.40) context.push({ icon: '🔍', label: 'Overlooked gems' });
+  if ((p?.prestigeScore ?? 0) > 0.50) context.push({ icon: '🏆', label: 'Film festival picks' });
+  if ((p?.eraAffinity?.classic ?? 0) > 0.15) context.push({ icon: '🎬', label: '70s-80s classics' });
+  if ((p?.indieAffinity ?? 0) > 0.35) context.push({ icon: '🎭', label: 'Indie favourites' });
+  context.push({ icon: '🔥', label: 'Best of the decade' });
+
+  return {
+    mood: mood.slice(0, 5),
+    context: (context.length >= 3 ? context : DEFAULT_CONTEXT_CHIPS).slice(0, 4),
+  };
+}
 
 let msgId = 0;
 const newId = () => String(++msgId);
@@ -72,6 +129,9 @@ export default function AITabScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
+  const [moodChips, setMoodChips] = useState<Chip[]>(DEFAULT_MOOD_CHIPS);
+  const [contextChips, setContextChips] = useState<Chip[]>(DEFAULT_CONTEXT_CHIPS);
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: newId(),
@@ -96,7 +156,14 @@ export default function AITabScreen() {
   useEffect(() => {
     loadAiSeenTitles(userId).then(titles => { crossSessionSeenRef.current = titles; });
     // Load shared Taste DNA — same identity system as the home tab
-    loadCachedAnyDNA().then(dna => { if (dna) tasteDnaRef.current = dna; });
+    loadCachedAnyDNA().then(dna => {
+      if (dna) {
+        tasteDnaRef.current = dna;
+        const chips = buildPersonalizedChips(dna);
+        setMoodChips(chips.mood);
+        setContextChips(chips.context);
+      }
+    });
     if (userId) {
       loadLatestAiSummary(userId).then(result => {
         if (result?.summary) {
@@ -345,7 +412,7 @@ export default function AITabScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipRow}
               >
-                {MOOD_CHIPS.map((chip) => (
+                {moodChips.map((chip) => (
                   <TouchableOpacity
                     key={chip.label}
                     style={styles.chip}
@@ -364,7 +431,7 @@ export default function AITabScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipRow}
               >
-                {CONTEXT_CHIPS.map((chip) => (
+                {contextChips.map((chip) => (
                   <TouchableOpacity
                     key={chip.label}
                     style={[styles.chip, styles.chipContext]}
