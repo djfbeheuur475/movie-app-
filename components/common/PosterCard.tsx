@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   },
   typeBadge: {
     position: 'absolute',
-    top: 6,
+    bottom: 6,
     left: 6,
     borderRadius: 4,
     paddingHorizontal: 5,
