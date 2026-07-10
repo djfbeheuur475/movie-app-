@@ -2,8 +2,9 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
-  SafeAreaView, ScrollView, Alert,
+  ScrollView, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import ChatBubble from '../../components/ai/ChatBubble';
 import { askGemini, summariseConversation } from '../../lib/gemini';
@@ -263,7 +264,7 @@ export default function AITabScreen() {
   }, [messages, geminiKey, traktMovies, traktShows, userId]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>

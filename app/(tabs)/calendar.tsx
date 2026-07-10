@@ -1,11 +1,12 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
+  View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, SectionList, TextInput, FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
   format, addDays, startOfToday,
@@ -13,7 +14,7 @@ import {
 } from 'date-fns';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { tmdbApi, getPosterUrl } from '../../lib/tmdb';
-import { traktApi } from '../../lib/trakt';
+import { traktApi, TraktUnauthorizedError } from '../../lib/trakt';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 
@@ -120,8 +121,9 @@ export default function CalendarScreen() {
   const [pinnedShow, setPinnedShow] = useState<{ id: number; name: string } | null>(null);
 
   const { items: watchlist } = useWatchlistStore();
-  const { traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
+  const { traktClientId, traktUsername, traktAccessToken, handleTraktUnauthorized } = useApiKeysStore();
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
+  const queryClient = useQueryClient();
 
   // ── Upcoming movies — full year (5 pages ≈ 100 films) ────────────────────
 
@@ -161,7 +163,7 @@ export default function CalendarScreen() {
 
   // ── Trakt history → top shows not already in watchlist ───────────────────
 
-  const { data: traktWatchedShows } = useQuery({
+  const { data: traktWatchedShows, error: traktCalError } = useQuery({
     queryKey: ['trakt-cal-shows', traktClientId, traktUsername, traktAccessToken],
     queryFn: () =>
       traktAccessToken
@@ -169,7 +171,16 @@ export default function CalendarScreen() {
         : traktApi.getUserWatchedShows(traktUsername, traktClientId),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
+    retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
   });
+
+  useEffect(() => {
+    if (traktCalError instanceof TraktUnauthorizedError) {
+      handleTraktUnauthorized().then((refreshed) => {
+        if (refreshed) queryClient.invalidateQueries({ queryKey: ['trakt-cal-shows'] });
+      });
+    }
+  }, [traktCalError]);
 
   const traktShowTmdbIds = useMemo(() => {
     if (!traktWatchedShows?.length) return [];
@@ -376,7 +387,7 @@ export default function CalendarScreen() {
   const isLoading = moviesLoading || traktShowsLoading || seasonsLoading;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View>

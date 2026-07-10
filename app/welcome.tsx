@@ -12,6 +12,7 @@ import {
   Linking,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -20,9 +21,9 @@ import { useApiKeysStore } from '../store/apiKeysStore';
 import { useAuthStore } from '../store/authStore';
 import { requestDeviceCode, pollDeviceToken } from '../lib/trakt';
 
-type Step = 'intro' | 'tmdb' | 'trakt' | 'gemini';
+type Step = 'intro' | 'trakt' | 'gemini';
 
-const STEPS: Step[] = ['tmdb', 'trakt', 'gemini'];
+const STEPS: Step[] = ['trakt', 'gemini'];
 
 function StepDots({ current }: { current: Step }) {
   const idx = STEPS.indexOf(current);
@@ -42,11 +43,7 @@ export default function WelcomeScreen() {
   const userId = useAuthStore((s) => s.user?.id);
 
   // Skip intro for authenticated users — they came from Google login
-  const [step, setStep] = useState<Step>(userId ? 'tmdb' : 'intro');
-
-  // TMDB
-  const [tmdbKey, setTmdbKey] = useState('');
-  const [tmdbError, setTmdbError] = useState('');
+  const [step, setStep] = useState<Step>(userId ? 'trakt' : 'intro');
 
   // Trakt
   const [traktClientId, setTraktClientId] = useState('');
@@ -59,18 +56,6 @@ export default function WelcomeScreen() {
   const [showGeminiKey, setShowGeminiKey] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
-
-  // ── TMDB ──────────────────────────────────────────────────────────────────
-
-  const handleTmdbNext = async () => {
-    const key = tmdbKey.trim();
-    if (!key) { setTmdbError('A TMDB API key is required to load movie data.'); return; }
-    setTmdbError('');
-    setIsSaving(true);
-    await saveKeys({ tmdbKey: key });
-    setIsSaving(false);
-    setStep('trakt');
-  };
 
   // ── Trakt ─────────────────────────────────────────────────────────────────
 
@@ -100,7 +85,11 @@ export default function WelcomeScreen() {
         await new Promise((r) => setTimeout(r, interval));
         const token = await pollDeviceToken(dc.device_code, clientId);
         if (token) {
-          await saveKeys({ traktClientId: clientId, traktAccessToken: token.access_token });
+          await saveKeys({
+            traktClientId: clientId,
+            traktAccessToken: token.access_token,
+            traktRefreshToken: token.refresh_token,
+          });
           setTraktCode(null);
           setTraktConnecting(false);
           setTraktConnected(true);
@@ -148,6 +137,7 @@ export default function WelcomeScreen() {
         locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFill}
       />
+      <SafeAreaView style={{ flex: 1 }}>
 
       {/* ── Intro ── */}
       {step === 'intro' && (
@@ -171,66 +161,10 @@ export default function WelcomeScreen() {
             ))}
           </View>
 
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep('tmdb')} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep('trakt')} activeOpacity={0.85}>
             <Text style={styles.primaryBtnText}>Get Started →</Text>
           </TouchableOpacity>
         </View>
-      )}
-
-      {/* ── TMDB step ── */}
-      {step === 'tmdb' && (
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <StepDots current="tmdb" />
-
-          <View style={styles.stepHeader}>
-            <Text style={styles.stepBadge}>Step 1 of 3 · Required</Text>
-            <Text style={styles.stepTitle}>TMDB API Key</Text>
-            <Text style={styles.stepDesc}>
-              Powers all movie and TV data. Completely{' '}
-              <Text style={styles.highlight}>free</Text> to register.
-            </Text>
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>How to get your key</Text>
-            {[
-              'Go to themoviedb.org and create a free account',
-              'Settings → API → Request an API key',
-              'Choose "Developer" and fill in the form',
-              'Copy your API Key (v3 auth)',
-            ].map((s, i) => (
-              <View key={i} style={styles.instructionRow}>
-                <View style={styles.stepCircle}><Text style={styles.stepCircleText}>{i + 1}</Text></View>
-                <Text style={styles.instructionText}>{s}</Text>
-              </View>
-            ))}
-            <TouchableOpacity
-              style={styles.linkBtn}
-              onPress={() => Linking.openURL('https://www.themoviedb.org/settings/api')}
-            >
-              <Text style={styles.linkBtnText}>Open TMDB Settings ↗</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>API Key (v3 auth)</Text>
-            <TextInput
-              style={[styles.input, tmdbError ? styles.inputError : null]}
-              value={tmdbKey}
-              onChangeText={(t) => { setTmdbKey(t); setTmdbError(''); }}
-              placeholder="e.g. a1b2c3d4e5f6..."
-              placeholderTextColor={Colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              selectionColor={Colors.primary}
-            />
-            {tmdbError ? <Text style={styles.errorText}>{tmdbError}</Text> : null}
-          </View>
-
-          <TouchableOpacity style={styles.primaryBtn} onPress={handleTmdbNext} disabled={isSaving} activeOpacity={0.85}>
-            {isSaving ? <ActivityIndicator color={Colors.text} /> : <Text style={styles.primaryBtnText}>Continue →</Text>}
-          </TouchableOpacity>
-        </ScrollView>
       )}
 
       {/* ── Trakt step ── */}
@@ -239,7 +173,7 @@ export default function WelcomeScreen() {
           <StepDots current="trakt" />
 
           <View style={styles.stepHeader}>
-            <Text style={styles.stepBadge}>Step 2 of 3 · Optional</Text>
+            <Text style={styles.stepBadge}>Step 1 of 2 · Optional</Text>
             <Text style={styles.stepTitle}>Connect Trakt</Text>
             <Text style={styles.stepDesc}>
               Sync your watch history for "Recently Watched", "New Eps This Week", and smart watchlist tabs.
@@ -319,13 +253,13 @@ export default function WelcomeScreen() {
         </ScrollView>
       )}
 
-      {/* ── Gemini step ── */}
-      {step === 'gemini' && (
+        {/* ── Gemini step ── */}
+        {step === 'gemini' && (
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <StepDots current="gemini" />
 
           <View style={styles.stepHeader}>
-            <Text style={styles.stepBadge}>Step 3 of 3 · Optional</Text>
+            <Text style={styles.stepBadge}>Step 2 of 2 · Optional</Text>
             <Text style={styles.stepTitle}>Gemini AI Key</Text>
             <Text style={styles.stepDesc}>
               Enables AI chat, personalised recommendations, and the{' '}
@@ -390,6 +324,7 @@ export default function WelcomeScreen() {
           <Text style={styles.settingsNote}>All keys can be updated anytime in Settings.</Text>
         </ScrollView>
       )}
+      </SafeAreaView>
     </KeyboardAvoidingView>
   );
 }

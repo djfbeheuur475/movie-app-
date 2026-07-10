@@ -7,8 +7,8 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -55,6 +55,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const { _refreshFromSession } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -97,7 +98,7 @@ export default function LoginScreen() {
   const handleGuest = () => router.replace('/(tabs)');
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 16) }]}>
       {/*
        * Layout strategy: poster grid + gradient are absolutely positioned
        * INSIDE the root flex container. Brand + signIn are normal-flow
@@ -182,7 +183,6 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     justifyContent: 'flex-end',
     paddingHorizontal: Spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 48 : 36,
   },
 
   // Backgrounds (absolute, behind everything)

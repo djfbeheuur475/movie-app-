@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -85,6 +86,7 @@ export default function PersonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [bioExpanded, setBioExpanded] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const { data: person, isLoading } = useQuery({
     queryKey: ['person', id],
@@ -157,7 +159,7 @@ export default function PersonScreen() {
           />
 
           {/* Back button */}
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={[styles.backBtn, { top: insets.top + 8 }]} onPress={() => router.back()}>
             <Text style={styles.backText}>←</Text>
           </TouchableOpacity>
 
@@ -277,7 +279,7 @@ export default function PersonScreen() {
           </View>
         )}
 
-        <View style={{ height: 48 }} />
+        <View style={{ height: Math.max(insets.bottom, 48) }} />
       </ScrollView>
     </View>
   );
@@ -316,7 +318,6 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     position: 'absolute',
-    top: 52,
     left: Spacing.lg,
     backgroundColor: 'rgba(0,0,0,0.55)',
     width: 36,

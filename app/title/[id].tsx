@@ -6,8 +6,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors, Spacing, Typography } from '../../constants/theme';
@@ -18,6 +18,14 @@ import EpisodeList from '../../components/detail/EpisodeList';
 import ContentRow from '../../components/home/ContentRow';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useAuthStore } from '../../store/authStore';
+import { useFollowStore } from '../../store/followStore';
+import { useTraktWatched } from '../../hooks/useTraktWatched';
+import {
+  requestNotificationPermission,
+  setupNotificationChannel,
+  scheduleFollowNotification,
+  cancelFollowNotification,
+} from '../../lib/notifications';
 import type { ContentItem, TMDBMovieDetail, TMDBTVDetail } from '../../types';
 
 type DetailData = TMDBMovieDetail | TMDBTVDetail;
@@ -31,6 +39,12 @@ export default function TitleDetailScreen() {
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlistStore();
   const userId = useAuthStore((s) => s.user?.id);
   const inWatchlist = isInWatchlist(numId, mediaType);
+
+  const { follow, unfollow, isFollowed, isUnfollowed } = useFollowStore();
+  const traktWatched = useTraktWatched();
+  const traktHasWatched = traktWatched.isWatched(numId, mediaType);
+  // Auto-tick if in Trakt history (unless explicitly unfollowed); or explicitly followed
+  const followActive = (traktHasWatched && !isUnfollowed(numId)) || isFollowed(numId);
 
   const { data: detail, isLoading, error } = useQuery<DetailData>({
     queryKey: ['title-detail', numId, mediaType],
@@ -53,6 +67,40 @@ export default function TitleDetailScreen() {
         title,
         poster_path: detail.poster_path,
       }, userId);
+    }
+  };
+
+  function getNextAirDate(d: DetailData): string | null {
+    if ('title' in d) {
+      const movie = d as TMDBMovieDetail;
+      const rd = movie.release_date;
+      return rd && new Date(rd) > new Date() ? rd : null;
+    }
+    const tv = d as TMDBTVDetail;
+    return tv.next_episode_to_air?.air_date ?? null;
+  }
+
+  const handleFollowToggle = async () => {
+    if (!detail) return;
+    if (followActive) {
+      unfollow(numId);
+      await cancelFollowNotification(numId);
+    } else {
+      follow(numId);
+      // Only schedule TMDB-based notification for shows not already in Trakt calendar
+      if (!traktHasWatched) {
+        const airDate = getNextAirDate(detail);
+        if (airDate) {
+          const title = 'title' in detail
+            ? (detail as TMDBMovieDetail).title
+            : (detail as TMDBTVDetail).name;
+          const granted = await requestNotificationPermission();
+          if (granted) {
+            await setupNotificationChannel();
+            await scheduleFollowNotification(numId, title, mediaType, airDate);
+          }
+        }
+      }
     }
   };
 
@@ -96,6 +144,8 @@ export default function TitleDetailScreen() {
           mediaType={mediaType}
           onWatchlistToggle={handleWatchlistToggle}
           isInWatchlist={inWatchlist}
+          isFollowed={followActive}
+          onFollowToggle={handleFollowToggle}
         />
 
         <CastList

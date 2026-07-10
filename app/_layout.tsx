@@ -7,10 +7,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useWatchlistStore } from '../store/watchlistStore';
 import { usePreferencesStore } from '../store/preferencesStore';
 import { useApiKeysStore } from '../store/apiKeysStore';
+import { useFollowStore } from '../store/followStore';
 import { Colors } from '../constants/theme';
 import { useEpisodeNotifications } from '../hooks/useEpisodeNotifications';
 
@@ -80,6 +82,7 @@ export default function RootLayout() {
   const loadWatchlist = useWatchlistStore((s) => s.loadWatchlist);
   const loadFromStorage = usePreferencesStore((s) => s.loadFromStorage);
   const loadKeys = useApiKeysStore((s) => s.loadKeys);
+  const loadFollowed = useFollowStore((s) => s.load);
 
   const [statusBarHidden, setStatusBarHidden] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,7 +103,7 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        await Promise.all([loadUser(), loadWatchlist(), loadFromStorage(), loadKeys()]);
+        await Promise.all([loadUser(), loadWatchlist(), loadFromStorage(), loadKeys(), loadFollowed()]);
       } catch (e) {
         console.warn('Startup load error:', e);
       } finally {
@@ -114,6 +117,7 @@ export default function RootLayout() {
   }, []);
 
   return (
+    <SafeAreaProvider>
     <GestureHandlerRootView style={styles.root}>
       <QueryClientProvider client={queryClient}>
         <StatusBar style="light" hidden={statusBarHidden} animated />
@@ -149,6 +153,7 @@ export default function RootLayout() {
         </GestureDetector>
       </QueryClientProvider>
     </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
 

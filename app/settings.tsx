@@ -10,9 +10,9 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useApiKeysStore } from '../store/apiKeysStore';
@@ -115,13 +115,13 @@ function CardHeader({
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, signOut } = useAuthStore();
+  const userId = user?.id ?? null;
   const {
-    tmdbKey, traktClientId, traktUsername, traktAccessToken, geminiKey,
-    saveKeys, clearKeys,
+    traktClientId, traktUsername, traktAccessToken, geminiKey,
+    saveKeys, clearKeys, syncToCloud,
   } = useApiKeysStore();
 
   const [fields, setFields] = useState({
-    tmdbKey,
     traktClientId,
     traktUsername,
     geminiKey,
@@ -132,17 +132,13 @@ export default function SettingsScreen() {
   const [traktCode, setTraktCode] = useState<{ userCode: string; verifyUrl: string } | null>(null);
 
   useEffect(() => {
-    setFields({ tmdbKey, traktClientId, traktUsername, geminiKey });
-  }, [tmdbKey, traktClientId, traktUsername, geminiKey]);
+    setFields({ traktClientId, traktUsername, geminiKey });
+  }, [traktClientId, traktUsername, geminiKey]);
 
   const set = (key: keyof typeof fields) => (val: string) =>
     setFields((f) => ({ ...f, [key]: val }));
 
   const handleSave = async () => {
-    if (!fields.tmdbKey.trim()) {
-      Alert.alert('TMDB key required', 'The TMDB API key cannot be empty.');
-      return;
-    }
     setIsSaving(true);
     await saveKeys(fields);
     setIsSaving(false);
@@ -177,7 +173,13 @@ export default function SettingsScreen() {
         await new Promise((r) => setTimeout(r, interval));
         const token = await pollDeviceToken(dc.device_code, clientId);
         if (token) {
-          await saveKeys({ traktClientId: clientId, traktAccessToken: token.access_token });
+          await saveKeys({
+            traktClientId: clientId,
+            traktAccessToken: token.access_token,
+            traktRefreshToken: token.refresh_token,
+          });
+          // Persist to cloud immediately so token survives sign-out/reinstall
+          if (userId) await syncToCloud(userId);
           setTraktCode(null);
           setTraktConnecting(false);
           Alert.alert('Connected!', 'Trakt is now linked to NextUp.');
@@ -269,26 +271,6 @@ export default function SettingsScreen() {
                 <Text style={styles.signInBtnText}>Sign In</Text>
               </TouchableOpacity>
             )}
-          </Card>
-
-          {/* ── TMDB ── */}
-          <Card>
-            <CardHeader
-              icon="🎬"
-              title="TMDB API Key"
-              subtitle="Required — powers all movie & TV data"
-              badge={fields.tmdbKey ? '✓ Set' : undefined}
-            />
-            <KeyInput
-              label="API Key (v3 auth)"
-              value={fields.tmdbKey}
-              onChange={set('tmdbKey')}
-              placeholder="a1b2c3d4e5f6..."
-              secure
-              hint="Free at themoviedb.org → Settings → API"
-              linkLabel="Get key"
-              linkUrl="https://www.themoviedb.org/settings/api"
-            />
           </Card>
 
           {/* ── Trakt ── */}
@@ -413,26 +395,6 @@ export default function SettingsScreen() {
               secure
               hint="Free tier available — no billing required for personal use"
             />
-          </Card>
-
-          {/* ── AI Search for Stremio ── */}
-          <Card>
-            <CardHeader
-              icon="⚡"
-              title="AI Search for Stremio"
-              subtitle="Discover AI-curated content directly inside Stremio"
-              badge="Optional"
-            />
-            <Text style={styles.integrationDesc}>
-              Install the AI Search addon in Stremio to search and discover content using AI — works alongside NextUp AI recommendations.
-            </Text>
-            <TouchableOpacity
-              style={styles.connectBtn}
-              onPress={() => Linking.openURL('https://stremio.itcon.au/aisearch/configure')}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.connectBtnText}>Configure in Stremio ↗</Text>
-            </TouchableOpacity>
           </Card>
 
           {/* ── Actions ── */}
