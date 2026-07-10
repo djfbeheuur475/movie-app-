@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   Dimensions,
   Linking,
+  Share,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import { getBackdropUrl, getPosterUrl } from '../../lib/tmdb';
 import type { TMDBMovieDetail, TMDBTVDetail } from '../../types';
@@ -28,6 +30,8 @@ interface Props {
   aiExplanation?: string;
   onWatchlistToggle?: () => void;
   isInWatchlist?: boolean;
+  isFollowed?: boolean;
+  onFollowToggle?: () => void;
 }
 
 export default function DetailHero({
@@ -36,6 +40,8 @@ export default function DetailHero({
   aiExplanation,
   onWatchlistToggle,
   isInWatchlist,
+  isFollowed,
+  onFollowToggle,
 }: Props) {
   const title = isMovie(detail) ? detail.title : (detail as TMDBTVDetail).name;
   const releaseDate = isMovie(detail) ? detail.release_date : (detail as TMDBTVDetail).first_air_date;
@@ -79,6 +85,17 @@ export default function DetailHero({
   const openTrailer = () => {
     if (trailer) {
       Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `You should watch ${title} 🎬 I found it on NextUp — the smartest way to decide what to watch next!`,
+        title,
+      });
+    } catch {
+      // user cancelled — no-op
     }
   };
 
@@ -132,23 +149,64 @@ export default function DetailHero({
 
       {/* Actions */}
       <View style={styles.actions}>
-        {trailer && (
-          <TouchableOpacity style={styles.trailerBtn} onPress={openTrailer} activeOpacity={0.8}>
-            <Text style={styles.trailerBtnText}>▶ Trailer</Text>
+        {/* Row 1: Save | Follow | Share */}
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[styles.iconBtn, isInWatchlist && styles.iconBtnActive]}
+            onPress={onWatchlistToggle}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={isInWatchlist ? 'bookmark' : 'bookmark-outline'}
+              size={20}
+              color={isInWatchlist ? Colors.primary : Colors.textMuted}
+            />
+            <Text style={[styles.iconBtnLabel, isInWatchlist && styles.iconBtnLabelActive]}>
+              {isInWatchlist ? 'Saved' : 'Save'}
+            </Text>
           </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[styles.watchlistBtn, isInWatchlist && styles.watchlistBtnActive]}
-          onPress={onWatchlistToggle}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.watchlistBtnText}>
-            {isInWatchlist ? '✓ Saved' : '+ Watchlist'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.stremioBtn} onPress={openStremio} activeOpacity={0.8}>
-          <Text style={styles.stremioBtnText}>⚡ Watch in Stremio</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconBtn, isFollowed && styles.iconBtnActive]}
+            onPress={onFollowToggle}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={isFollowed ? 'notifications' : 'notifications-outline'}
+              size={20}
+              color={isFollowed ? Colors.primary : Colors.textMuted}
+            />
+            <Text style={[styles.iconBtnLabel, isFollowed && styles.iconBtnLabelActive]}>
+              {isFollowed ? 'Following' : 'Follow'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={handleShare} activeOpacity={0.8}>
+            <Ionicons name="share-social-outline" size={20} color={Colors.textMuted} />
+            <Text style={styles.iconBtnLabel}>Share</Text>
+          </TouchableOpacity>
+        </View>
+        {/* Row 2: Trailer | Watch */}
+        <View style={styles.buttonRow}>
+          {trailer ? (
+            <TouchableOpacity style={styles.iconBtn} onPress={openTrailer} activeOpacity={0.8}>
+              <Ionicons name="play-circle-outline" size={20} color={Colors.textMuted} />
+              <Text style={styles.iconBtnLabel}>Trailer</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.stremioBtn, !trailer && styles.stremioBtnFull]}
+            onPress={openStremio}
+            activeOpacity={0.8}
+          >
+            <View style={styles.stremioBtnInner}>
+              <Image
+                source={require('../../assets/stremio-logo.png')}
+                style={styles.stremioLogo}
+                contentFit="contain"
+              />
+              <Text style={styles.stremioBtnText}>Watch</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Overview */}
@@ -256,49 +314,57 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     marginTop: Spacing.md,
   },
-  trailerBtn: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: BorderRadius.sm,
+  buttonRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  iconBtn: {
     flex: 1,
     alignItems: 'center',
-  },
-  trailerBtnText: {
-    ...Typography.subheading,
-    color: Colors.text,
-  },
-  watchlistBtn: {
-    backgroundColor: Colors.surfaceElevated,
+    justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: BorderRadius.sm,
-    flex: 1,
-    alignItems: 'center',
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
+    gap: 4,
   },
-  watchlistBtnActive: {
-    borderColor: Colors.success,
-    backgroundColor: Colors.success + '22',
+  iconBtnActive: {
+    backgroundColor: Colors.primary + '18',
+    borderColor: Colors.primary + '55',
   },
-  watchlistBtnText: {
-    ...Typography.subheading,
-    color: Colors.text,
+  iconBtnLabel: {
+    ...Typography.label,
+    color: Colors.textMuted,
+  },
+  iconBtnLabelActive: {
+    color: Colors.primary,
   },
   stremioBtn: {
+    flex: 2,
     backgroundColor: '#7b2d8b',
     paddingVertical: 10,
     paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
-    width: '100%',
+  },
+  stremioBtnFull: {
+    flex: 1,
+  },
+  stremioBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stremioLogo: {
+    width: 18,
+    height: 18,
   },
   stremioBtnText: {
     ...Typography.subheading,

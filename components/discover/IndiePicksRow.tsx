@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
   Animated,
 } from 'react-native';
@@ -23,11 +22,6 @@ import type { ContentItem } from '../../types';
 
 const CARD_WIDTH = 152;
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
-
-const FESTIVAL_SOURCES = [
-  'Cannes', 'Sundance', 'TIFF', 'Venice', 'Berlinale',
-  'SXSW', 'Tribeca', 'Oscars', 'BAFTA', 'Spirit Awards',
-];
 
 // Returns date strings for the two cutoffs, computed at call time
 function getDateCutoffs() {
@@ -185,18 +179,6 @@ export default function IndiePicksRow({ mediaType = 'movie', variant }: RowProps
         <Text style={styles.sectionTitle}>{config.title}</Text>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.festivalRow}
-      >
-        {FESTIVAL_SOURCES.map((name) => (
-          <View key={name} style={styles.festivalChip}>
-            <Text style={styles.festivalChipText}>{name}</Text>
-          </View>
-        ))}
-      </ScrollView>
-
       {isLoading ? (
         <FlatList
           data={Array(8).fill(null)}
@@ -242,26 +224,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...Typography.heading,
     color: Colors.text,
-  },
-  festivalRow: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  festivalChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  festivalChipText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: Colors.textMuted,
-    letterSpacing: 0.4,
   },
   list: {
     paddingHorizontal: Spacing.lg,
