@@ -857,6 +857,69 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 60 * 4,
   });
 
+  // ─── Hidden Gems For You ─────────────────────────────────────────────────
+  // Low vote count (floor 300, ceiling tuned to noveltyTolerance) + high quality (≥7.5).
+  // Uses top 4 genres for a broader pool and skips the niche mismatch filter so
+  // foreign, indie, and unusual content can surface freely.
+  const { data: hiddenGemsData } = useQuery({
+    queryKey: ['hidden-gems-v1', topGenreEntries.join(','), bywAffinityKey],
+    queryFn: async () => {
+      const profile = thematicData?.profile as TasteProfile | undefined;
+      const novelty = profile?.noveltyTolerance ?? 0.3;
+
+      // Adventurous users get a tighter upper cap — more obscure picks
+      const voteCountMax = novelty > 0.60 ? 1500 : novelty > 0.35 ? 3000 : 5000;
+
+      // Classic-affinity users get a wider date range to include older gems
+      const classicAffinity = profile?.eraAffinity?.classic ?? 0;
+      const yearFrom = classicAffinity > 0.20 ? 1970 : 2000;
+      const dateGte = `${yearFrom}-01-01`;
+
+      // Top 4 genres for a broader but still relevant candidate pool
+      const gemGenreIds = Object.entries(genreAffinity)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 4)
+        .map(([id]) => Number(id));
+
+      if (gemGenreIds.length === 0) return { items: [] };
+
+      const watchedSet = new Set<number>([
+        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
+        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
+      ]);
+
+      // Fetch 2 pages each — the voteCount cap filters out ~half the raw results
+      const [mP1, mP2, tvP1, tvP2] = await Promise.all([
+        tmdbApi.discoverMoviesTyped({ genreIds: gemGenreIds, sortBy: 'vote_average.desc', voteAverageGte: 7.5, voteCountGte: 300, releaseDateGte: dateGte, page: 1 }).then(r => r.map(normalizeMovie)),
+        tmdbApi.discoverMoviesTyped({ genreIds: gemGenreIds, sortBy: 'vote_average.desc', voteAverageGte: 7.5, voteCountGte: 300, releaseDateGte: dateGte, page: 2 }).then(r => r.map(normalizeMovie)),
+        tmdbApi.discoverShowsTyped({ genreIds: gemGenreIds, sortBy: 'vote_average.desc', voteAverageGte: 7.5, voteCountGte: 200, firstAirDateGte: dateGte, page: 1 }).then(r => r.map(normalizeTVShow)),
+        tmdbApi.discoverShowsTyped({ genreIds: gemGenreIds, sortBy: 'vote_average.desc', voteAverageGte: 7.5, voteCountGte: 200, firstAirDateGte: dateGte, page: 2 }).then(r => r.map(normalizeTVShow)),
+      ]);
+
+      // Client-side voteCount ceiling keeps mainstream hits out
+      const gemsMovies = [...mP1, ...mP2].filter(i => (i.voteCount ?? 0) <= voteCountMax);
+      const gemsTV = [...tvP1, ...tvP2].filter(i => (i.voteCount ?? 0) <= voteCountMax);
+
+      // Interleave to vary media type
+      const seen = new Set<number>();
+      const merged: ContentItem[] = [];
+      const maxLen = Math.max(gemsMovies.length, gemsTV.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (gemsMovies[i] && !seen.has(gemsMovies[i].id)) { seen.add(gemsMovies[i].id); merged.push(gemsMovies[i]); }
+        if (gemsTV[i] && !seen.has(gemsTV[i].id)) { seen.add(gemsTV[i].id); merged.push(gemsTV[i]); }
+      }
+
+      const items = merged
+        .filter(item => !watchedSet.has(item.id))
+        .filter(item => passesQualityFilter(item, 'discover'))
+        .slice(0, 24);
+
+      return { items };
+    },
+    enabled: Object.keys(genreAffinity).length > 0 && traktReady,
+    staleTime: 1000 * 60 * 60 * 6,
+  });
+
   // ─── Watchlist-seeded row ─────────────────────────────────────────────────
   // Explicit intent: the user bookmarked this — find similar content they'd also want.
   // Seed = most recently added watchlist item not already watched.
@@ -950,11 +1013,24 @@ export default function HomeScreen() {
     [trendingInGenreData, bywIds, iylIds, watchlistIds]
   );
 
-  const personalIds = useMemo(() => {
+  // All personal IDs before hidden gems — used to dedup hidden gems itself
+  const priorPersonalIds = useMemo(() => {
     const ids = new Set<number>([...bywIds, ...iylIds, ...watchlistIds]);
     filteredTrendingGenreItems.forEach(i => ids.add(i.id));
     return ids;
   }, [bywIds, iylIds, watchlistIds, filteredTrendingGenreItems]);
+
+  const filteredHiddenGemsItems = useMemo(() =>
+    (hiddenGemsData?.items ?? []).filter(i => !priorPersonalIds.has(i.id)),
+    [hiddenGemsData, priorPersonalIds]
+  );
+
+  // Full personal ID set — thematic editorial rows are filtered against this
+  const personalIds = useMemo(() => {
+    const ids = new Set<number>([...priorPersonalIds]);
+    filteredHiddenGemsItems.forEach(i => ids.add(i.id));
+    return ids;
+  }, [priorPersonalIds, filteredHiddenGemsItems]);
 
   const filteredThematicRows = useMemo(() =>
     thematicRows
@@ -1104,6 +1180,15 @@ export default function HomeScreen() {
               title={trendingInGenreData.title}
               subtitle="Popular right now in the genres you love"
               items={filteredTrendingGenreItems}
+              isLoading={false}
+              showRating
+            />
+          )}
+          {filteredHiddenGemsItems.length >= 3 && (
+            <ContentRow
+              title="Hidden Gems For You"
+              subtitle="Critically loved, under the radar — matched to your taste"
+              items={filteredHiddenGemsItems}
               isLoading={false}
               showRating
             />
