@@ -17,6 +17,8 @@ import type { TMDBMovieDetail, TMDBTVDetail } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BACKDROP_HEIGHT = 280;
+// Width of one column in the 3-column button grid (matches row-1 button width exactly)
+const ACTION_COL_WIDTH = (SCREEN_WIDTH - 2 * Spacing.lg - 2 * Spacing.sm) / 3;
 
 type DetailType = TMDBMovieDetail | TMDBTVDetail;
 
@@ -187,13 +189,17 @@ export default function DetailHero({
         {/* Row 2: Trailer | Watch */}
         <View style={styles.buttonRow}>
           {trailer ? (
-            <TouchableOpacity style={styles.iconBtn} onPress={openTrailer} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={[styles.iconBtn, { flex: 0, width: ACTION_COL_WIDTH }]}
+              onPress={openTrailer}
+              activeOpacity={0.8}
+            >
               <Ionicons name="play-circle-outline" size={20} color={Colors.textMuted} />
               <Text style={styles.iconBtnLabel}>Trailer</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
-            style={[styles.stremioBtn, !trailer && styles.stremioBtnFull]}
+            style={[styles.stremioBtn, styles.stremioBtnFull]}
             onPress={openStremio}
             activeOpacity={0.8}
           >
@@ -358,16 +364,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stremioBtnInner: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   stremioLogo: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
   },
   stremioBtnText: {
-    ...Typography.subheading,
+    ...Typography.label,
     color: Colors.text,
   },
   section: {
@@ -404,3 +410,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+

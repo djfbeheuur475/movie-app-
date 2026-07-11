@@ -5,6 +5,7 @@ import {
   ScrollView, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import ChatBubble from '../../components/ai/ChatBubble';
 import { askGemini, summariseConversation } from '../../lib/gemini';
@@ -23,73 +24,136 @@ import type { ChatMessage, ContentItem } from '../../types';
 
 type Chip = { icon: string; label: string };
 
-const DEFAULT_MOOD_CHIPS: Chip[] = [
-  { icon: '🌧', label: 'Rainy night mood' },
-  { icon: '🔪', label: 'Tense thriller' },
-  { icon: '🎭', label: 'Prestige drama' },
-  { icon: '🌌', label: 'Mind-bending sci-fi' },
-  { icon: '😂', label: 'Feel-good comedy' },
+// Mulberry32 seeded PRNG — stable within a day, changes each day
+function seededRandom(seed: number) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const result = [...arr];
+  const rand = seededRandom(seed);
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+// Changes once per day — chips rotate daily but stay stable within a session
+function dailySeed(): number {
+  return Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+}
+
+// Large mood pool — shuffled daily so fallback chips feel fresh
+const MOOD_POOL: Chip[] = [
+  { icon: 'rainy-outline', label: 'Rainy night mood' },
+  { icon: 'flash-outline', label: 'Tense thriller' },
+  { icon: 'film-outline', label: 'Prestige drama' },
+  { icon: 'planet-outline', label: 'Mind-bending sci-fi' },
+  { icon: 'happy-outline', label: 'Feel-good comedy' },
+  { icon: 'water-outline', label: 'Slow burn & atmosphere' },
+  { icon: 'bulb-outline', label: 'Something thought-provoking' },
+  { icon: 'musical-notes-outline', label: 'High energy & fun' },
+  { icon: 'moon-outline', label: 'Late night watch' },
+  { icon: 'people-outline', label: 'Something to watch together' },
+  { icon: 'heart-outline', label: 'Let me cry a little' },
+  { icon: 'eye-outline', label: 'Edge-of-seat suspense' },
+  { icon: 'briefcase-outline', label: 'Gripping true story' },
+  { icon: 'earth-outline', label: 'World cinema gem' },
+  { icon: 'time-outline', label: 'Nostalgic comfort watch' },
 ];
 
-const DEFAULT_CONTEXT_CHIPS: Chip[] = [
-  { icon: '🏆', label: 'Film festival picks' },
-  { icon: '🔍', label: 'Overlooked gems' },
-  { icon: '🎬', label: '70s-80s classics' },
-  { icon: '🔥', label: 'Best of the decade' },
+// Large context pool — shuffled daily
+const CONTEXT_POOL: Chip[] = [
+  { icon: 'trophy-outline', label: 'Film festival picks' },
+  { icon: 'search-outline', label: 'Overlooked gems' },
+  { icon: 'film-outline', label: '70s-80s classics' },
+  { icon: 'flame-outline', label: 'Best of the decade' },
+  { icon: 'videocam-outline', label: '90s cult classics' },
+  { icon: 'star-outline', label: 'Critically acclaimed' },
+  { icon: 'ribbon-outline', label: 'Award winners' },
+  { icon: 'color-palette-outline', label: 'Indie favourites' },
+  { icon: 'camera-outline', label: 'Director deep dive' },
+  { icon: 'globe-outline', label: 'International hits' },
+  { icon: 'tv-outline', label: 'Binge-worthy series' },
+  { icon: 'aperture-outline', label: 'Arthouse picks' },
 ];
 
-// Genre ID → chips that fit a viewer with high affinity for that genre
+// Per-genre chips — 4+ options each so daily rotation has real variety
 const GENRE_MOOD_CHIPS: Record<number, Chip[]> = {
-  80:    [{ icon: '🕵️', label: 'Crime with moral weight' }, { icon: '🔪', label: 'Dark crime thriller' }],
-  53:    [{ icon: '😰', label: 'Slow-burn psychological' }, { icon: '🧠', label: 'Paranoid thriller' }],
-  18:    [{ icon: '🎭', label: 'Character-driven drama' }, { icon: '💭', label: 'Emotionally heavy' }],
-  878:   [{ icon: '🌌', label: 'Mind-bending sci-fi' }, { icon: '🤖', label: 'Cerebral sci-fi' }],
-  27:    [{ icon: '👁️', label: 'Psychological horror' }, { icon: '🌙', label: 'Late night horror' }],
-  35:    [{ icon: '😂', label: 'Sharp comedy' }, { icon: '😄', label: 'Feel-good watch' }],
-  28:    [{ icon: '💥', label: 'High-stakes action' }, { icon: '⚡', label: 'Adrenaline thriller' }],
-  9648:  [{ icon: '🔍', label: 'Gripping mystery' }, { icon: '🧩', label: 'Puzzle-box story' }],
-  10749: [{ icon: '❤️', label: 'Romantic drama' }, { icon: '💔', label: 'Bittersweet love story' }],
-  12:    [{ icon: '🌏', label: 'Epic adventure' }, { icon: '🗺️', label: 'Journey film' }],
-  14:    [{ icon: '✨', label: 'Dark fantasy' }, { icon: '🐉', label: 'Fantasy epic' }],
-  99:    [{ icon: '🎥', label: 'Documentary pick' }, { icon: '📽️', label: 'Real story film' }],
-  10765: [{ icon: '🌌', label: 'Sci-fi & fantasy' }, { icon: '🧬', label: 'Speculative drama' }],
-  10759: [{ icon: '⚔️', label: 'Action & adventure' }, { icon: '💥', label: 'High-octane series' }],
+  80:    [{ icon: 'shield-outline', label: 'Crime with moral weight' }, { icon: 'skull-outline', label: 'Dark crime thriller' }, { icon: 'alert-circle-outline', label: 'Gritty crime drama' }, { icon: 'apps-outline', label: 'Crime puzzle' }],
+  53:    [{ icon: 'warning-outline', label: 'Slow-burn psychological' }, { icon: 'pulse-outline', label: 'Paranoid thriller' }, { icon: 'eye-outline', label: 'Edge-of-seat tension' }, { icon: 'cloudy-night-outline', label: 'Atmospheric thriller' }],
+  18:    [{ icon: 'person-outline', label: 'Character-driven drama' }, { icon: 'chatbubble-outline', label: 'Emotionally heavy' }, { icon: 'heart-dislike-outline', label: 'Devastating drama' }, { icon: 'ellipse-outline', label: 'Quiet & profound' }],
+  878:   [{ icon: 'planet-outline', label: 'Mind-bending sci-fi' }, { icon: 'hardware-chip-outline', label: 'Cerebral sci-fi' }, { icon: 'flask-outline', label: 'Near-future thriller' }, { icon: 'rocket-outline', label: 'Speculative epic' }],
+  27:    [{ icon: 'eye-outline', label: 'Psychological horror' }, { icon: 'moon-outline', label: 'Late night horror' }, { icon: 'warning-outline', label: 'Slow-burn dread' }, { icon: 'pulse-outline', label: 'Body horror' }],
+  35:    [{ icon: 'happy-outline', label: 'Sharp comedy' }, { icon: 'sunny-outline', label: 'Feel-good watch' }, { icon: 'musical-notes-outline', label: 'Laugh-out-loud funny' }, { icon: 'sparkles-outline', label: 'Crowd-pleaser' }],
+  28:    [{ icon: 'flash-outline', label: 'High-stakes action' }, { icon: 'thunderstorm-outline', label: 'Adrenaline thriller' }, { icon: 'speedometer-outline', label: 'Slick action film' }, { icon: 'navigate-outline', label: 'Stylish & fast' }],
+  9648:  [{ icon: 'search-outline', label: 'Gripping mystery' }, { icon: 'apps-outline', label: 'Puzzle-box story' }, { icon: 'time-outline', label: 'Whodunit classic' }, { icon: 'key-outline', label: 'Twisty & clever' }],
+  10749: [{ icon: 'heart-outline', label: 'Romantic drama' }, { icon: 'heart-dislike-outline', label: 'Bittersweet love story' }, { icon: 'flower-outline', label: 'Sweeping romance' }, { icon: 'mail-outline', label: 'Heartfelt & tender' }],
+  12:    [{ icon: 'earth-outline', label: 'Epic adventure' }, { icon: 'map-outline', label: 'Journey film' }, { icon: 'triangle-outline', label: 'Survival epic' }, { icon: 'compass-outline', label: 'Discovery & wonder' }],
+  14:    [{ icon: 'sparkles-outline', label: 'Dark fantasy' }, { icon: 'flame-outline', label: 'Fantasy epic' }, { icon: 'color-wand-outline', label: 'Mythic storytelling' }, { icon: 'moon-outline', label: 'Gothic atmosphere' }],
+  99:    [{ icon: 'camera-outline', label: 'Documentary pick' }, { icon: 'film-outline', label: 'Real story film' }, { icon: 'eye-outline', label: 'Eye-opening doc' }, { icon: 'megaphone-outline', label: 'True story, stranger than fiction' }],
+  10765: [{ icon: 'planet-outline', label: 'Sci-fi & fantasy series' }, { icon: 'flask-outline', label: 'Speculative drama' }, { icon: 'layers-outline', label: 'Epic fantasy series' }, { icon: 'hardware-chip-outline', label: 'Future worlds' }],
+  10759: [{ icon: 'flash-outline', label: 'Action & adventure series' }, { icon: 'thunderstorm-outline', label: 'High-octane series' }, { icon: 'tv-outline', label: 'Pulse-pounding TV' }, { icon: 'speedometer-outline', label: 'Non-stop thrills' }],
 };
 
 function buildPersonalizedChips(dna: TasteDNA): { mood: Chip[]; context: Chip[] } {
+  const seed = dailySeed();
   const affinity = dna.genreAffinity ?? {};
   const topGenres = Object.entries(affinity)
     .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
+    .slice(0, 6)
     .map(([id]) => Number(id));
 
   const seen = new Set<string>();
   const mood: Chip[] = [];
 
+  // For each top genre, shuffle its chip options with today's seed before picking
   for (const id of topGenres) {
-    for (const chip of GENRE_MOOD_CHIPS[id] ?? []) {
+    const options = seededShuffle(GENRE_MOOD_CHIPS[id] ?? [], seed + id);
+    for (const chip of options) {
       if (!seen.has(chip.label) && mood.length < 5) {
         seen.add(chip.label);
         mood.push(chip);
       }
     }
   }
-  for (const chip of DEFAULT_MOOD_CHIPS) {
+  // Fill remaining slots from the shuffled mood pool
+  for (const chip of seededShuffle(MOOD_POOL, seed)) {
     if (mood.length >= 5) break;
     if (!seen.has(chip.label)) { seen.add(chip.label); mood.push(chip); }
   }
 
+  // Build context candidates from DNA profile thresholds, then shuffle + take 4
   const p = dna.profile;
-  const context: Chip[] = [];
-  if ((p?.noveltyTolerance ?? 0) > 0.40) context.push({ icon: '🔍', label: 'Overlooked gems' });
-  if ((p?.prestigeScore ?? 0) > 0.50) context.push({ icon: '🏆', label: 'Film festival picks' });
-  if ((p?.eraAffinity?.classic ?? 0) > 0.15) context.push({ icon: '🎬', label: '70s-80s classics' });
-  if ((p?.indieAffinity ?? 0) > 0.35) context.push({ icon: '🎭', label: 'Indie favourites' });
-  context.push({ icon: '🔥', label: 'Best of the decade' });
+  const contextCandidates: Chip[] = [];
+  if ((p?.noveltyTolerance ?? 0) > 0.40) contextCandidates.push({ icon: 'search-outline', label: 'Overlooked gems' }, { icon: 'earth-outline', label: 'World cinema gem' });
+  if ((p?.prestigeScore ?? 0) > 0.50) contextCandidates.push({ icon: 'trophy-outline', label: 'Film festival picks' }, { icon: 'ribbon-outline', label: 'Award winners' });
+  if ((p?.eraAffinity?.classic ?? 0) > 0.15) contextCandidates.push({ icon: 'film-outline', label: '70s-80s classics' }, { icon: 'videocam-outline', label: '90s cult classics' });
+  if ((p?.indieAffinity ?? 0) > 0.35) contextCandidates.push({ icon: 'color-palette-outline', label: 'Indie favourites' }, { icon: 'aperture-outline', label: 'Arthouse picks' });
+  // Always include some from the general pool as backup
+  contextCandidates.push(...seededShuffle(CONTEXT_POOL, seed + 999).slice(0, 6));
 
+  const seenCtx = new Set<string>();
+  const context: Chip[] = [];
+  for (const chip of seededShuffle(contextCandidates, seed + 42)) {
+    if (context.length >= 4) break;
+    if (!seenCtx.has(chip.label)) { seenCtx.add(chip.label); context.push(chip); }
+  }
+
+  return { mood: mood.slice(0, 5), context };
+}
+
+function buildDefaultChips(): { mood: Chip[]; context: Chip[] } {
+  const seed = dailySeed();
   return {
-    mood: mood.slice(0, 5),
-    context: (context.length >= 3 ? context : DEFAULT_CONTEXT_CHIPS).slice(0, 4),
+    mood: seededShuffle(MOOD_POOL, seed).slice(0, 5),
+    context: seededShuffle(CONTEXT_POOL, seed + 1).slice(0, 4),
   };
 }
 
@@ -129,8 +193,9 @@ export default function AITabScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  const [moodChips, setMoodChips] = useState<Chip[]>(DEFAULT_MOOD_CHIPS);
-  const [contextChips, setContextChips] = useState<Chip[]>(DEFAULT_CONTEXT_CHIPS);
+  const defaultChips = buildDefaultChips();
+  const [moodChips, setMoodChips] = useState<Chip[]>(defaultChips.mood);
+  const [contextChips, setContextChips] = useState<Chip[]>(defaultChips.context);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -157,12 +222,10 @@ export default function AITabScreen() {
     loadAiSeenTitles(userId).then(titles => { crossSessionSeenRef.current = titles; });
     // Load shared Taste DNA — same identity system as the home tab
     loadCachedAnyDNA().then(dna => {
-      if (dna) {
-        tasteDnaRef.current = dna;
-        const chips = buildPersonalizedChips(dna);
-        setMoodChips(chips.mood);
-        setContextChips(chips.context);
-      }
+      tasteDnaRef.current = dna ?? undefined;
+      const chips = dna ? buildPersonalizedChips(dna) : buildDefaultChips();
+      setMoodChips(chips.mood);
+      setContextChips(chips.context);
     });
     if (userId) {
       loadLatestAiSummary(userId).then(result => {
@@ -351,6 +414,11 @@ export default function AITabScreen() {
                   timestamp: new Date(),
                 }]);
                 setInput('');
+                const chips = tasteDnaRef.current
+                  ? buildPersonalizedChips(tasteDnaRef.current)
+                  : buildDefaultChips();
+                setMoodChips(chips.mood);
+                setContextChips(chips.context);
               }}
             >
               <Text style={styles.resetBtnText}>New chat</Text>
@@ -416,10 +484,10 @@ export default function AITabScreen() {
                   <TouchableOpacity
                     key={chip.label}
                     style={styles.chip}
-                    onPress={() => sendMessage(`${chip.icon} ${chip.label}`)}
+                    onPress={() => sendMessage(chip.label)}
                     activeOpacity={0.75}
                   >
-                    <Text style={styles.chipIcon}>{chip.icon}</Text>
+                    <Ionicons name={chip.icon as any} size={15} color={Colors.textSecondary} />
                     <Text style={styles.chipText}>{chip.label}</Text>
                   </TouchableOpacity>
                 ))}
@@ -435,10 +503,10 @@ export default function AITabScreen() {
                   <TouchableOpacity
                     key={chip.label}
                     style={[styles.chip, styles.chipContext]}
-                    onPress={() => sendMessage(`${chip.icon} ${chip.label}`)}
+                    onPress={() => sendMessage(chip.label)}
                     activeOpacity={0.75}
                   >
-                    <Text style={styles.chipIcon}>{chip.icon}</Text>
+                    <Ionicons name={chip.icon as any} size={15} color={Colors.textSecondary} />
                     <Text style={styles.chipText}>{chip.label}</Text>
                   </TouchableOpacity>
                 ))}
@@ -589,7 +657,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     borderColor: Colors.primary + '30',
   },
-  chipIcon: { fontSize: 16 },
   chipText: { fontSize: 13, fontWeight: '600', color: Colors.text },
 
   // ── Chat / messages ──────────────────────────────────────────────────────────

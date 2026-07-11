@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
@@ -18,20 +19,10 @@ import { usePreferencesStore } from '../../store/preferencesStore';
 import { getPosterUrl } from '../../lib/tmdb';
 import type { TMDBSearchResult } from '../../types';
 
-const GENRE_PILLS = [
-  { id: 28, name: 'Action' },
-  { id: 35, name: 'Comedy' },
-  { id: 27, name: 'Horror' },
-  { id: 18, name: 'Drama' },
-  { id: 878, name: 'Sci-Fi' },
-  { id: 10749, name: 'Romance' },
-  { id: 53, name: 'Thriller' },
-  { id: 16, name: 'Animation' },
-];
-
 function SearchResultItem({ item }: { item: TMDBSearchResult }) {
   const router = useRouter();
   const isMedia = item.media_type === 'movie' || item.media_type === 'tv';
+  const isPerson = item.media_type === 'person';
   const title = item.title ?? item.name ?? 'Unknown';
   const poster = item.poster_path ?? item.profile_path;
   const year = (item.release_date ?? item.first_air_date ?? '').slice(0, 4);
@@ -47,19 +38,31 @@ function SearchResultItem({ item }: { item: TMDBSearchResult }) {
 
   return (
     <TouchableOpacity style={styles.resultItem} onPress={handlePress} activeOpacity={0.75}>
-      <Image
-        source={{ uri: getPosterUrl(poster ?? null, 'thumb') ?? '' }}
-        style={[styles.resultPoster, item.media_type === 'person' && styles.resultAvatar]}
-        contentFit="cover"
-      />
+      <View style={styles.posterWrap}>
+        <Image
+          source={{ uri: getPosterUrl(poster ?? null, 'thumb') ?? '' }}
+          style={[styles.resultPoster, isPerson && styles.resultAvatar]}
+          contentFit="cover"
+        />
+        {isMedia && (
+          <View style={[
+            styles.typeBadge,
+            item.media_type === 'movie' ? styles.typeBadgeMovie : styles.typeBadgeTV,
+          ]}>
+            <Text style={[
+              styles.typeBadgeText,
+              item.media_type === 'movie' ? styles.typeBadgeTextMovie : styles.typeBadgeTextTV,
+            ]}>
+              {item.media_type === 'movie' ? 'Movie' : 'TV'}
+            </Text>
+          </View>
+        )}
+      </View>
       <View style={styles.resultInfo}>
         <Text style={styles.resultTitle} numberOfLines={2}>{title}</Text>
         <View style={styles.resultMeta}>
-          <Text style={styles.resultType}>
-            {item.media_type === 'movie' ? '🎬' : item.media_type === 'tv' ? '📺' : '👤'}
-            {' '}{item.media_type === 'person' ? item.known_for_department : year}
-          </Text>
-          {rating && rating > 0 && (
+          {year ? <Text style={styles.resultYear}>{year}</Text> : null}
+          {rating != null && rating > 0 && (
             <Text style={styles.resultRating}>★ {rating.toFixed(1)}</Text>
           )}
         </View>
@@ -89,65 +92,39 @@ export default function SearchScreen() {
     addRecentSearch(q);
   }, [query]);
 
-  const handleGenrePress = useCallback((genreName: string) => {
-    setQuery(genreName);
-    setActiveQuery(genreName);
-    addRecentSearch(genreName);
-  }, []);
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Search</Text>
-        <View style={styles.searchBarWrapper}>
-          <SearchBar
-            value={query}
-            onChangeText={setQuery}
-            onSubmit={handleSubmit}
-            onClear={() => setActiveQuery('')}
-          />
-        </View>
+        <SearchBar
+          value={query}
+          onChangeText={setQuery}
+          onSubmit={handleSubmit}
+          onClear={() => { setQuery(''); setActiveQuery(''); }}
+        />
       </View>
 
       {!activeQuery ? (
-        <View style={styles.discover}>
-          {/* Genre pills */}
-          <Text style={styles.sectionTitle}>Browse by Genre</Text>
-          <View style={styles.genreGrid}>
-            {GENRE_PILLS.map((g) => (
+        recentSearches.length > 0 ? (
+          <View style={styles.recentSection}>
+            <View style={styles.recentHeader}>
+              <Text style={styles.sectionTitle}>Recent</Text>
+              <TouchableOpacity onPress={clearRecentSearches}>
+                <Text style={styles.clearText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+            {recentSearches.slice(0, 8).map((q, i) => (
               <TouchableOpacity
-                key={g.id}
-                style={styles.genrePill}
-                onPress={() => handleGenrePress(g.name)}
-                activeOpacity={0.75}
+                key={i}
+                style={styles.recentItem}
+                onPress={() => { setQuery(q); setActiveQuery(q); }}
               >
-                <Text style={styles.genrePillText}>{g.name}</Text>
+                <Ionicons name="time-outline" size={14} color={Colors.textMuted} />
+                <Text style={styles.recentText}>{q}</Text>
               </TouchableOpacity>
             ))}
           </View>
-
-          {/* Recent searches */}
-          {recentSearches.length > 0 && (
-            <View style={styles.recentSection}>
-              <View style={styles.recentHeader}>
-                <Text style={styles.sectionTitle}>Recent</Text>
-                <TouchableOpacity onPress={clearRecentSearches}>
-                  <Text style={styles.clearText}>Clear</Text>
-                </TouchableOpacity>
-              </View>
-              {recentSearches.slice(0, 8).map((q, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={styles.recentItem}
-                  onPress={() => { setQuery(q); setActiveQuery(q); }}
-                >
-                  <Text style={styles.recentIcon}>🕐</Text>
-                  <Text style={styles.recentText}>{q}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
+        ) : null
       ) : isLoading ? (
         <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
       ) : (
@@ -181,43 +158,19 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: Spacing.md,
   },
-  searchBarWrapper: {},
-  discover: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-  },
   sectionTitle: {
     ...Typography.subheading,
     color: Colors.text,
-    marginBottom: Spacing.md,
-  },
-  genreGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginBottom: Spacing.xl,
-  },
-  genrePill: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  genrePillText: {
-    ...Typography.body,
-    color: Colors.text,
   },
   recentSection: {
-    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
   recentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   clearText: {
     ...Typography.caption,
@@ -230,10 +183,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-  },
-  recentIcon: {
-    fontSize: 14,
-    color: Colors.textMuted,
   },
   recentText: {
     ...Typography.body,
@@ -249,17 +198,48 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     padding: Spacing.sm,
-    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  posterWrap: {
+    position: 'relative',
   },
   resultPoster: {
-    width: 60,
-    height: 90,
+    width: 72,
+    height: 108,
     borderRadius: BorderRadius.sm,
     backgroundColor: Colors.surfaceElevated,
   },
   resultAvatar: {
-    height: 60,
-    borderRadius: 30,
+    height: 72,
+    borderRadius: 36,
+  },
+  typeBadge: {
+    position: 'absolute',
+    bottom: 5,
+    left: 5,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  typeBadgeMovie: {
+    backgroundColor: Colors.primary,
+  },
+  typeBadgeTV: {
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  typeBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  typeBadgeTextMovie: {
+    color: Colors.background,
+  },
+  typeBadgeTextTV: {
+    color: Colors.text,
   },
   resultInfo: {
     flex: 1,
@@ -276,13 +256,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  resultType: {
+  resultYear: {
     ...Typography.caption,
     color: Colors.textMuted,
   },
   resultRating: {
     ...Typography.caption,
     color: Colors.accent,
+    fontWeight: '700',
   },
   resultOverview: {
     ...Typography.caption,

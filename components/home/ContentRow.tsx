@@ -11,6 +11,7 @@ import {
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import PosterCard from '../common/PosterCard';
 import { PosterSkeleton } from '../common/LoadingSkeleton';
+import { useTraktWatched } from '../../hooks/useTraktWatched';
 import type { ContentItem } from '../../types';
 
 interface Props {
@@ -45,6 +46,7 @@ export default function ContentRow({
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
   const hasAnimated = useRef(false);
+  const { isWatched } = useTraktWatched();
 
   useEffect(() => {
     if (hasAnimated.current) return;
@@ -57,9 +59,21 @@ export default function ContentRow({
     }
   }, [isLoading, items.length]);
 
+  const itemSize = cardWidth + 10;
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({ length: itemSize, offset: Spacing.lg + itemSize * index, index }),
+    [itemSize]
+  );
+
   const renderItem = useCallback(({ item }: { item: ContentItem }) => (
-    <PosterCard item={item} width={cardWidth} showRating={showRating} showType={showType} />
-  ), [cardWidth, showRating, showType]);
+    <PosterCard
+      item={item}
+      width={cardWidth}
+      showRating={showRating}
+      showType={showType}
+      watched={isWatched(item.id, item.mediaType)}
+    />
+  ), [cardWidth, showRating, showType, isWatched]);
 
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
@@ -97,6 +111,10 @@ export default function ContentRow({
           onEndReached={onEndReached}
           onEndReachedThreshold={0.5}
           renderItem={renderItem}
+          getItemLayout={getItemLayout}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={3}
           ListFooterComponent={
             isLoadingMore ? (
               <View style={styles.loadingMore}>

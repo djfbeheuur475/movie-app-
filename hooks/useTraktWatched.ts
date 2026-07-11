@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { traktApi } from '../lib/trakt';
@@ -65,25 +66,27 @@ export function useTraktWatched() {
     retry: 1,
   });
 
-  return {
-    isWatched(id: number, type: 'movie' | 'tv'): boolean {
-      if (!hasAuth) return false;
-      return type === 'movie' ? data.movieIds.has(id) : data.showIds.has(id);
-    },
-    isEpisodeWatched(showId: number, season: number, episode: number): boolean {
-      if (!hasAuth) return false;
-      return data.episodes.get(showId)?.has(epKey(season, episode)) ?? false;
-    },
-    watchedInSeason(showId: number, season: number): number {
-      if (!hasAuth) return 0;
-      const epSet = data.episodes.get(showId);
-      if (!epSet) return 0;
-      const prefix = `${season}_`;
-      let count = 0;
-      for (const key of epSet) {
-        if (key.startsWith(prefix)) count++;
-      }
-      return count;
-    },
-  };
+  const isWatched = useCallback((id: number, type: 'movie' | 'tv'): boolean => {
+    if (!hasAuth) return false;
+    return type === 'movie' ? data.movieIds.has(id) : data.showIds.has(id);
+  }, [data, hasAuth]);
+
+  const isEpisodeWatched = useCallback((showId: number, season: number, episode: number): boolean => {
+    if (!hasAuth) return false;
+    return data.episodes.get(showId)?.has(epKey(season, episode)) ?? false;
+  }, [data, hasAuth]);
+
+  const watchedInSeason = useCallback((showId: number, season: number): number => {
+    if (!hasAuth) return 0;
+    const epSet = data.episodes.get(showId);
+    if (!epSet) return 0;
+    const prefix = `${season}_`;
+    let count = 0;
+    for (const key of epSet) {
+      if (key.startsWith(prefix)) count++;
+    }
+    return count;
+  }, [data, hasAuth]);
+
+  return { isWatched, isEpisodeWatched, watchedInSeason };
 }

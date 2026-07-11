@@ -7,6 +7,7 @@ import {
   Animated,
   Text,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, Typography } from '../../constants/theme';
 
 interface Props {
@@ -46,7 +47,7 @@ export default function SearchBar({
 
   return (
     <Animated.View style={[styles.container, { borderColor }]}>
-      <Text style={styles.searchIcon}>🔍</Text>
+      <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
       <TextInput
         style={styles.input}
         value={value}
@@ -84,9 +85,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     height: 48,
     gap: Spacing.sm,
-  },
-  searchIcon: {
-    fontSize: 16,
   },
   input: {
     flex: 1,

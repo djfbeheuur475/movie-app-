@@ -1,5 +1,12 @@
 const BASE = 'https://api.trakt.tv';
 
+export class TraktUnauthorizedError extends Error {
+  constructor() {
+    super('Trakt token expired or invalid — reconnect required');
+    this.name = 'TraktUnauthorizedError';
+  }
+}
+
 function headers(clientId: string, accessToken?: string): HeadersInit {
   const h: HeadersInit = {
     'Content-Type': 'application/json',
@@ -12,8 +19,33 @@ function headers(clientId: string, accessToken?: string): HeadersInit {
 
 async function get<T>(path: string, clientId: string, accessToken?: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { headers: headers(clientId, accessToken) });
+  if (res.status === 401) throw new TraktUnauthorizedError();
   if (!res.ok) throw new Error(`Trakt ${res.status}: ${path}`);
   return res.json();
+}
+
+export async function refreshTraktToken(
+  refreshToken: string,
+  clientId: string,
+  clientSecret = '',
+): Promise<DeviceTokenResponse | null> {
+  try {
+    const res = await fetch(`${BASE}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: 'urn:ietf:wg:oauth:2.0:oob',
+        grant_type: 'refresh_token',
+      }),
+    });
+    if (res.status === 200) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Device code OAuth ────────────────────────────────────────────────────────

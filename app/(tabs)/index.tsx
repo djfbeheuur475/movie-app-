@@ -175,8 +175,8 @@ export default function HomeScreen() {
       const results = await Promise.allSettled(
         recentIds.map(({ tmdbId, mediaType }) =>
           mediaType === 'movie'
-            ? tmdbApi.getMovieDetail(tmdbId).then(normalizeMovie)
-            : tmdbApi.getTVDetail(tmdbId).then(normalizeTVShow)
+            ? tmdbApi.getMovieBasic(tmdbId).then(normalizeMovie)
+            : tmdbApi.getTVBasic(tmdbId).then(normalizeTVShow)
         )
       );
       return results
@@ -236,7 +236,7 @@ export default function HomeScreen() {
     queryKey: ['home-new-eps', newEpsShowIds],
     queryFn: async () => {
       const results = await Promise.allSettled(
-        newEpsShowIds.map((id) => tmdbApi.getTVDetail(id))
+        newEpsShowIds.map((id) => tmdbApi.getTVBasic(id))
       );
       return results
         .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
@@ -852,13 +852,6 @@ export default function HomeScreen() {
               showRating
             />
           )}
-          {hasTrakt && (
-            <RecentlyWatchedRow
-              items={historyItems ?? []}
-              isLoading={historyLoading}
-              lastEpisodes={lastEpisodes}
-            />
-          )}
           {(newEpsLoading || newEpsThisWeek.length > 0) && (
             <NewEpsRow
               title="New Eps This Week"
@@ -908,6 +901,13 @@ export default function HomeScreen() {
                 showRating
               />
             </>
+          )}
+          {hasTrakt && (
+            <RecentlyWatchedRow
+              items={historyItems ?? []}
+              isLoading={historyLoading}
+              lastEpisodes={lastEpisodes}
+            />
           )}
         </View>
       </ScrollView>

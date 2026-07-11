@@ -38,14 +38,12 @@ function formatAirDate(dateStr: string): { dayLabel: string; dateLabel: string }
   return { dayLabel, dateLabel };
 }
 
-function NewEpsCard({ show }: { show: any }) {
+function NewEpsCard({ show, watched }: { show: any; watched: boolean }) {
   const router = useRouter();
-  const { isEpisodeWatched } = useTraktWatched();
   const ep = show.next_episode_to_air;
   if (!ep) return null;
 
   const posterUrl = getPosterUrl(show.poster_path, 'medium');
-  const watched = isEpisodeWatched(show.id, ep.season_number, ep.episode_number);
   const { dayLabel, dateLabel } = formatAirDate(ep.air_date);
   const epCode = `S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
   const isToday = dayLabel === 'TODAY';
@@ -98,10 +96,13 @@ interface Props {
   isLoading?: boolean;
 }
 
+const NEW_EPS_ITEM_SIZE = CARD_WIDTH + 10;
+
 export default function NewEpsRow({ title, shows, isLoading }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
   const hasAnimated = useRef(false);
+  const { isEpisodeWatched } = useTraktWatched();
 
   useEffect(() => {
     if (hasAnimated.current) return;
@@ -136,7 +137,15 @@ export default function NewEpsRow({ title, shows, isLoading }: Props) {
           showsHorizontalScrollIndicator={false}
           keyExtractor={(s) => String(s.id)}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => <NewEpsCard show={item} />}
+          getItemLayout={(_, index) => ({ length: NEW_EPS_ITEM_SIZE, offset: Spacing.lg + NEW_EPS_ITEM_SIZE * index, index })}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={3}
+          renderItem={({ item }) => {
+            const ep = item.next_episode_to_air;
+            const watched = ep ? isEpisodeWatched(item.id, ep.season_number, ep.episode_number) : false;
+            return <NewEpsCard show={item} watched={watched} />;
+          }}
         />
       )}
     </Animated.View>

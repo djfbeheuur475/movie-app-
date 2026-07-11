@@ -17,6 +17,8 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 
 export type Database = {
   public: {
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
     Tables: {
       profiles: {
         Row: {
@@ -34,8 +36,21 @@ export type Database = {
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at' | 'updated_at'>;
+        Insert: {
+          id: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          trakt_connected?: boolean;
+          trakt_username?: string | null;
+          trakt_client_id?: string | null;
+          trakt_access_token?: string | null;
+          trakt_refresh_token?: string | null;
+          tmdb_api_key?: string | null;
+          gemini_api_key?: string | null;
+          setup_done?: boolean;
+        };
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+        Relationships: [];
       };
       user_preferences: {
         Row: {
@@ -47,6 +62,7 @@ export type Database = {
         };
         Insert: Omit<Database['public']['Tables']['user_preferences']['Row'], 'updated_at'>;
         Update: Partial<Database['public']['Tables']['user_preferences']['Insert']>;
+        Relationships: [];
       };
       user_settings: {
         Row: {
@@ -58,8 +74,17 @@ export type Database = {
           trakt_username: string | null;
           setup_done: boolean;
         };
-        Insert: Database['public']['Tables']['user_settings']['Row'];
-        Update: Partial<Database['public']['Tables']['user_settings']['Row']>;
+        Insert: {
+          id: string;
+          tmdb_key?: string | null;
+          gemini_key?: string | null;
+          trakt_client_id?: string | null;
+          trakt_access_token?: string | null;
+          trakt_username?: string | null;
+          setup_done?: boolean;
+        };
+        Update: Partial<Database['public']['Tables']['user_settings']['Insert']>;
+        Relationships: [];
       };
       watchlist: {
         Row: {
@@ -73,6 +98,7 @@ export type Database = {
         };
         Insert: Omit<Database['public']['Tables']['watchlist']['Row'], 'id' | 'added_at'>;
         Update: Partial<Database['public']['Tables']['watchlist']['Insert']>;
+        Relationships: [];
       };
       taste_dna: {
         Row: {
@@ -91,6 +117,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database['public']['Tables']['taste_dna']['Insert']>;
+        Relationships: [];
       };
       shown_rows: {
         Row: {
@@ -103,6 +130,7 @@ export type Database = {
           shown_at?: string;
         };
         Update: Partial<Database['public']['Tables']['shown_rows']['Insert']>;
+        Relationships: [];
       };
       ai_conversations: {
         Row: {
@@ -116,6 +144,7 @@ export type Database = {
           session_at?: string;
         };
         Update: Partial<Database['public']['Tables']['ai_conversations']['Insert']>;
+        Relationships: [];
       };
     };
   };

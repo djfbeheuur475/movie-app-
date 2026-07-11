@@ -30,14 +30,14 @@ interface Props {
 function RecentCard({
   item,
   lastEp,
+  watched,
 }: {
   item: ContentItem;
   lastEp: { season: number; episode: number } | undefined;
+  watched: boolean;
 }) {
   const router = useRouter();
-  const { isWatched } = useTraktWatched();
   const posterUrl = getPosterUrl(item.posterPath, 'medium');
-  const watched = isWatched(item.id, item.mediaType);
 
   const epCode =
     item.mediaType === 'tv' && lastEp
@@ -85,10 +85,13 @@ function RecentCard({
   );
 }
 
+const RECENT_ITEM_SIZE = CARD_WIDTH + 10;
+
 export default function RecentlyWatchedRow({ items, isLoading, lastEpisodes }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
   const hasAnimated = useRef(false);
+  const { isWatched } = useTraktWatched();
 
   useEffect(() => {
     if (hasAnimated.current) return;
@@ -103,9 +106,13 @@ export default function RecentlyWatchedRow({ items, isLoading, lastEpisodes }: P
 
   const renderItem = useCallback(
     ({ item }: { item: ContentItem }) => (
-      <RecentCard item={item} lastEp={lastEpisodes.get(item.id)} />
+      <RecentCard
+        item={item}
+        lastEp={lastEpisodes.get(item.id)}
+        watched={isWatched(item.id, item.mediaType)}
+      />
     ),
-    [lastEpisodes]
+    [lastEpisodes, isWatched]
   );
 
   return (
@@ -131,6 +138,10 @@ export default function RecentlyWatchedRow({ items, isLoading, lastEpisodes }: P
           keyExtractor={(item) => `rw-${item.mediaType}-${item.id}`}
           contentContainerStyle={styles.list}
           renderItem={renderItem}
+          getItemLayout={(_, index) => ({ length: RECENT_ITEM_SIZE, offset: Spacing.lg + RECENT_ITEM_SIZE * index, index })}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={3}
         />
       )}
     </Animated.View>

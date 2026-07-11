@@ -47,3 +47,10 @@ google-play-key.json
 
 # Backend build
 backend/dist/
+
+# Local APK builds
+*.apk
+*.aab
+
+# Claude worktrees
+.claude/worktrees/

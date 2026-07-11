@@ -92,8 +92,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       .eq('id', u.id)
       .single();
 
-    // Existing user with keys: restore to device SecureStore + load watchlist + restore preferences
-    if (settings?.setup_done || settings?.tmdb_key) {
+    // Restore keys for any user who has a settings row (regardless of setup_done state)
+    if (settings) {
       await useApiKeysStore.getState().restoreFromCloud(settings);
       await useWatchlistStore.getState().syncFromCloud(u.id);
     }

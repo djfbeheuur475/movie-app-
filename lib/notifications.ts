@@ -38,9 +38,13 @@ export interface EpisodeAlert {
 }
 
 export async function scheduleEpisodeNotifications(alerts: EpisodeAlert[]) {
-  // Cancel pending scheduled notifications so we can reschedule cleanly.
-  // Deterministic identifiers (below) prevent duplicates in the delivered tray.
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  // Cancel only episode notifications — leave nextup-follow-* untouched.
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    scheduled
+      .filter((n) => n.identifier.startsWith('nextup-episode-'))
+      .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier))
+  );
 
   const now = new Date();
 
@@ -90,5 +94,62 @@ export async function scheduleEpisodeNotifications(alerts: EpisodeAlert[]) {
         },
       });
     }
+  }
+}
+
+export async function scheduleFollowNotification(
+  tmdbId: number,
+  title: string,
+  mediaType: 'movie' | 'tv',
+  airDate: string,
+): Promise<void> {
+  const identifier = `nextup-follow-${tmdbId}`;
+  const [y, m, d] = airDate.split('-').map(Number);
+  const fireAt = new Date(y, m - 1, d, 9, 0, 0, 0);
+  const now = new Date();
+  const isToday = fireAt.toDateString() === now.toDateString();
+  const alreadyPast = fireAt.getTime() <= now.getTime();
+  if (alreadyPast && !isToday) return;
+
+  const body =
+    mediaType === 'tv'
+      ? `New episode of ${title} airs today!`
+      : `${title} releases today!`;
+
+  const content: Notifications.NotificationContentInput = {
+    title: '📺 NextUp',
+    body,
+    data: { type: 'new-episode', tmdbId, mediaType },
+    ...(Platform.OS === 'android' && { channelId: 'new-episodes' }),
+  };
+
+  if (isToday && alreadyPast) {
+    await Notifications.scheduleNotificationAsync({
+      identifier,
+      content,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 5,
+        channelId: 'new-episodes',
+      },
+    });
+  } else {
+    await Notifications.scheduleNotificationAsync({
+      identifier,
+      content,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: fireAt,
+        channelId: 'new-episodes',
+      },
+    });
+  }
+}
+
+export async function cancelFollowNotification(tmdbId: number): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(`nextup-follow-${tmdbId}`);
+  } catch {
+    // notification may not exist — ignore
   }
 }

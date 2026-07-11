@@ -52,6 +52,10 @@
     "typescript": "~5.8.3"
   },
   "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "clean": "bash scripts/clean.sh",
+    "rebuild": "bash scripts/rebuild.sh",
+    "doctor": "bash scripts/doctor.sh",
     "start": "expo start",
     "android": "expo run:android",
     "android:build": "eas build --platform android --profile preview",

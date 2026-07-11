@@ -10,7 +10,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Colors, BorderRadius, Typography, Shadow } from '../../constants/theme';
 import { getPosterUrl } from '../../lib/tmdb';
-import { useTraktWatched } from '../../hooks/useTraktWatched';
 import WatchedBadge from './WatchedBadge';
 import type { ContentItem } from '../../types';
 
@@ -22,15 +21,14 @@ interface Props {
   showTitle?: boolean;
   showRating?: boolean;
   showType?: boolean;
+  watched?: boolean;
 }
 
-function PosterCard({ item, width = 120, showTitle = false, showRating = false, showType = false }: Props) {
+function PosterCard({ item, width = 120, showTitle = false, showRating = false, showType = false, watched = false }: Props) {
   const router = useRouter();
   const height = width * 1.5;
   const posterUrl = getPosterUrl(item.posterPath, width > 150 ? 'large' : 'medium');
   const scale = useSharedValue(1);
-  const { isWatched } = useTraktWatched();
-  const watched = isWatched(item.id, item.mediaType);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],

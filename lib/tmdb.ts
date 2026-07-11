@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { Config, ImageSizes } from '../constants/config';
-import { useApiKeysStore } from '../store/apiKeysStore';
 import type {
   TMDBMovie,
   TMDBTVShow,
@@ -11,16 +10,11 @@ import type {
   ContentItem,
 } from '../types';
 
+const TMDB_API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY ?? '';
+
 const tmdb = axios.create({
   baseURL: Config.TMDB_BASE_URL,
-  params: { language: 'en-US' },
-});
-
-// Inject the TMDB key from secure store on every request
-tmdb.interceptors.request.use((config) => {
-  const key = useApiKeysStore.getState().tmdbKey;
-  if (key) config.params = { ...config.params, api_key: key };
-  return config;
+  params: { language: 'en-US', api_key: TMDB_API_KEY },
 });
 
 // ─── Image helpers ────────────────────────────────────────────────────────────
@@ -341,6 +335,17 @@ export const tmdbApi = {
         : (data.results as TMDBTVShow[]),
       total_pages: data.total_pages as number,
     };
+  },
+
+  // Lightweight detail (no append_to_response) — only basic fields needed for home rows
+  getMovieBasic: async (id: number): Promise<TMDBMovie> => {
+    const { data } = await tmdb.get(`/movie/${id}`);
+    return { ...data, genre_ids: (data.genres ?? []).map((g: { id: number }) => g.id) };
+  },
+
+  getTVBasic: async (id: number): Promise<TMDBTVDetail> => {
+    const { data } = await tmdb.get(`/tv/${id}`);
+    return { ...data, genre_ids: (data.genres ?? []).map((g: { id: number }) => g.id) };
   },
 
   // TV episode detail
