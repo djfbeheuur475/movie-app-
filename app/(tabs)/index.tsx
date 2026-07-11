@@ -366,6 +366,37 @@ export default function HomeScreen() {
       });
   }, [newEpsShowDetails]);
 
+  // ─── Continue Watching ────────────────────────────────────────────────────
+  // TV shows the user has started but not finished: last watched season < total
+  // seasons, or the show is still returning. Sorted by most recently watched.
+  const continueWatchingItems: ContentItem[] = useMemo(() => {
+    if (!newEpsShowDetails?.length || lastEpisodes.size === 0) return [];
+
+    const recencyMap = new Map<number, number>();
+    for (const s of traktShows ?? []) {
+      if (s.show.ids.tmdb) {
+        recencyMap.set(s.show.ids.tmdb, new Date(s.last_watched_at).getTime());
+      }
+    }
+
+    return (newEpsShowDetails as any[])
+      .filter((show: any) => {
+        const lastEp = lastEpisodes.get(show.id);
+        if (!lastEp) return false; // watchlist-only, never played
+        return (
+          lastEp.season < show.number_of_seasons ||
+          show.status === 'Returning Series'
+        );
+      })
+      .sort((a: any, b: any) => {
+        const ra = recencyMap.get(a.id) ?? 0;
+        const rb = recencyMap.get(b.id) ?? 0;
+        return rb - ra;
+      })
+      .slice(0, 16)
+      .map(normalizeTVShow);
+  }, [newEpsShowDetails, lastEpisodes, traktShows]);
+
   // Genre affinity — play-weighted from Trakt history; falls back to stated preferences
   const genreAffinity = useMemo((): GenreAffinity => {
     const fromHistory = computeGenreAffinity(historyItems ?? [], playsMap);
@@ -1146,6 +1177,16 @@ export default function HomeScreen() {
               isLoading={trendingLoading}
               showRating
               showType
+            />
+          )}
+          {/* Continue Watching — highest intent: user is mid-series */}
+          {continueWatchingItems.length >= 2 && (
+            <ContentRow
+              title="Continue Watching"
+              subtitle="Pick up where you left off"
+              items={continueWatchingItems}
+              isLoading={false}
+              showRating
             />
           )}
           {/* Personal rows — most relevant to the user's current taste */}
