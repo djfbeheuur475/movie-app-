@@ -664,10 +664,23 @@ export default function HomeScreen() {
       )
       .filter((item) => passesQualityFilter(item, 'trending'));
     if (!qualified.length) return null;
-    // Stable pick: use first item's id as seed so hero doesn't jump on re-render
+
+    // When taste data is available, pick the trending item that best matches
+    // the user's genre affinity instead of a generic stable pick.
+    if (Object.keys(genreAffinity).length > 0) {
+      const scored = qualified.map(item => {
+        const itemGenres = new Set(item.genres ?? []);
+        const score = Object.entries(genreAffinity)
+          .reduce((s, [id, w]) => s + (itemGenres.has(Number(id)) ? w : 0), 0);
+        return { item, score };
+      });
+      return scored.sort((a, b) => b.score - a.score)[0].item;
+    }
+
+    // No history yet: stable pick from top 3 so hero doesn't jump on re-render
     const seed = (trending[0] as any).id ?? 0;
     return qualified[seed % Math.min(3, qualified.length)];
-  }, [trending]);
+  }, [trending, genreAffinity]);
 
   // Trending row — mixed movies + TV, hero item excluded to avoid duplication
   const trendingItems: ContentItem[] = useMemo(() => {
