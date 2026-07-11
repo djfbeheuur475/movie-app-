@@ -167,6 +167,10 @@ export default function HomeScreen() {
   const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
   const hasGemini = !!(geminiKey?.trim());
 
+  // Stable for the lifetime of this component mount — changes only on app restart,
+  // which gives each session a fresh template selection for thematic rows.
+  const sessionKey = useRef(Date.now()).current;
+
   // ─── Trending (hero only) ──────────────────────────────────────────────────
 
   const { data: trending, isLoading: trendingLoading, refetch: refetchTrending } = useQuery({
@@ -435,7 +439,9 @@ export default function HomeScreen() {
   );
 
   // ─── Thematic rows (Taste DNA) ────────────────────────────────────────────
-  // Temporal context drives row rotation — dateKey changes every 6h
+  // temporal is still used inside queryFn for deterministicPage + template context.
+  // sessionKey in the query key ensures each app launch gets a fresh template
+  // selection; tab navigation within the session serves the cache.
   const temporal = useMemo(() => getTemporalContext(), []);
 
   const traktMovieFingerprint = (traktMovies ?? []).slice(0, 10).map((m) => m.movie.ids.tmdb).join(',');
@@ -445,8 +451,7 @@ export default function HomeScreen() {
   const traktReady = !hasTrakt || (traktMoviesFetched && traktShowsFetched);
 
   const { data: thematicData, isLoading: thematicLoading, refetch: refetchThematic } = useQuery({
-    // Removed geminiKey from queryKey — homepage no longer calls Gemini
-    queryKey: ['thematic-rows-v10', traktMovieFingerprint, traktShowFingerprint, temporal.dateKey],
+    queryKey: ['thematic-rows-v10', traktMovieFingerprint, traktShowFingerprint, sessionKey],
     queryFn: async () => {
       const movies = traktMovies ?? [];
       const shows = traktShows ?? [];
