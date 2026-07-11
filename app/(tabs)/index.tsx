@@ -29,6 +29,12 @@ import {
 } from '../../lib/tasteDna';
 import type { GenreAffinity, TasteProfile } from '../../lib/tasteDna';
 import { selectRowTemplates, buildTasteNarration, applyProfileToTemplate, GENRE_LABELS } from '../../lib/templateSelector';
+import { isMismatchedNiche, rankItemsByProfile } from '../../lib/recommendations';
+import type { RecsContext, WatchSeed } from '../../lib/recommendations';
+import { useBecauseYouWatched } from '../../hooks/useBecauseYouWatched';
+import { useIfYouLiked } from '../../hooks/useIfYouLiked';
+import { useHiddenGems } from '../../hooks/useHiddenGems';
+import { useTrendingInGenre } from '../../hooks/useTrendingInGenre';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useAuthStore } from '../../store/authStore';
@@ -43,119 +49,6 @@ import type { ContentItem } from '../../types';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_SKELETON_HEIGHT = SCREEN_HEIGHT * 0.55;
-
-// ─── Niche content mismatch filter ───────────────────────────────────────────
-// Niche genres and eras bleed into broad queries because TMDB applies them as
-// secondary tags. Suppress content outside these niches unless the user's
-// history shows real affinity for them. Default: assume NOT interested.
-
-function isMismatchedNiche(
-  item: ContentItem,
-  templateGenreIds: number[],
-  genreAffinity: GenreAffinity,
-  profile?: TasteProfile,
-  templateEraFit?: 'classic' | 'nineties' | 'modern',
-): boolean {
-  const itemGenres = new Set(item.genres ?? []);
-  const templateGenres = new Set(templateGenreIds);
-  const hasHistory = Object.keys(genreAffinity).length > 0;
-
-  // Animation (16): filter unless the user has demonstrated real affinity (>10% of history).
-  // When no history yet, still filter — animation almost never belongs in BYW or thematic rows
-  // that didn't request it. Users who love animation will quickly cross the threshold.
-  if (itemGenres.has(16) && !templateGenres.has(16)) {
-    if (!hasHistory || (genreAffinity[16] ?? 0) < 0.10) return true;
-  }
-  // Family (10751): same logic, lower threshold
-  if (itemGenres.has(10751) && !templateGenres.has(10751)) {
-    if (!hasHistory || (genreAffinity[10751] ?? 0) < 0.08) return true;
-  }
-  // Kids TV (10762): always filter unless explicitly requested
-  if (itemGenres.has(10762) && !templateGenres.has(10762)) {
-    if (!hasHistory || (genreAffinity[10762] ?? 0) < 0.05) return true;
-  }
-
-  // Classic era (pre-1980): treat like animation — a niche the user must earn.
-  // Skip this check for templates that explicitly target classic/vintage content
-  // (new-hollywood, classic-cinema) so those rows still work for classic fans.
-  if (templateEraFit !== 'classic') {
-    const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : 2020;
-    if (year < 1980) {
-      const classicAffinity = profile?.eraAffinity.classic ?? 0;
-      // Filter unless at least 15% of their history is classic-era content
-      if (!hasHistory || classicAffinity < 0.15) return true;
-    }
-  }
-
-  return false;
-}
-
-// ─── Behavioural ranking ───────────────────────────────────────────────────────
-// Re-ranks TMDB Discover results by taste fit rather than generic quality sort.
-// Quality becomes a floor (via voteAverageGte) rather than the ranking mechanism.
-
-function rankItemsByProfile(
-  items: ContentItem[],
-  profile: TasteProfile | undefined,
-  genreAffinity: GenreAffinity,
-  tasteNeighborhood: Set<number>,
-): ContentItem[] {
-  if (!profile && Object.keys(genreAffinity).length === 0) return items;
-
-  const affinityEntries = Object.entries(genreAffinity)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 10)
-    .map(([id, w]) => [Number(id), w] as [number, number]);
-  const totalAffinity = affinityEntries.reduce((s, [, w]) => s + w, 0);
-
-  const darkness  = profile?.darknessScore    ?? 0.3;
-  const novelty   = profile?.noveltyTolerance ?? 0.3;
-  const prestige  = profile?.prestigeScore    ?? 0.5;
-  const eraAff    = profile?.eraAffinity      ?? { classic: 0.1, nineties: 0.15, modern: 0.75 };
-
-  const scored = items.map(item => {
-    const genres = new Set(item.genres ?? []);
-
-    // 1. Genre affinity match (normalised 0–1)
-    const matched = affinityEntries.reduce((s, [id, w]) => s + (genres.has(id) ? w : 0), 0);
-    const affinityScore = totalAffinity > 0 ? matched / totalAffinity : 0;
-
-    // 2. Era fit
-    const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : 2010;
-    const era = year < 1990 ? 'classic' : year < 2000 ? 'nineties' : 'modern';
-    const eraScore = eraAff[era] ?? 0.3;
-
-    // 3. Quality fit — calibrated by prestige preference so high-prestige users rank by rating,
-    //    while mainstream users aren't penalised for preferring popular films over obscure gems.
-    const rating = item.rating ?? 0;
-    const ratingNorm = Math.max(0, Math.min((rating - 6.0) / 4.0, 1));
-    const qualityScore = ratingNorm * (0.4 + prestige * 0.6);
-
-    // 4. Novelty fit — matches obscure vs popular content to user's tolerance.
-    const votes = Math.max(item.voteCount ?? 0, 1);
-    const popularityRatio = Math.min(Math.log10(votes) / Math.log10(100000), 1);
-    const noveltyScore = novelty > 0.50 ? (1 - popularityRatio) : popularityRatio;
-
-    // 5. Darkness fit
-    const isDark = genres.has(27) || genres.has(53) || genres.has(80) || genres.has(9648);
-    const darknessScore = isDark ? darkness : Math.max(0, 1 - darkness * 2);
-
-    // 6. Taste neighbourhood bonus — items TMDB recommends based on films you've actually watched.
-    const neighborBonus = tasteNeighborhood.has(item.id) ? 1 : 0;
-
-    return {
-      item,
-      score: affinityScore  * 0.30
-           + qualityScore   * 0.20
-           + eraScore       * 0.12
-           + noveltyScore   * 0.13
-           + darknessScore  * 0.10
-           + neighborBonus  * 0.15,
-    };
-  });
-
-  return scored.sort((a, b) => b.score - a.score).map(x => x.item);
-}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -673,292 +566,24 @@ export default function HomeScreen() {
     return [s1, s2] as const;
   }, [recentIds, temporal.dateKey, historyItems]);
 
-  // Prevents caching unfiltered results when historyItems loads after first fire
-  const bywAffinityKey = Object.keys(genreAffinity).length > 0 ? 'history' : 'empty';
+  // ─── Shared recommendation context ──────────────────────────────────────────
+  const recsCtx: RecsContext = {
+    traktMovies,
+    traktShows,
+    genreAffinity,
+    profile: thematicData?.profile as TasteProfile | undefined,
+    traktReady,
+  };
 
-  const { data: ifYouLikedRows } = useQuery({
-    queryKey: ['if-you-liked-v1', seed1?.tmdbId, seed2?.tmdbId, bywAffinityKey],
-    queryFn: async () => {
-      const seeds = [seed1, seed2].filter((s): s is NonNullable<typeof s> => s != null);
-      if (seeds.length === 0) return [];
-
-      const watchedSet = new Set<number>([
-        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
-        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
-      ]);
-
-      const dominant = Object.entries(genreAffinity)
-        .sort(([, a], [, b]) => b - a).slice(0, 4).map(([id]) => Number(id));
-      const profile = thematicData?.profile as TasteProfile | undefined;
-
-      async function fetchSimilarItems(seed: typeof seeds[0]): Promise<ContentItem[]> {
-        // /similar uses genre+keyword metadata; /recommendations uses collaborative filtering.
-        // Merge with /similar prioritised — more accurate for niche content.
-        const [similarRaw, recsRaw] = await Promise.all(
-          seed.mediaType === 'movie'
-            ? [
-                tmdbApi.getMovieSimilar(seed.tmdbId).then(r => r.map(normalizeMovie)),
-                tmdbApi.getMovieRecommendations(seed.tmdbId).then(r => r.map(normalizeMovie)),
-              ]
-            : [
-                tmdbApi.getTVSimilar(seed.tmdbId).then(r => r.map(normalizeTVShow)),
-                tmdbApi.getTVRecommendations(seed.tmdbId).then(r => r.map(normalizeTVShow)),
-              ]
-        );
-
-        const seen = new Set<number>();
-        const merged: ContentItem[] = [];
-        for (const item of [...similarRaw, ...recsRaw]) {
-          if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
-        }
-
-        const filtered = merged
-          .filter((item) => !watchedSet.has(item.id))
-          .filter((item) => passesQualityFilter(item, 'discover'))
-          .filter((item) => !isMismatchedNiche(item, [], genreAffinity, profile));
-
-        if (dominant.length === 0) return filtered.slice(0, 20);
-
-        const ranked = filtered.map(item => {
-          const itemGenres = new Set(item.genres ?? []);
-          const genreMatch = dominant.filter(g => itemGenres.has(g)).length / dominant.length;
-          const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : 2010;
-          const era = profile?.eraAffinity ?? { classic: 0.1, nineties: 0.15, modern: 0.75 };
-          const eraScore = year < 1990 ? era.classic : year < 2000 ? era.nineties : era.modern;
-          const prestige = profile?.prestigeScore ?? 0.5;
-          const qualityBonus = prestige > 0.45 ? Math.max(0, ((item.rating ?? 0) - 7.0) / 3.0) * prestige : 0;
-          const novelty = profile?.noveltyTolerance ?? 0.3;
-          const popularityFit = novelty > 0.5
-            ? Math.max(0, 1 - (item.voteCount ?? 0) / 8000) * 0.1
-            : Math.min((item.voteCount ?? 0) / 5000, 1) * 0.1;
-          return { item, score: genreMatch * 0.5 + eraScore * 0.15 + qualityBonus * 0.25 + popularityFit };
-        });
-
-        return ranked.sort((a, b) => b.score - a.score).map(x => x.item).slice(0, 20);
-      }
-
-      const rowData = await Promise.all(seeds.map(fetchSimilarItems));
-
-      // Cross-row dedup: an item can only appear in the first "if you liked" row it fits
-      const seenAcrossRows = new Set<number>();
-      return seeds.map((seed, i) => ({
-        seed,
-        items: rowData[i].filter(item => {
-          if (seenAcrossRows.has(item.id)) return false;
-          seenAcrossRows.add(item.id);
-          return true;
-        }),
-      })).filter(r => r.items.length >= 3);
-    },
-    enabled: !!seed1 && traktReady,
-    staleTime: 1000 * 60 * 60,
-  });
-
-  // ─── Because You Watched rows ─────────────────────────────────────────────
-  // Three independent seeds from the top of the recent-watch list, each
-  // producing its own row titled with the actual show/movie name.
-  const bywSeeds = recentIds.slice(0, 3);
-
-  const { data: bywRows } = useQuery({
-    queryKey: ['because-you-watched-v2', bywSeeds.map(s => `${s.tmdbId}-${s.mediaType}`).join(','), bywAffinityKey],
-    queryFn: async () => {
-      if (bywSeeds.length === 0) return [];
-      const watchedSet = new Set<number>([
-        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
-        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
-      ]);
-      const profile = thematicData?.profile as TasteProfile | undefined;
-      const dominant = Object.entries(genreAffinity)
-        .sort(([, a], [, b]) => b - a).slice(0, 4).map(([id]) => Number(id));
-
-      async function fetchSeedItems(seed: typeof bywSeeds[0]): Promise<ContentItem[]> {
-        const [similarRaw, recsRaw] = await Promise.all(
-          seed.mediaType === 'movie'
-            ? [
-                tmdbApi.getMovieSimilar(seed.tmdbId).then(r => r.map(normalizeMovie)),
-                tmdbApi.getMovieRecommendations(seed.tmdbId).then(r => r.map(normalizeMovie)),
-              ]
-            : [
-                tmdbApi.getTVSimilar(seed.tmdbId).then(r => r.map(normalizeTVShow)),
-                tmdbApi.getTVRecommendations(seed.tmdbId).then(r => r.map(normalizeTVShow)),
-              ]
-        );
-
-        const seen = new Set<number>([seed.tmdbId]);
-        const merged: ContentItem[] = [];
-        for (const item of [...similarRaw, ...recsRaw]) {
-          if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
-        }
-
-        const filtered = merged
-          .filter(item => !watchedSet.has(item.id))
-          .filter(item => passesQualityFilter(item, 'discover'))
-          .filter(item => !isMismatchedNiche(item, [], genreAffinity, profile));
-
-        if (dominant.length === 0) return filtered.slice(0, 20);
-
-        return filtered
-          .map(item => {
-            const itemGenres = new Set(item.genres ?? []);
-            const genreMatch = dominant.filter(g => itemGenres.has(g)).length / dominant.length;
-            const prestige = profile?.prestigeScore ?? 0.5;
-            const qualityBonus = prestige > 0.45 ? Math.max(0, ((item.rating ?? 0) - 7.0) / 3.0) * prestige : 0;
-            return { item, score: genreMatch * 0.6 + qualityBonus * 0.4 };
-          })
-          .sort((a, b) => b.score - a.score)
-          .map(x => x.item)
-          .slice(0, 20);
-      }
-
-      const rowData = await Promise.all(bywSeeds.map(fetchSeedItems));
-
-      // Cross-row dedup: a title can only appear in the first BYW row it fits
-      const seenAcrossRows = new Set<number>();
-      return bywSeeds.map((seed, i) => ({
-        seed,
-        items: rowData[i].filter(item => {
-          if (seenAcrossRows.has(item.id)) return false;
-          seenAcrossRows.add(item.id);
-          return true;
-        }),
-      })).filter(r => r.items.length >= 3);
-    },
-    enabled: bywSeeds.length > 0 && traktReady,
-    staleTime: 1000 * 60 * 60,
-  });
-
-  // ─── Trending in [Your Genre] row ────────────────────────────────────────
-  // Discovers popular recent content filtered to the user's top 2 genres.
-  // Title is dynamic: "Trending in Crime & Thriller".
-  const { data: trendingInGenreData } = useQuery({
-    queryKey: ['trending-in-genre-v1', topGenreEntries.join(',')],
-    queryFn: async () => {
-      const genreLabel = topGenreEntries
-        .map(id => GENRE_LABELS[id])
-        .filter(Boolean)
-        .map(l => l!.charAt(0).toUpperCase() + l!.slice(1))
-        .join(' & ');
-
-      const threeYearsAgo = new Date();
-      threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
-      const dateGte = threeYearsAgo.toISOString().slice(0, 10);
-
-      const watchedSet = new Set<number>([
-        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
-        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
-      ]);
-
-      const [movieResults, tvResults] = await Promise.all([
-        tmdbApi.discoverMoviesTyped({
-          genreIds: topGenreEntries,
-          sortBy: 'popularity.desc',
-          voteAverageGte: 6.5,
-          voteCountGte: 500,
-          releaseDateGte: dateGte,
-        }).then(r => r.map(normalizeMovie)),
-        tmdbApi.discoverShowsTyped({
-          genreIds: topGenreEntries,
-          sortBy: 'popularity.desc',
-          voteAverageGte: 7.0,
-          voteCountGte: 200,
-          firstAirDateGte: dateGte,
-        }).then(r => r.map(normalizeTVShow)),
-      ]);
-
-      // Interleave movies and TV to vary media type across the row
-      const seen = new Set<number>();
-      const merged: ContentItem[] = [];
-      const maxLen = Math.max(movieResults.length, tvResults.length);
-      for (let i = 0; i < maxLen; i++) {
-        if (movieResults[i] && !seen.has(movieResults[i].id)) {
-          seen.add(movieResults[i].id);
-          merged.push(movieResults[i]);
-        }
-        if (tvResults[i] && !seen.has(tvResults[i].id)) {
-          seen.add(tvResults[i].id);
-          merged.push(tvResults[i]);
-        }
-      }
-
-      const profile = thematicData?.profile as TasteProfile | undefined;
-      const items = merged
-        .filter(item => !watchedSet.has(item.id))
-        .filter(item => passesQualityFilter(item, 'discover'))
-        .filter(item => !isMismatchedNiche(item, topGenreEntries, genreAffinity, profile))
-        .slice(0, 24);
-
-      return { title: `Trending in ${genreLabel || 'Your Genre'}`, items };
-    },
-    enabled: topGenreEntries.length > 0 && traktReady,
-    staleTime: 1000 * 60 * 60 * 4,
-  });
-
-  // ─── Hidden Gems For You ─────────────────────────────────────────────────
-  // Low vote count (floor 300, ceiling tuned to noveltyTolerance) + high quality (≥7.5).
-  // Uses top 4 genres for a broader pool and skips the niche mismatch filter so
-  // foreign, indie, and unusual content can surface freely.
-  const { data: hiddenGemsData } = useQuery({
-    queryKey: ['hidden-gems-v1', topGenreEntries.join(','), bywAffinityKey],
-    queryFn: async () => {
-      const profile = thematicData?.profile as TasteProfile | undefined;
-      const novelty = profile?.noveltyTolerance ?? 0.3;
-
-      // Adventurous users get a tighter upper cap — more obscure picks
-      const voteCountMax = novelty > 0.60 ? 1500 : novelty > 0.35 ? 3000 : 5000;
-
-      // Classic-affinity users get a wider date range to include older gems
-      const classicAffinity = profile?.eraAffinity?.classic ?? 0;
-      const yearFrom = classicAffinity > 0.20 ? 1970 : 2000;
-      const dateGte = `${yearFrom}-01-01`;
-
-      // Top 4 genres for a broader but still relevant candidate pool
-      const gemGenreIds = Object.entries(genreAffinity)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 4)
-        .map(([id]) => Number(id));
-
-      if (gemGenreIds.length === 0) return { items: [] };
-
-      const watchedSet = new Set<number>([
-        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
-        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
-      ]);
-
-      // Fetch 2 pages each — the voteCount cap filters out ~half the raw results
-      const [mP1, mP2, tvP1, tvP2] = await Promise.all([
-        tmdbApi.discoverMoviesTyped({ genreIds: gemGenreIds, sortBy: 'vote_average.desc', voteAverageGte: 7.5, voteCountGte: 300, releaseDateGte: dateGte, page: 1 }).then(r => r.map(normalizeMovie)),
-        tmdbApi.discoverMoviesTyped({ genreIds: gemGenreIds, sortBy: 'vote_average.desc', voteAverageGte: 7.5, voteCountGte: 300, releaseDateGte: dateGte, page: 2 }).then(r => r.map(normalizeMovie)),
-        tmdbApi.discoverShowsTyped({ genreIds: gemGenreIds, sortBy: 'vote_average.desc', voteAverageGte: 7.5, voteCountGte: 200, firstAirDateGte: dateGte, page: 1 }).then(r => r.map(normalizeTVShow)),
-        tmdbApi.discoverShowsTyped({ genreIds: gemGenreIds, sortBy: 'vote_average.desc', voteAverageGte: 7.5, voteCountGte: 200, firstAirDateGte: dateGte, page: 2 }).then(r => r.map(normalizeTVShow)),
-      ]);
-
-      // Client-side voteCount ceiling keeps mainstream hits out
-      const gemsMovies = [...mP1, ...mP2].filter(i => (i.voteCount ?? 0) <= voteCountMax);
-      const gemsTV = [...tvP1, ...tvP2].filter(i => (i.voteCount ?? 0) <= voteCountMax);
-
-      // Interleave to vary media type
-      const seen = new Set<number>();
-      const merged: ContentItem[] = [];
-      const maxLen = Math.max(gemsMovies.length, gemsTV.length);
-      for (let i = 0; i < maxLen; i++) {
-        if (gemsMovies[i] && !seen.has(gemsMovies[i].id)) { seen.add(gemsMovies[i].id); merged.push(gemsMovies[i]); }
-        if (gemsTV[i] && !seen.has(gemsTV[i].id)) { seen.add(gemsTV[i].id); merged.push(gemsTV[i]); }
-      }
-
-      const items = merged
-        .filter(item => !watchedSet.has(item.id))
-        .filter(item => passesQualityFilter(item, 'discover'))
-        .slice(0, 24);
-
-      return { items };
-    },
-    enabled: Object.keys(genreAffinity).length > 0 && traktReady,
-    staleTime: 1000 * 60 * 60 * 6,
-  });
+  // ─── Row module hooks ─────────────────────────────────────────────────────────
+  const bywSeeds: WatchSeed[] = recentIds.slice(0, 3);
+  const { data: bywRows } = useBecauseYouWatched(bywSeeds, recsCtx);
+  const { data: ifYouLikedRows } = useIfYouLiked(seed1, seed2, recsCtx);
+  const { data: trendingInGenreData } = useTrendingInGenre(topGenreEntries, recsCtx);
+  const { data: hiddenGemsData } = useHiddenGems(topGenreEntries, recsCtx);
 
   // ─── Watchlist-seeded row ─────────────────────────────────────────────────
-  // Explicit intent: the user bookmarked this — find similar content they'd also want.
-  // Seed = most recently added watchlist item not already watched.
+  const bywAffinityKey = Object.keys(genreAffinity).length > 0 ? 'history' : 'empty';
   const watchlistSeed = useMemo(() => {
     if (!watchlistItems.length) return null;
     const watchedSet = new Set<number>([
