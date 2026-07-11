@@ -35,6 +35,7 @@ import { useBecauseYouWatched } from '../../hooks/useBecauseYouWatched';
 import { useIfYouLiked } from '../../hooks/useIfYouLiked';
 import { useHiddenGems } from '../../hooks/useHiddenGems';
 import { useTrendingInGenre } from '../../hooks/useTrendingInGenre';
+import { useWatchlistSeed } from '../../hooks/useWatchlistSeed';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useAuthStore } from '../../store/authStore';
@@ -583,55 +584,7 @@ export default function HomeScreen() {
   const { data: hiddenGemsData } = useHiddenGems(topGenreEntries, recsCtx);
 
   // ─── Watchlist-seeded row ─────────────────────────────────────────────────
-  const bywAffinityKey = Object.keys(genreAffinity).length > 0 ? 'history' : 'empty';
-  const watchlistSeed = useMemo(() => {
-    if (!watchlistItems.length) return null;
-    const watchedSet = new Set<number>([
-      ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
-      ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
-    ]);
-    return [...watchlistItems]
-      .sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime())
-      .find(item => !watchedSet.has(item.tmdb_id)) ?? null;
-  }, [watchlistItems, traktMovies, traktShows]);
-
-  const { data: watchlistSeedItems } = useQuery({
-    queryKey: ['watchlist-seed-v1', watchlistSeed?.tmdb_id, watchlistSeed?.media_type, bywAffinityKey],
-    queryFn: async () => {
-      if (!watchlistSeed) return [];
-      const watchedSet = new Set<number>([
-        ...(traktMovies ?? []).map((m) => m.movie.ids.tmdb).filter((id): id is number => !!id),
-        ...(traktShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id),
-      ]);
-      const profile = thematicData?.profile as TasteProfile | undefined;
-
-      const [similarRaw, recsRaw] = await Promise.all(
-        watchlistSeed.media_type === 'movie'
-          ? [
-              tmdbApi.getMovieSimilar(watchlistSeed.tmdb_id).then(r => r.map(normalizeMovie)),
-              tmdbApi.getMovieRecommendations(watchlistSeed.tmdb_id).then(r => r.map(normalizeMovie)),
-            ]
-          : [
-              tmdbApi.getTVSimilar(watchlistSeed.tmdb_id).then(r => r.map(normalizeTVShow)),
-              tmdbApi.getTVRecommendations(watchlistSeed.tmdb_id).then(r => r.map(normalizeTVShow)),
-            ]
-      );
-
-      const seen = new Set<number>([watchlistSeed.tmdb_id]);
-      const merged: ContentItem[] = [];
-      for (const item of [...similarRaw, ...recsRaw]) {
-        if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
-      }
-
-      return merged
-        .filter(item => !watchedSet.has(item.id))
-        .filter(item => passesQualityFilter(item, 'discover'))
-        .filter(item => !isMismatchedNiche(item, [], genreAffinity, profile))
-        .slice(0, 20);
-    },
-    enabled: !!watchlistSeed,
-    staleTime: 1000 * 60 * 60,
-  });
+  const { seed: watchlistSeed, items: watchlistSeedItems } = useWatchlistSeed(watchlistItems, recsCtx);
 
   // ─── Cross-row dedup (render-time) ────────────────────────────────────────
   // Personal rows take priority over thematic editorial rows.
