@@ -194,7 +194,12 @@ export default function DetailHero({
         <View style={styles.buttonRow}>
           {trailer ? (
             <TouchableOpacity
-              style={[styles.iconBtn, { flex: 0, width: ACTION_COL_WIDTH }]}
+              style={[
+                styles.iconBtn,
+                showFollow
+                  ? { flex: 0, width: ACTION_COL_WIDTH }
+                  : { flex: 1 },
+              ]}
               onPress={openTrailer}
               activeOpacity={0.8}
             >
