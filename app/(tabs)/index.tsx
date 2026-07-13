@@ -115,7 +115,7 @@ export default function HomeScreen() {
     return map;
   }, [traktMovies, traktShows]);
 
-  // Merge movies + shows, sort by play-count × recency, deduplicate, take top 12
+  // Merge movies + shows, sort by play-count × recency, deduplicate, take top 30
   const recentIds = useMemo(() => {
     const recencyWeight = (watchedAt: string) => {
       const days = (Date.now() - new Date(watchedAt).getTime()) / 86400000;
@@ -147,7 +147,7 @@ export default function HomeScreen() {
         seen.add(tmdbId);
         return true;
       })
-      .slice(0, 12);
+      .slice(0, 30);
   }, [traktMovies, traktShows]);
 
   const { data: historyItems, isLoading: historyLoading } = useQuery({

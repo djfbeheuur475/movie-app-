@@ -544,10 +544,10 @@ export function computeContentFingerprint(
 ): string {
   const movieIds = [...movies]
     .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
-    .slice(0, 15).map(m => m.movie.ids.tmdb ?? 0).join(',');
+    .slice(0, 30).map(m => m.movie.ids.tmdb ?? 0).join(',');
   const showIds = [...shows]
     .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
-    .slice(0, 10).map(s => s.show.ids.tmdb ?? 0).join(',');
+    .slice(0, 20).map(s => s.show.ids.tmdb ?? 0).join(',');
   return `${movieIds}|${showIds}`;
 }
 
@@ -855,12 +855,12 @@ export async function generateTasteDNA(
   const sortedMovies = [...movies]
     .map(m => ({ ...m, _score: m.plays * recencyWeight(m.last_watched_at) }))
     .sort((a, b) => b._score - a._score)
-    .slice(0, 40);
+    .slice(0, 80);
 
   const sortedShows = [...shows]
     .map(s => ({ ...s, _score: s.plays * recencyWeight(s.last_watched_at) }))
     .sort((a, b) => b._score - a._score)
-    .slice(0, 30);
+    .slice(0, 60);
 
   const recentMovies = sortedMovies
     .map(m => m.plays > 1 ? `${m.movie.title} (${m.movie.year}) [${m.plays}×]` : `${m.movie.title} (${m.movie.year})`)

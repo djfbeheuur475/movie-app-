@@ -60,10 +60,10 @@ function buildSystemPrompt(
 
   const sortedMovies = [...watchedMovies].sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime());
   const sortedShows = [...watchedShows].sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime());
-  const recentMovies = sortedMovies.slice(0, 30).map((m) => `${m.movie.title} (${m.movie.year})`).join(", ");
-  const recentShows = sortedShows.slice(0, 20).map((s) => `${s.show.title} (${s.show.year})`).join(", ");
-  const lovedMovies = [...watchedMovies].filter((m) => m.plays > 1).sort((a, b) => b.plays - a.plays).slice(0, 8).map((m) => `${m.movie.title} (×${m.plays})`).join(", ");
-  const lovedShows = [...watchedShows].sort((a, b) => Math.min(b.plays, 20) - Math.min(a.plays, 20)).slice(0, 6).map((s) => `${s.show.title} (${Math.min(s.plays, 20)} eps)`).join(", ");
+  const recentMovies = sortedMovies.slice(0, 60).map((m) => `${m.movie.title} (${m.movie.year})`).join(", ");
+  const recentShows = sortedShows.slice(0, 50).map((s) => `${s.show.title} (${s.show.year})`).join(", ");
+  const lovedMovies = [...watchedMovies].filter((m) => m.plays > 1).sort((a, b) => b.plays - a.plays).slice(0, 15).map((m) => `${m.movie.title} (×${m.plays})`).join(", ");
+  const lovedShows = [...watchedShows].sort((a, b) => Math.min(b.plays, 20) - Math.min(a.plays, 20)).slice(0, 12).map((s) => `${s.show.title} (${Math.min(s.plays, 20)} eps)`).join(", ");
   const hasHistory = !!(recentMovies || recentShows);
 
   let genreDnaSection = "";
