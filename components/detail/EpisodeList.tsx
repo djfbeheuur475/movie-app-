@@ -48,6 +48,7 @@ export default function EpisodeList({ showId, seasons, posterPath, imdbId, showN
 
   const episodes = data?.episodes ?? [];
   const fallbackPoster = getPosterUrl(posterPath, 'thumb');
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   return (
     <View style={styles.container}>
@@ -104,20 +105,21 @@ export default function EpisodeList({ showId, seasons, posterPath, imdbId, showN
             const epCode = `S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
             const airDate = formatDate(ep.air_date);
             const runtime = ep.runtime ? `${ep.runtime}m` : null;
+            const isUnaired = !!ep.air_date && ep.air_date > todayStr;
 
             return (
               <TouchableOpacity
                 key={ep.id}
-                style={styles.episodeCard}
-                activeOpacity={0.7}
-                onPress={() =>
+                style={[styles.episodeCard, isUnaired && styles.episodeCardUnaired]}
+                activeOpacity={isUnaired ? 1 : 0.7}
+                onPress={isUnaired ? undefined : () =>
                   router.push(
                     `/episode?showId=${showId}&season=${ep.season_number}&episode=${ep.episode_number}&imdbId=${imdbId ?? ''}&showName=${encodeURIComponent(showName ?? '')}`
                   )
                 }
               >
                 {/* Thumbnail */}
-                <View style={styles.still}>
+                <View style={[styles.still, isUnaired && styles.stillUnaired]}>
                   {stillUrl ? (
                     <Image
                       source={{ uri: stillUrl }}
@@ -128,12 +130,12 @@ export default function EpisodeList({ showId, seasons, posterPath, imdbId, showN
                   ) : (
                     <View style={styles.stillPlaceholder} />
                   )}
-                  {ep.vote_average > 0 && (
+                  {!isUnaired && ep.vote_average > 0 && (
                     <View style={styles.ratingBadge}>
                       <Text style={styles.ratingText}>★ {ep.vote_average.toFixed(1)}</Text>
                     </View>
                   )}
-                  {isEpisodeWatched(showId, ep.season_number, ep.episode_number) && (
+                  {!isUnaired && isEpisodeWatched(showId, ep.season_number, ep.episode_number) && (
                     <WatchedBadge />
                   )}
                 </View>
@@ -141,14 +143,14 @@ export default function EpisodeList({ showId, seasons, posterPath, imdbId, showN
                 {/* Info */}
                 <View style={styles.info}>
                   <View style={styles.infoTop}>
-                    <Text style={styles.epCode}>{epCode}</Text>
+                    <Text style={[styles.epCode, isUnaired && styles.epCodeUnaired]}>{epCode}</Text>
                     {runtime && <Text style={styles.runtime}>{runtime}</Text>}
                   </View>
-                  <Text style={styles.epName} numberOfLines={2}>
+                  <Text style={[styles.epName, isUnaired && styles.textUnaired]} numberOfLines={2}>
                     {ep.name ?? `Episode ${ep.episode_number}`}
                   </Text>
                   {airDate ? <Text style={styles.airDate}>{airDate}</Text> : null}
-                  {ep.overview ? (
+                  {ep.overview && !isUnaired ? (
                     <Text style={styles.overview} numberOfLines={3}>
                       {ep.overview}
                     </Text>
@@ -235,6 +237,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
+  episodeCardUnaired: {
+    opacity: 0.4,
+  },
+
+  stillUnaired: {
+    opacity: 0.6,
+  },
 
   // Still image
   still: {
@@ -285,6 +294,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.primary,
     letterSpacing: 0.3,
+  },
+  epCodeUnaired: {
+    color: Colors.textMuted,
+  },
+  textUnaired: {
+    color: Colors.textMuted,
   },
   runtime: {
     fontSize: 10,
