@@ -34,6 +34,7 @@ interface Props {
   isInWatchlist?: boolean;
   isFollowed?: boolean;
   onFollowToggle?: () => void;
+  showFollow?: boolean;
 }
 
 export default function DetailHero({
@@ -44,6 +45,7 @@ export default function DetailHero({
   isInWatchlist,
   isFollowed,
   onFollowToggle,
+  showFollow = true,
 }: Props) {
   const title = isMovie(detail) ? detail.title : (detail as TMDBTVDetail).name;
   const releaseDate = isMovie(detail) ? detail.release_date : (detail as TMDBTVDetail).first_air_date;
@@ -167,20 +169,22 @@ export default function DetailHero({
               {isInWatchlist ? 'Saved' : 'Save'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.iconBtn, isFollowed && styles.iconBtnActive]}
-            onPress={onFollowToggle}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={isFollowed ? 'notifications' : 'notifications-outline'}
-              size={20}
-              color={isFollowed ? Colors.primary : Colors.textMuted}
-            />
-            <Text style={[styles.iconBtnLabel, isFollowed && styles.iconBtnLabelActive]}>
-              {isFollowed ? 'Following' : 'Follow'}
-            </Text>
-          </TouchableOpacity>
+          {showFollow && (
+            <TouchableOpacity
+              style={[styles.iconBtn, isFollowed && styles.iconBtnActive]}
+              onPress={onFollowToggle}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={isFollowed ? 'notifications' : 'notifications-outline'}
+                size={20}
+                color={isFollowed ? Colors.primary : Colors.textMuted}
+              />
+              <Text style={[styles.iconBtnLabel, isFollowed && styles.iconBtnLabelActive]}>
+                {isFollowed ? 'Following' : 'Follow'}
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.iconBtn} onPress={handleShare} activeOpacity={0.8}>
             <Ionicons name="share-social-outline" size={20} color={Colors.textMuted} />
             <Text style={styles.iconBtnLabel}>Share</Text>

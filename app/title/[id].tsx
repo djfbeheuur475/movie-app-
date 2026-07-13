@@ -146,6 +146,7 @@ export default function TitleDetailScreen() {
           isInWatchlist={inWatchlist}
           isFollowed={followActive}
           onFollowToggle={handleFollowToggle}
+          showFollow={mediaType === 'tv' || !!getNextAirDate(detail)}
         />
 
         <CastList
