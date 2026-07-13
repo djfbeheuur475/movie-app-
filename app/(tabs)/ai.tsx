@@ -172,21 +172,35 @@ async function searchTitleWithFallback(
   title: string,
   year: number | undefined,
   prefer: 'movie' | 'tv',
-): Promise<ContentItem | null> {
+): Promise<{ item: ContentItem; aiTitle: string } | null> {
   const THRESHOLD = 0.5;
   try {
     if (prefer === 'movie') {
       const movies = await tmdbApi.searchMovies(title, 1, year);
-      if (movies[0] && titleMatch(movies[0].title, title) >= THRESHOLD) return normalizeMovie(movies[0]);
+      if (movies[0] && titleMatch(movies[0].title, title) >= THRESHOLD) return { item: normalizeMovie(movies[0]), aiTitle: title };
       const shows = await tmdbApi.searchTVShows(title, 1, year);
-      if (shows[0] && titleMatch(shows[0].name, title) >= THRESHOLD) return normalizeTVShow(shows[0]);
-      return movies[0] ? normalizeMovie(movies[0]) : null;
+      if (shows[0] && titleMatch(shows[0].name, title) >= THRESHOLD) return { item: normalizeTVShow(shows[0]), aiTitle: title };
+      // Year filter may be too strict — retry without year
+      if (year) {
+        const mny = await tmdbApi.searchMovies(title, 1);
+        if (mny[0] && titleMatch(mny[0].title, title) >= THRESHOLD) return { item: normalizeMovie(mny[0]), aiTitle: title };
+        const sny = await tmdbApi.searchTVShows(title, 1);
+        if (sny[0] && titleMatch(sny[0].name, title) >= THRESHOLD) return { item: normalizeTVShow(sny[0]), aiTitle: title };
+      }
+      return movies[0] ? { item: normalizeMovie(movies[0]), aiTitle: title } : null;
     } else {
       const shows = await tmdbApi.searchTVShows(title, 1, year);
-      if (shows[0] && titleMatch(shows[0].name, title) >= THRESHOLD) return normalizeTVShow(shows[0]);
+      if (shows[0] && titleMatch(shows[0].name, title) >= THRESHOLD) return { item: normalizeTVShow(shows[0]), aiTitle: title };
       const movies = await tmdbApi.searchMovies(title, 1, year);
-      if (movies[0] && titleMatch(movies[0].title, title) >= THRESHOLD) return normalizeMovie(movies[0]);
-      return shows[0] ? normalizeTVShow(shows[0]) : null;
+      if (movies[0] && titleMatch(movies[0].title, title) >= THRESHOLD) return { item: normalizeMovie(movies[0]), aiTitle: title };
+      // Year filter may be too strict — retry without year
+      if (year) {
+        const sny = await tmdbApi.searchTVShows(title, 1);
+        if (sny[0] && titleMatch(sny[0].name, title) >= THRESHOLD) return { item: normalizeTVShow(sny[0]), aiTitle: title };
+        const mny = await tmdbApi.searchMovies(title, 1);
+        if (mny[0] && titleMatch(mny[0].title, title) >= THRESHOLD) return { item: normalizeMovie(mny[0]), aiTitle: title };
+      }
+      return shows[0] ? { item: normalizeTVShow(shows[0]), aiTitle: title } : null;
     }
   } catch {
     return null;
@@ -407,14 +421,25 @@ export default function AITabScreen() {
         )),
       ]);
 
-      const allMovies = movieSearchRes.filter(fulfilled).map(r => r.value).filter((v): v is ContentItem => !!v);
-      const allShows = showSearchRes.filter(fulfilled).map(r => r.value).filter((v): v is ContentItem => !!v);
+      type SearchResult = { item: ContentItem; aiTitle: string };
+      const allResults: SearchResult[] = [
+        ...movieSearchRes.filter(fulfilled).map(r => r.value).filter((v): v is SearchResult => !!v),
+        ...showSearchRes.filter(fulfilled).map(r => r.value).filter((v): v is SearchResult => !!v),
+      ];
+      const allItems = allResults.map(r => r.item);
 
-      const posterItems = [...allMovies, ...allShows]
+      // Map from AI-provided title → ContentItem so the bubble can link even when
+      // the TMDB title differs from what the AI wrote (e.g. "Forbrydelsen" vs "The Killing")
+      const aiTitleMap: Record<string, ContentItem> = {};
+      for (const { item, aiTitle } of allResults) {
+        aiTitleMap[aiTitle.toLowerCase()] = item;
+      }
+
+      const posterItems = allItems
         .filter(item => !!item.posterPath && PREFERRED_LANGS.has(item.originalLanguage ?? 'en'))
         .slice(0, 6);
       const posterIds = new Set(posterItems.map(i => i.id));
-      const linkOnlyItems = [...allMovies, ...allShows].filter(i => !posterIds.has(i.id));
+      const linkOnlyItems = allItems.filter(i => !posterIds.has(i.id));
       const recItems: ContentItem[] = [...posterItems, ...linkOnlyItems];
 
       const newTitles = [...movieTitles, ...showTitles];
@@ -424,10 +449,10 @@ export default function AITabScreen() {
         saveAiSeenTitles(newTitles, crossSessionSeenRef.current);
       }
 
-      // Replace placeholder with clean parsed reply + recommendations
+      // Replace placeholder with clean parsed reply + recommendations + AI title map
       setMessages(prev => prev.map(m =>
         m.id === assistantId
-          ? { ...m, content: reply, recommendations: recItems }
+          ? { ...m, content: reply, recommendations: recItems, aiTitleMap }
           : m
       ));
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);

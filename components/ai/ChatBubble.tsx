@@ -20,33 +20,45 @@ function cleanContent(text: string): string {
 function LinkedReplyText({
   text,
   recommendations,
+  aiTitleMap,
   isUser,
 }: {
   text: string;
   recommendations?: ContentItem[];
+  aiTitleMap?: Record<string, ContentItem>;
   isUser: boolean;
 }) {
   const router = useRouter();
   const cleaned = cleanContent(text);
 
-  if (!recommendations?.length) {
+  if (!recommendations?.length && !aiTitleMap) {
     return <Text style={[styles.text, isUser && styles.userText]}>{cleaned}</Text>;
   }
 
-  // Sort longest-title-first so "Breaking Bad" matches before "Bad" if there were overlap
-  const sorted = [...recommendations].sort((a, b) => b.title.length - a.title.length);
-  const pattern = sorted
-    .map((item) => item.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('|');
+  // Build the set of linkable titles from both AI-provided titles (aiTitleMap keys)
+  // and TMDB titles (recommendations). AI titles take priority since they match the text.
+  const linkMap = new Map<string, ContentItem>();
+  for (const item of (recommendations ?? [])) {
+    linkMap.set(item.title.toLowerCase(), item);
+  }
+  for (const [aiTitle, item] of Object.entries(aiTitleMap ?? {})) {
+    linkMap.set(aiTitle, item);
+  }
+
+  if (linkMap.size === 0) {
+    return <Text style={[styles.text, isUser && styles.userText]}>{cleaned}</Text>;
+  }
+
+  // Sort longest-title-first so "Breaking Bad" matches before "Bad"
+  const titles = [...linkMap.keys()].sort((a, b) => b.length - a.length);
+  const pattern = titles.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   const regex = new RegExp(`(${pattern})`, 'gi');
   const parts = cleaned.split(regex);
 
   return (
     <Text style={[styles.text, isUser && styles.userText]}>
       {parts.map((part, i) => {
-        const match = recommendations.find(
-          (item) => item.title.toLowerCase() === part.toLowerCase()
-        );
+        const match = linkMap.get(part.toLowerCase());
         if (match) {
           return (
             <Text
@@ -75,6 +87,7 @@ export default function ChatBubble({ message }: Props) {
         <LinkedReplyText
           text={message.content}
           recommendations={message.recommendations}
+          aiTitleMap={message.aiTitleMap}
           isUser={isUser}
         />
         {message.recommendations && message.recommendations.length > 0 && (

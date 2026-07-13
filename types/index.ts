@@ -271,6 +271,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   recommendations?: ContentItem[];
+  aiTitleMap?: Record<string, ContentItem>;
 }
 
 export interface UserProfile {
