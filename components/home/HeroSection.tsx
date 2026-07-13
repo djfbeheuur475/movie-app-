@@ -40,12 +40,11 @@ function HeroSlide({ item, onPress }: { item: ContentItem; onPress: () => void }
         style={StyleSheet.absoluteFill}
       />
       <View style={styles.content}>
-        <View style={styles.featuredBadge}>
-          <Text style={styles.featuredText}>
-            FEATURED {item.mediaType === 'tv' ? 'SERIES' : 'FILM'}
-            {item.rating > 0 ? `  ★ ${item.rating.toFixed(1)}` : ''}
-          </Text>
-        </View>
+        {item.rating > 0 && (
+          <View style={styles.featuredBadge}>
+            <Text style={styles.featuredText}>★ {item.rating.toFixed(1)}</Text>
+          </View>
+        )}
         <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
         {item.overview ? (
           <Text style={styles.overview} numberOfLines={2}>{item.overview}</Text>
