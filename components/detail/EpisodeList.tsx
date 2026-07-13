@@ -111,15 +111,15 @@ export default function EpisodeList({ showId, seasons, posterPath, imdbId, showN
               <TouchableOpacity
                 key={ep.id}
                 style={[styles.episodeCard, isUnaired && styles.episodeCardUnaired]}
-                activeOpacity={isUnaired ? 1 : 0.7}
-                onPress={isUnaired ? undefined : () =>
+                activeOpacity={0.7}
+                onPress={() =>
                   router.push(
                     `/episode?showId=${showId}&season=${ep.season_number}&episode=${ep.episode_number}&imdbId=${imdbId ?? ''}&showName=${encodeURIComponent(showName ?? '')}`
                   )
                 }
               >
                 {/* Thumbnail */}
-                <View style={[styles.still, isUnaired && styles.stillUnaired]}>
+                <View style={styles.still}>
                   {stillUrl ? (
                     <Image
                       source={{ uri: stillUrl }}
@@ -130,12 +130,12 @@ export default function EpisodeList({ showId, seasons, posterPath, imdbId, showN
                   ) : (
                     <View style={styles.stillPlaceholder} />
                   )}
-                  {!isUnaired && ep.vote_average > 0 && (
+                  {ep.vote_average > 0 && (
                     <View style={styles.ratingBadge}>
                       <Text style={styles.ratingText}>★ {ep.vote_average.toFixed(1)}</Text>
                     </View>
                   )}
-                  {!isUnaired && isEpisodeWatched(showId, ep.season_number, ep.episode_number) && (
+                  {isEpisodeWatched(showId, ep.season_number, ep.episode_number) && (
                     <WatchedBadge />
                   )}
                 </View>
@@ -143,14 +143,14 @@ export default function EpisodeList({ showId, seasons, posterPath, imdbId, showN
                 {/* Info */}
                 <View style={styles.info}>
                   <View style={styles.infoTop}>
-                    <Text style={[styles.epCode, isUnaired && styles.epCodeUnaired]}>{epCode}</Text>
+                    <Text style={styles.epCode}>{epCode}</Text>
                     {runtime && <Text style={styles.runtime}>{runtime}</Text>}
                   </View>
-                  <Text style={[styles.epName, isUnaired && styles.textUnaired]} numberOfLines={2}>
+                  <Text style={styles.epName} numberOfLines={2}>
                     {ep.name ?? `Episode ${ep.episode_number}`}
                   </Text>
                   {airDate ? <Text style={styles.airDate}>{airDate}</Text> : null}
-                  {ep.overview && !isUnaired ? (
+                  {ep.overview ? (
                     <Text style={styles.overview} numberOfLines={3}>
                       {ep.overview}
                     </Text>
@@ -238,11 +238,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   episodeCardUnaired: {
-    opacity: 0.4,
-  },
-
-  stillUnaired: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
 
   // Still image
@@ -294,12 +290,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.primary,
     letterSpacing: 0.3,
-  },
-  epCodeUnaired: {
-    color: Colors.textMuted,
-  },
-  textUnaired: {
-    color: Colors.textMuted,
   },
   runtime: {
     fontSize: 10,
