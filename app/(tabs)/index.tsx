@@ -304,6 +304,19 @@ export default function HomeScreen() {
     return computeGenreAffinity(recentItems, uniformPlays);
   }, [historyItems, recentIds]);
 
+  // Dominant language — if ≥65% of history items share a language, use it to filter
+  // discover results so non-relevant foreign content (K-dramas, anime) doesn't appear.
+  const dominantLanguage = useMemo((): string | null => {
+    if (!historyItems?.length || historyItems.length < 5) return null;
+    const counts: Record<string, number> = {};
+    for (const item of historyItems) {
+      const lang = item.originalLanguage ?? 'en';
+      counts[lang] = (counts[lang] ?? 0) + 1;
+    }
+    const [[topLang, topCount]] = Object.entries(counts).sort(([, a], [, b]) => b - a);
+    return topCount / historyItems.length >= 0.65 ? topLang : null;
+  }, [historyItems]);
+
   // Top 2 genre IDs by affinity weight — used for the Trending in [Genre] row
   const topGenreEntries = useMemo(() =>
     Object.entries(genreAffinity)
@@ -338,7 +351,7 @@ export default function HomeScreen() {
   const aiRowSections = (aiFeed?.sections.filter((s) => s.type === 'row' || s.type === 'spotlight') ?? []).slice(0, 4);
 
   const { data: thematicData, isLoading: thematicLoading } = useQuery({
-    queryKey: ['thematic-rows-v10', traktMovieFingerprint, traktShowFingerprint, sessionKey],
+    queryKey: ['thematic-rows-v11', traktMovieFingerprint, traktShowFingerprint, dominantLanguage, sessionKey],
     queryFn: async () => {
       const movies = traktMovies ?? [];
       const shows = traktShows ?? [];
@@ -413,6 +426,9 @@ export default function HomeScreen() {
           const offsetPage = deterministicPage(temporal.dateKey, rowIndex); // 1–3
           const pages = offsetPage === 1 ? [1, 2, 3] : [1, offsetPage, Math.min(offsetPage + 1, 5)];
 
+          // Templates that explicitly target a country/region opt out of language filter
+          const langFilter = row.originCountry ? null : dominantLanguage;
+
           async function fetchPage(p: number) {
             const cacheParams = {
               type: row.type, genreIds: row.genreIds, excludeGenres: row.excludeGenres ?? null,
@@ -420,7 +436,8 @@ export default function HomeScreen() {
               voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
               releaseDateGte: row.releaseDateGte ?? null, releaseDateLte: row.releaseDateLte ?? null,
               runtimeGte: row.runtimeGte ?? null, runtimeLte: row.runtimeLte ?? null,
-              originCountry: row.originCountry ?? null, page: p,
+              originCountry: row.originCountry ?? null,
+              withOriginalLanguage: langFilter ?? null, page: p,
             };
             const cached = await loadDiscoverCache(cacheParams);
             if (cached) return cached as ContentItem[];
@@ -432,14 +449,16 @@ export default function HomeScreen() {
                   voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
                   releaseDateGte: row.releaseDateGte, releaseDateLte: row.releaseDateLte,
                   runtimeGte: row.runtimeGte, runtimeLte: row.runtimeLte,
-                  originCountry: row.originCountry, page: p,
+                  originCountry: row.originCountry,
+                  withOriginalLanguage: langFilter ?? undefined, page: p,
                 })).map(normalizeMovie)
               : (await tmdbApi.discoverShowsTyped({
                   genreIds: row.genreIds, excludeGenres: row.excludeGenres,
                   withKeywords: row.withKeywords, sortBy: row.sortBy,
                   voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
                   firstAirDateGte: row.releaseDateGte, firstAirDateLte: row.releaseDateLte,
-                  originCountry: row.originCountry, page: p,
+                  originCountry: row.originCountry,
+                  withOriginalLanguage: langFilter ?? undefined, page: p,
                 })).map(normalizeTVShow);
 
             saveDiscoverCache(cacheParams, results); // non-blocking
@@ -459,7 +478,7 @@ export default function HomeScreen() {
             .filter((item) => !watchedIds.has(item.id))
             .filter((item) => !cooldownIds.has(item.id))
             .filter((item) => passesQualityFilter(item, 'discover'))
-            .filter((item) => !isMismatchedNiche(item, rawTemplate.genreIds, genreAffinity, profile, rawTemplate.eraFit));
+            .filter((item) => !isMismatchedNiche(item, rawTemplate.genreIds, genreAffinity, profile, rawTemplate.eraFit, langFilter));
 
           // Re-rank by behavioural fit — shifts from "best rated in genre" to "best for you"
           const items = rankItemsByProfile(filtered, profile, genreAffinity, tasteNeighborhood)

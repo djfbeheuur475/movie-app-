@@ -179,6 +179,7 @@ export const tmdbApi = {
     runtimeGte?: number;
     runtimeLte?: number;
     originCountry?: string;
+    withOriginalLanguage?: string;
     page?: number;
   }): Promise<TMDBMovie[]> => {
     const { data } = await tmdb.get('/discover/movie', {
@@ -197,6 +198,7 @@ export const tmdbApi = {
         ...(opts.runtimeGte && { 'with_runtime.gte': opts.runtimeGte }),
         ...(opts.runtimeLte && { 'with_runtime.lte': opts.runtimeLte }),
         ...(opts.originCountry && { with_origin_country: opts.originCountry }),
+        ...(opts.withOriginalLanguage && { with_original_language: opts.withOriginalLanguage }),
       },
     });
     return data.results as TMDBMovie[];
@@ -212,6 +214,7 @@ export const tmdbApi = {
     firstAirDateGte?: string;
     firstAirDateLte?: string;
     originCountry?: string;
+    withOriginalLanguage?: string;
     page?: number;
   }): Promise<TMDBTVShow[]> => {
     const { data } = await tmdb.get('/discover/tv', {
@@ -227,6 +230,7 @@ export const tmdbApi = {
         ...(opts.firstAirDateGte && { 'first_air_date.gte': opts.firstAirDateGte }),
         ...(opts.firstAirDateLte && { 'first_air_date.lte': opts.firstAirDateLte }),
         ...(opts.originCountry && { with_origin_country: opts.originCountry }),
+        ...(opts.withOriginalLanguage && { with_original_language: opts.withOriginalLanguage }),
       },
     });
     return data.results as TMDBTVShow[];

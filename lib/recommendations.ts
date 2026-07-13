@@ -32,26 +32,33 @@ export function isMismatchedNiche(
   genreAffinity: GenreAffinity,
   profile?: TasteProfile,
   templateEraFit?: 'classic' | 'nineties' | 'modern',
+  preferredLanguage?: string | null,
 ): boolean {
   const itemGenres = new Set(item.genres ?? []);
   const templateGenres = new Set(templateGenreIds);
   const hasHistory = Object.keys(genreAffinity).length > 0;
 
-  // Animation (16): filter unless the user has demonstrated real affinity (>10% of history).
+  // Animation (16): filter unless user has real affinity (>5% of history).
   if (itemGenres.has(16) && !templateGenres.has(16)) {
-    if (!hasHistory || (genreAffinity[16] ?? 0) < 0.10) return true;
+    if (!hasHistory || (genreAffinity[16] ?? 0) < 0.05) return true;
   }
-  // Family (10751): same logic, lower threshold
+  // Family (10751): filter unless user watches family content (>3% of history).
   if (itemGenres.has(10751) && !templateGenres.has(10751)) {
-    if (!hasHistory || (genreAffinity[10751] ?? 0) < 0.08) return true;
+    if (!hasHistory || (genreAffinity[10751] ?? 0) < 0.03) return true;
   }
-  // Kids TV (10762): always filter unless explicitly requested
+  // Kids TV (10762): always filter unless explicitly requested.
   if (itemGenres.has(10762) && !templateGenres.has(10762)) {
-    if (!hasHistory || (genreAffinity[10762] ?? 0) < 0.05) return true;
+    return true;
   }
 
-  // Classic era (pre-1980): suppress unless user has demonstrated classic affinity,
-  // or the template explicitly targets classic content.
+  // Language mismatch — if the user predominantly watches content in one language,
+  // filter items in other languages that they have no history with.
+  // Templates targeting world cinema (originCountry set) are exempt.
+  if (preferredLanguage && item.originalLanguage && item.originalLanguage !== preferredLanguage) {
+    return true;
+  }
+
+  // Classic era (pre-1980): suppress unless user has demonstrated classic affinity.
   if (templateEraFit !== 'classic') {
     const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : 2020;
     if (year < 1980) {
