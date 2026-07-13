@@ -426,9 +426,6 @@ export default function HomeScreen() {
           const offsetPage = deterministicPage(temporal.dateKey, rowIndex); // 1–3
           const pages = offsetPage === 1 ? [1, 2, 3] : [1, offsetPage, Math.min(offsetPage + 1, 5)];
 
-          // Templates that explicitly target a country/region opt out of language filter
-          const langFilter = row.originCountry ? null : dominantLanguage;
-
           async function fetchPage(p: number) {
             const cacheParams = {
               type: row.type, genreIds: row.genreIds, excludeGenres: row.excludeGenres ?? null,
@@ -436,8 +433,7 @@ export default function HomeScreen() {
               voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
               releaseDateGte: row.releaseDateGte ?? null, releaseDateLte: row.releaseDateLte ?? null,
               runtimeGte: row.runtimeGte ?? null, runtimeLte: row.runtimeLte ?? null,
-              originCountry: row.originCountry ?? null,
-              withOriginalLanguage: langFilter ?? null, page: p,
+              originCountry: row.originCountry ?? null, page: p,
             };
             const cached = await loadDiscoverCache(cacheParams);
             if (cached) return cached as ContentItem[];
@@ -449,16 +445,14 @@ export default function HomeScreen() {
                   voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
                   releaseDateGte: row.releaseDateGte, releaseDateLte: row.releaseDateLte,
                   runtimeGte: row.runtimeGte, runtimeLte: row.runtimeLte,
-                  originCountry: row.originCountry,
-                  withOriginalLanguage: langFilter ?? undefined, page: p,
+                  originCountry: row.originCountry, page: p,
                 })).map(normalizeMovie)
               : (await tmdbApi.discoverShowsTyped({
                   genreIds: row.genreIds, excludeGenres: row.excludeGenres,
                   withKeywords: row.withKeywords, sortBy: row.sortBy,
                   voteAverageGte: row.voteAverageGte, voteCountGte: row.voteCountGte,
                   firstAirDateGte: row.releaseDateGte, firstAirDateLte: row.releaseDateLte,
-                  originCountry: row.originCountry,
-                  withOriginalLanguage: langFilter ?? undefined, page: p,
+                  originCountry: row.originCountry, page: p,
                 })).map(normalizeTVShow);
 
             saveDiscoverCache(cacheParams, results); // non-blocking
@@ -478,11 +472,28 @@ export default function HomeScreen() {
             .filter((item) => !watchedIds.has(item.id))
             .filter((item) => !cooldownIds.has(item.id))
             .filter((item) => passesQualityFilter(item, 'discover'))
-            .filter((item) => !isMismatchedNiche(item, rawTemplate.genreIds, genreAffinity, profile, rawTemplate.eraFit, langFilter));
+            .filter((item) => !isMismatchedNiche(item, rawTemplate.genreIds, genreAffinity, profile, rawTemplate.eraFit));
 
           // Re-rank by behavioural fit — shifts from "best rated in genre" to "best for you"
-          const items = rankItemsByProfile(filtered, profile, genreAffinity, tasteNeighborhood)
-            .slice(0, 20);
+          const ranked = rankItemsByProfile(filtered, profile, genreAffinity, tasteNeighborhood);
+
+          // Cap non-dominant-language items to 1 per row so foreign content
+          // can surface occasionally but never floods the row.
+          const items = (() => {
+            if (!dominantLanguage || row.originCountry) return ranked.slice(0, 20);
+            const result: ContentItem[] = [];
+            let foreignCount = 0;
+            for (const item of ranked) {
+              if (result.length >= 20) break;
+              const isForeign = item.originalLanguage && item.originalLanguage !== dominantLanguage;
+              if (isForeign) {
+                if (foreignCount < 1) { result.push(item); foreignCount++; }
+              } else {
+                result.push(item);
+              }
+            }
+            return result;
+          })();
 
           return { ...rawTemplate, items };
         })

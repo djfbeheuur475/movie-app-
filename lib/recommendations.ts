@@ -51,13 +51,6 @@ export function isMismatchedNiche(
     return true;
   }
 
-  // Language mismatch — if the user predominantly watches content in one language,
-  // filter items in other languages that they have no history with.
-  // Templates targeting world cinema (originCountry set) are exempt.
-  if (preferredLanguage && item.originalLanguage && item.originalLanguage !== preferredLanguage) {
-    return true;
-  }
-
   // Classic era (pre-1980): suppress unless user has demonstrated classic affinity.
   if (templateEraFit !== 'classic') {
     const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : 2020;
