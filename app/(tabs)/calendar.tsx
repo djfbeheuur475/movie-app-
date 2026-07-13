@@ -119,6 +119,7 @@ export default function CalendarScreen() {
   const [showWatching, setShowWatching] = useState(true);
   const [showNewMovies, setShowNewMovies] = useState(false);
   const [showAnticipated, setShowAnticipated] = useState(false);
+  const [showForYou, setShowForYou] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [pinnedShow, setPinnedShow] = useState<{ id: number; name: string } | null>(null);
@@ -242,6 +243,46 @@ export default function CalendarScreen() {
     },
     enabled: traktShowTmdbIds.length > 0,
     staleTime: 1000 * 60 * 30,
+  });
+
+  // ── For You — genre-matched upcoming releases ────────────────────────────
+
+  const topGenreIds = useMemo(() => {
+    const count = new Map<number, number>();
+    const allShows = [...(watchlistShowDetails ?? []), ...(traktShowDetails ?? [])];
+    for (const show of allShows) {
+      for (const g of (show.genres ?? [])) {
+        count.set(g.id, (count.get(g.id) ?? 0) + 1);
+      }
+    }
+    return [...count.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([id]) => id);
+  }, [watchlistShowDetails, traktShowDetails]);
+
+  const { data: forYouRaw } = useQuery({
+    queryKey: ['for-you-releases', topGenreIds.join(',')],
+    queryFn: async () => {
+      const todayStr = format(startOfToday(), 'yyyy-MM-dd');
+      const futureStr = format(addMonths(startOfToday(), 6), 'yyyy-MM-dd');
+      const genreStr = topGenreIds.join(',');
+      const settled = await Promise.allSettled([
+        tmdbApi.discoverMovies({ sort_by: 'popularity.desc', 'primary_release_date.gte': todayStr, 'primary_release_date.lte': futureStr, with_genres: genreStr, page: 1 }),
+        tmdbApi.discoverMovies({ sort_by: 'popularity.desc', 'primary_release_date.gte': todayStr, 'primary_release_date.lte': futureStr, with_genres: genreStr, page: 2 }),
+        tmdbApi.discoverTV({ sort_by: 'popularity.desc', 'first_air_date.gte': todayStr, 'first_air_date.lte': futureStr, with_genres: genreStr, page: 1 }),
+        tmdbApi.discoverTV({ sort_by: 'popularity.desc', 'first_air_date.gte': todayStr, 'first_air_date.lte': futureStr, with_genres: genreStr, page: 2 }),
+      ]);
+      const movieItems = settled.slice(0, 2)
+        .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+        .flatMap((r) => r.value.map((m: any) => ({ ...m, _mediaType: 'movie' as const })));
+      const tvItems = settled.slice(2)
+        .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+        .flatMap((r) => r.value.map((s: any) => ({ ...s, _mediaType: 'tv' as const })));
+      return [...movieItems, ...tvItems];
+    },
+    enabled: topGenreIds.length > 0,
+    staleTime: 1000 * 60 * 60 * 12,
   });
 
   // ── Season episode schedules ──────────────────────────────────────────────
@@ -437,17 +478,56 @@ export default function CalendarScreen() {
     return entries;
   }, [anticipatedRaw, watchlistMovieIds, isFollowed, isUnfollowed, today]);
 
+  const watchingTvIdSet = useMemo(
+    () => new Set([...watchlistShowIds, ...traktShowTmdbIds]),
+    [watchlistShowIds, traktShowTmdbIds]
+  );
+
+  const forYouEntries = useMemo(() => {
+    const cutoff = addYears(today, 1);
+    const seenKeys = new Set<string>();
+    const entries: CalendarEntry[] = [];
+    for (const item of (forYouRaw ?? [])) {
+      const isMovie = item._mediaType === 'movie';
+      const dateStr = isMovie ? item.release_date : item.first_air_date;
+      const title = isMovie ? item.title : item.name;
+      const key = `${item._mediaType}-${item.id}`;
+      if (!dateStr || !title || seenKeys.has(key)) continue;
+      if (!isMovie && watchingTvIdSet.has(item.id)) continue;
+      seenKeys.add(key);
+      let airDate: Date;
+      try { airDate = parseISO(dateStr); } catch { continue; }
+      if (isBefore(airDate, today) || isAfter(airDate, cutoff)) continue;
+      entries.push({
+        id: isMovie ? `movie-${item.id}` : `forYou-tv-${item.id}`,
+        tmdbId: item.id,
+        mediaType: item._mediaType,
+        title,
+        posterPath: item.poster_path,
+        airDate,
+        note: 'Based on your taste',
+        isFromWatchlist: isMovie ? watchlistMovieIds.has(item.id) : false,
+        notifyEnabled: watchlistMovieIds.has(item.id) || isFollowed(item.id),
+      });
+    }
+    return entries;
+  }, [forYouRaw, watchlistMovieIds, watchingTvIdSet, isFollowed, today]);
+
   const toggleWatching = () => {
-    if (showWatching && !showNewMovies && !showAnticipated) return;
+    if (showWatching && !showNewMovies && !showAnticipated && !showForYou) return;
     setShowWatching((v) => !v);
   };
   const toggleNewMovies = () => {
-    if (showNewMovies && !showWatching && !showAnticipated) return;
+    if (showNewMovies && !showWatching && !showAnticipated && !showForYou) return;
     setShowNewMovies((v) => !v);
   };
   const toggleAnticipated = () => {
-    if (showAnticipated && !showWatching && !showNewMovies) return;
+    if (showAnticipated && !showWatching && !showNewMovies && !showForYou) return;
     setShowAnticipated((v) => !v);
+  };
+  const toggleForYou = () => {
+    if (showForYou && !showWatching && !showNewMovies && !showAnticipated) return;
+    setShowForYou((v) => !v);
   };
 
   const filteredEntries = useMemo(() => {
@@ -483,9 +563,12 @@ export default function CalendarScreen() {
     if (showAnticipated) {
       add(anticipatedEntries);
     }
+    if (showForYou) {
+      add(forYouEntries);
+    }
 
     return results;
-  }, [allEntries, anticipatedEntries, today, showWatching, showNewMovies, showAnticipated, watchedShowTmdbIds, watchlistTvIdSet]);
+  }, [allEntries, anticipatedEntries, forYouEntries, today, showWatching, showNewMovies, showAnticipated, showForYou, watchedShowTmdbIds, watchlistTvIdSet]);
 
   const sections = useMemo(() => groupByDate(filteredEntries), [filteredEntries]);
 
@@ -549,6 +632,15 @@ export default function CalendarScreen() {
         >
           <Ionicons name="flame-outline" size={14} color={showAnticipated ? Colors.background : Colors.textSecondary} />
           <Text style={[styles.filterBtnText, showAnticipated && styles.filterBtnTextActive]}>Most Anticipated</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterBtn, showForYou && styles.filterBtnActive]}
+          onPress={toggleForYou}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="sparkles-outline" size={14} color={showForYou ? Colors.background : Colors.textSecondary} />
+          <Text style={[styles.filterBtnText, showForYou && styles.filterBtnTextActive]}>For You</Text>
         </TouchableOpacity>
       </View>
 
@@ -624,12 +716,16 @@ export default function CalendarScreen() {
         <View style={styles.empty}>
           <Ionicons name="calendar-outline" size={48} color={Colors.textMuted} />
           <Text style={styles.emptyTitle}>
-            {!hasTrakt && showWatching && !showNewMovies && !showAnticipated
+            {showForYou && topGenreIds.length === 0
+              ? 'No taste data yet'
+              : !hasTrakt && showWatching && !showNewMovies && !showAnticipated && !showForYou
               ? 'Connect Trakt to see your shows'
               : 'Nothing scheduled'}
           </Text>
           <Text style={styles.emptyText}>
-            {!hasTrakt && showWatching && !showNewMovies && !showAnticipated
+            {showForYou && topGenreIds.length === 0
+              ? 'Add shows to your watchlist or connect Trakt so we can match your taste.'
+              : !hasTrakt && showWatching && !showNewMovies && !showAnticipated && !showForYou
               ? 'Go to Settings → Trakt to connect your account.'
               : 'No upcoming releases for the selected filters.'}
           </Text>
