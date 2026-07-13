@@ -9,14 +9,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import {
-  format, addDays, startOfToday,
+  format, addDays, addMonths, startOfToday,
   isSameDay, parseISO, isAfter, isBefore, addYears,
 } from 'date-fns';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { tmdbApi, getPosterUrl } from '../../lib/tmdb';
-import { traktApi, TraktUnauthorizedError } from '../../lib/trakt';
+import { traktApi, TraktUnauthorizedError, effectiveTraktClientId } from '../../lib/trakt';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useApiKeysStore } from '../../store/apiKeysStore';
+import { useFollowStore } from '../../store/followStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ interface CalendarEntry {
   airDate: Date;
   note: string;
   isFromWatchlist: boolean;
+  notifyEnabled: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -75,21 +77,20 @@ function CalendarCard({ entry, isTonight }: { entry: CalendarEntry; isTonight: b
               <Text style={styles.tonightBadgeText}>• Tonight</Text>
             </View>
           )}
-          {entry.isFromWatchlist && (
-            <View style={styles.savedPip}>
-              <Text style={styles.savedPipText}>✓</Text>
-            </View>
-          )}
         </View>
         <Text style={styles.cardNote}>{entry.note}</Text>
         <Text style={styles.cardDate}>{format(entry.airDate, 'EEE, MMM d')}</Text>
       </View>
-      <Ionicons
-        name={entry.mediaType === 'movie' ? 'film-outline' : 'tv-outline'}
-        size={18}
-        color={Colors.textMuted}
-        style={styles.cardTypeIcon}
-      />
+      <View style={styles.cardRight}>
+        {entry.notifyEnabled && (
+          <Ionicons name="notifications" size={16} color={Colors.primary} />
+        )}
+        <Ionicons
+          name={entry.mediaType === 'movie' ? 'film-outline' : 'tv-outline'}
+          size={18}
+          color={Colors.textMuted}
+        />
+      </View>
     </TouchableOpacity>
   );
 }
@@ -115,14 +116,18 @@ function ShowSearchResult({ show, onPress }: { show: any; onPress: () => void })
 export default function CalendarScreen() {
   const today = startOfToday();
   const router = useRouter();
-  const [watchedOnly, setWatchedOnly] = useState(false);
+  const [showWatching, setShowWatching] = useState(true);
+  const [showNewMovies, setShowNewMovies] = useState(false);
+  const [showAnticipated, setShowAnticipated] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [pinnedShow, setPinnedShow] = useState<{ id: number; name: string } | null>(null);
 
   const { items: watchlist } = useWatchlistStore();
-  const { traktClientId, traktUsername, traktAccessToken, handleTraktUnauthorized } = useApiKeysStore();
-  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
+  const { isFollowed, isUnfollowed } = useFollowStore();
+  const { traktClientId, traktAccessToken, handleTraktUnauthorized } = useApiKeysStore();
+  const hasTrakt = !!traktAccessToken;
+  const traktClientIdEff = effectiveTraktClientId(traktClientId);
   const queryClient = useQueryClient();
 
   // ── Upcoming movies — full year (5 pages ≈ 100 films) ────────────────────
@@ -138,6 +143,43 @@ export default function CalendarScreen() {
         .flatMap((r) => r.value.results);
     },
     staleTime: 1000 * 60 * 60 * 6,
+  });
+
+  // ── Most anticipated — popular upcoming releases (next 5 months) ─────────
+
+  const { data: anticipatedRaw } = useQuery({
+    queryKey: ['anticipated-releases'],
+    queryFn: async () => {
+      const todayStr = format(startOfToday(), 'yyyy-MM-dd');
+      const futureStr = format(addMonths(startOfToday(), 12), 'yyyy-MM-dd');
+      const moviePages = [1, 2, 3].map((p) =>
+        tmdbApi.discoverMovies({
+          sort_by: 'popularity.desc',
+          'primary_release_date.gte': todayStr,
+          'primary_release_date.lte': futureStr,
+          page: p,
+        })
+      );
+      const tvPages = [1, 2, 3].map((p) =>
+        tmdbApi.discoverTV({
+          sort_by: 'popularity.desc',
+          'first_air_date.gte': todayStr,
+          'first_air_date.lte': futureStr,
+          page: p,
+        })
+      );
+      const settled = await Promise.allSettled([...moviePages, ...tvPages]);
+      const movies = settled
+        .slice(0, 3)
+        .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+        .flatMap((r) => r.value.map((m: any) => ({ ...m, _mediaType: 'movie' as const })));
+      const shows = settled
+        .slice(3)
+        .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+        .flatMap((r) => r.value.map((s: any) => ({ ...s, _mediaType: 'tv' as const })));
+      return [...movies, ...shows];
+    },
+    staleTime: 1000 * 60 * 60 * 12,
   });
 
   // ── Watchlist TV shows → details ─────────────────────────────────────────
@@ -164,11 +206,8 @@ export default function CalendarScreen() {
   // ── Trakt history → top shows not already in watchlist ───────────────────
 
   const { data: traktWatchedShows, error: traktCalError } = useQuery({
-    queryKey: ['trakt-cal-shows', traktClientId, traktUsername, traktAccessToken],
-    queryFn: () =>
-      traktAccessToken
-        ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
-        : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+    queryKey: ['trakt-cal-shows', traktClientIdEff, traktAccessToken],
+    queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
     retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
@@ -305,6 +344,7 @@ export default function CalendarScreen() {
             airDate,
             note: `S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')} — ${ep.name ?? 'New episode'}`,
             isFromWatchlist: fromWatchlist,
+            notifyEnabled: fromWatchlist ? true : !isUnfollowed(show.id),
           });
         }
       } else if (show.next_episode_to_air?.air_date) {
@@ -325,6 +365,7 @@ export default function CalendarScreen() {
             airDate,
             note: `S${String(next.season_number).padStart(2, '0')}E${String(next.episode_number).padStart(2, '0')} — ${next.name ?? 'New episode'}`,
             isFromWatchlist: fromWatchlist,
+            notifyEnabled: fromWatchlist ? true : !isUnfollowed(show.id),
           });
         }
       }
@@ -347,13 +388,14 @@ export default function CalendarScreen() {
         airDate,
         note: 'In cinemas',
         isFromWatchlist: watchlistMovieIds.has(m.id),
+        notifyEnabled: watchlistMovieIds.has(m.id) || isFollowed(m.id),
       });
     }
 
     return entries;
-  }, [seasonData, watchlistShowDetails, traktShowDetails, upcomingMoviesYear, watchlistMovieIds]);
+  }, [seasonData, watchlistShowDetails, traktShowDetails, upcomingMoviesYear, watchlistMovieIds, isFollowed, isUnfollowed]);
 
-  // ── "Shows I'm Watching" filter ───────────────────────────────────────────
+  // ── Filter sets ───────────────────────────────────────────────────────────
 
   const watchedShowTmdbIds = useMemo(() => {
     return new Set(
@@ -366,15 +408,84 @@ export default function CalendarScreen() {
     [watchlistShowIds]
   );
 
+  const anticipatedEntries = useMemo(() => {
+    const cutoff = addYears(today, 1);
+    const seenKeys = new Set<string>();
+    const entries: CalendarEntry[] = [];
+    for (const item of (anticipatedRaw ?? [])) {
+      const isMovie = item._mediaType === 'movie';
+      const dateStr = isMovie ? item.release_date : item.first_air_date;
+      const title = isMovie ? item.title : item.name;
+      const key = `${item._mediaType}-${item.id}`;
+      if (!dateStr || !title || seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      let airDate: Date;
+      try { airDate = parseISO(dateStr); } catch { continue; }
+      if (isBefore(airDate, today) || isAfter(airDate, cutoff)) continue;
+      entries.push({
+        id: isMovie ? `movie-${item.id}` : `anticipated-tv-${item.id}`,
+        tmdbId: item.id,
+        mediaType: item._mediaType,
+        title,
+        posterPath: item.poster_path,
+        airDate,
+        note: 'Highly anticipated',
+        isFromWatchlist: isMovie ? watchlistMovieIds.has(item.id) : false,
+        notifyEnabled: watchlistMovieIds.has(item.id) || isFollowed(item.id),
+      });
+    }
+    return entries;
+  }, [anticipatedRaw, watchlistMovieIds, isFollowed, isUnfollowed, today]);
+
+  const toggleWatching = () => {
+    if (showWatching && !showNewMovies && !showAnticipated) return;
+    setShowWatching((v) => !v);
+  };
+  const toggleNewMovies = () => {
+    if (showNewMovies && !showWatching && !showAnticipated) return;
+    setShowNewMovies((v) => !v);
+  };
+  const toggleAnticipated = () => {
+    if (showAnticipated && !showWatching && !showNewMovies) return;
+    setShowAnticipated((v) => !v);
+  };
+
   const filteredEntries = useMemo(() => {
-    const base = allEntries.filter(
-      (e) => isAfter(e.airDate, addDays(today, -1)) || isSameDay(e.airDate, today)
-    );
-    if (!watchedOnly) return base;
-    return base.filter(
-      (e) => e.mediaType === 'tv' && (watchedShowTmdbIds.has(e.tmdbId) || watchlistTvIdSet.has(e.tmdbId))
-    );
-  }, [allEntries, today, watchedOnly, watchedShowTmdbIds, watchlistTvIdSet]);
+    const isRecent = (e: CalendarEntry) =>
+      isAfter(e.airDate, addDays(today, -1)) || isSameDay(e.airDate, today);
+
+    const results: CalendarEntry[] = [];
+    const seenMovieIds = new Set<number>();
+    const seenEpKeys = new Set<string>();
+
+    const add = (entries: CalendarEntry[]) => {
+      for (const e of entries) {
+        if (!isRecent(e)) continue;
+        if (e.mediaType === 'movie') {
+          if (seenMovieIds.has(e.tmdbId)) continue;
+          seenMovieIds.add(e.tmdbId);
+        } else {
+          if (seenEpKeys.has(e.id)) continue;
+          seenEpKeys.add(e.id);
+        }
+        results.push(e);
+      }
+    };
+
+    if (showWatching) {
+      add(allEntries.filter(
+        (e) => e.mediaType === 'tv' && (watchedShowTmdbIds.has(e.tmdbId) || watchlistTvIdSet.has(e.tmdbId))
+      ));
+    }
+    if (showNewMovies) {
+      add(allEntries.filter((e) => e.mediaType === 'movie'));
+    }
+    if (showAnticipated) {
+      add(anticipatedEntries);
+    }
+
+    return results;
+  }, [allEntries, anticipatedEntries, today, showWatching, showNewMovies, showAnticipated, watchedShowTmdbIds, watchlistTvIdSet]);
 
   const sections = useMemo(() => groupByDate(filteredEntries), [filteredEntries]);
 
@@ -390,33 +501,54 @@ export default function CalendarScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Calendar</Text>
+        <Text style={styles.title}>My Calendar</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => router.push('/(tabs)/search')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="search-outline" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="settings-outline" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => router.push('/settings')}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="settings-outline" size={18} color={Colors.textMuted} />
-        </TouchableOpacity>
       </View>
 
-      {/* Shows I'm Watching toggle */}
+      {/* Filter buttons */}
       <View style={styles.filterRow}>
         <TouchableOpacity
-          style={[styles.filterBtn, watchedOnly && styles.filterBtnActive]}
-          onPress={() => setWatchedOnly((v) => !v)}
+          style={[styles.filterBtn, showWatching && styles.filterBtnActive]}
+          onPress={toggleWatching}
           activeOpacity={0.8}
         >
-          <Ionicons
-            name="eye-outline"
-            size={14}
-            color={watchedOnly ? Colors.background : Colors.textSecondary}
-          />
-          <Text style={[styles.filterBtnText, watchedOnly && styles.filterBtnTextActive]}>
-            Shows I'm Watching
-          </Text>
+          <Ionicons name="eye-outline" size={14} color={showWatching ? Colors.background : Colors.textSecondary} />
+          <Text style={[styles.filterBtnText, showWatching && styles.filterBtnTextActive]}>Watching</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterBtn, showNewMovies && styles.filterBtnActive]}
+          onPress={toggleNewMovies}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="film-outline" size={14} color={showNewMovies ? Colors.background : Colors.textSecondary} />
+          <Text style={[styles.filterBtnText, showNewMovies && styles.filterBtnTextActive]}>New Movies</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterBtn, showAnticipated && styles.filterBtnActive]}
+          onPress={toggleAnticipated}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="flame-outline" size={14} color={showAnticipated ? Colors.background : Colors.textSecondary} />
+          <Text style={[styles.filterBtnText, showAnticipated && styles.filterBtnTextActive]}>Most Anticipated</Text>
         </TouchableOpacity>
       </View>
 
@@ -492,14 +624,14 @@ export default function CalendarScreen() {
         <View style={styles.empty}>
           <Ionicons name="calendar-outline" size={48} color={Colors.textMuted} />
           <Text style={styles.emptyTitle}>
-            {hasTrakt ? 'Nothing scheduled' : 'Connect Trakt to see your shows'}
+            {!hasTrakt && showWatching && !showNewMovies && !showAnticipated
+              ? 'Connect Trakt to see your shows'
+              : 'Nothing scheduled'}
           </Text>
           <Text style={styles.emptyText}>
-            {hasTrakt
-              ? watchedOnly
-                ? 'No upcoming episodes for shows you\'ve watched.'
-                : 'No upcoming releases in the next 12 months.'
-              : 'Go to Settings → Trakt to connect your account.'}
+            {!hasTrakt && showWatching && !showNewMovies && !showAnticipated
+              ? 'Go to Settings → Trakt to connect your account.'
+              : 'No upcoming releases for the selected filters.'}
           </Text>
         </View>
       ) : (
@@ -532,11 +664,12 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: '800', color: Colors.text, letterSpacing: -0.5 },
   subtitle: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   settingsBtn: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface,
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
-  filterRow: { marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
   filterBtn: {
     flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
     gap: 6, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border,
@@ -586,11 +719,6 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.sm, gap: 3 },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   cardTitle: { ...Typography.subheading, color: Colors.text, flex: 1 },
-  savedPip: {
-    backgroundColor: Colors.primary + '22', borderRadius: BorderRadius.sm,
-    paddingHorizontal: 5, paddingVertical: 1,
-  },
-  savedPipText: { ...Typography.label, color: Colors.primary },
   tonightBadge: {
     backgroundColor: '#f59e0b22', borderRadius: BorderRadius.full,
     paddingHorizontal: 6, paddingVertical: 2,
@@ -598,7 +726,12 @@ const styles = StyleSheet.create({
   tonightBadgeText: { fontSize: 10, fontWeight: '700', color: '#f59e0b' },
   cardNote: { ...Typography.caption, color: Colors.primary, fontWeight: '600' },
   cardDate: { ...Typography.caption, color: Colors.textMuted },
-  cardTypeIcon: { marginRight: Spacing.md },
+  cardRight: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginRight: Spacing.md,
+  },
   empty: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: Spacing.xl, gap: Spacing.md,

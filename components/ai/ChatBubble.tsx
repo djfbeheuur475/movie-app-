@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, BorderRadius, Typography } from '../../constants/theme';
 import PosterCard from '../common/PosterCard';
+import { useTraktWatched } from '../../hooks/useTraktWatched';
 import type { ChatMessage, ContentItem } from '../../types';
 
 interface Props {
@@ -65,6 +66,7 @@ function LinkedReplyText({
 
 export default function ChatBubble({ message }: Props) {
   const isUser = message.role === 'user';
+  const { isWatched } = useTraktWatched();
 
   return (
     <View style={[styles.row, isUser && styles.rowRight]}>
@@ -78,7 +80,15 @@ export default function ChatBubble({ message }: Props) {
         {message.recommendations && message.recommendations.length > 0 && (
           <View style={styles.recs}>
             {message.recommendations.slice(0, 5).map((item) => (
-              <PosterCard key={`${item.mediaType}-${item.id}`} item={item} width={90} showTitle showType showRating />
+              <PosterCard
+                key={`${item.mediaType}-${item.id}`}
+                item={item}
+                width={90}
+                showTitle
+                showType
+                showRating
+                watched={isWatched(item.id, item.mediaType)}
+              />
             ))}
           </View>
         )}

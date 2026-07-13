@@ -4,10 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Linking,
   Alert,
@@ -19,56 +15,26 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { useAuthStore } from '../store/authStore';
-import { requestDeviceCode, pollDeviceToken } from '../lib/trakt';
+import { requestDeviceCode, pollDeviceToken, TRAKT_DEFAULT_CLIENT_ID } from '../lib/trakt';
 
-type Step = 'intro' | 'trakt' | 'gemini';
-
-const STEPS: Step[] = ['trakt', 'gemini'];
-
-function StepDots({ current }: { current: Step }) {
-  const idx = STEPS.indexOf(current);
-  if (idx < 0) return null;
-  return (
-    <View style={styles.dots}>
-      {STEPS.map((s, i) => (
-        <View key={s} style={[styles.dot, i === idx && styles.dotActive, i < idx && styles.dotDone]} />
-      ))}
-    </View>
-  );
-}
+type Step = 'intro' | 'trakt';
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const { saveKeys, markSetupDone, syncToCloud } = useApiKeysStore();
   const userId = useAuthStore((s) => s.user?.id);
 
-  // Skip intro for authenticated users — they came from Google login
   const [step, setStep] = useState<Step>(userId ? 'trakt' : 'intro');
-
-  // Trakt
-  const [traktClientId, setTraktClientId] = useState('');
   const [traktCode, setTraktCode] = useState<{ userCode: string; verifyUrl: string } | null>(null);
   const [traktConnecting, setTraktConnecting] = useState(false);
   const [traktConnected, setTraktConnected] = useState(false);
-
-  // Gemini
-  const [geminiKey, setGeminiKey] = useState('');
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
-
   const [isSaving, setIsSaving] = useState(false);
 
-  // ── Trakt ─────────────────────────────────────────────────────────────────
-
   const handleTraktConnect = useCallback(async () => {
-    const clientId = traktClientId.trim();
-    if (!clientId) {
-      Alert.alert('Missing Client ID', 'Enter your Trakt Client ID first.');
-      return;
-    }
     setTraktConnecting(true);
     setTraktCode(null);
     try {
-      const dc = await requestDeviceCode(clientId);
+      const dc = await requestDeviceCode(TRAKT_DEFAULT_CLIENT_ID);
       setTraktCode({ userCode: dc.user_code, verifyUrl: dc.verification_url });
       Linking.openURL(dc.verification_url);
 
@@ -83,10 +49,9 @@ export default function WelcomeScreen() {
           return;
         }
         await new Promise((r) => setTimeout(r, interval));
-        const token = await pollDeviceToken(dc.device_code, clientId);
+        const token = await pollDeviceToken(dc.device_code, TRAKT_DEFAULT_CLIENT_ID);
         if (token) {
           await saveKeys({
-            traktClientId: clientId,
             traktAccessToken: token.access_token,
             traktRefreshToken: token.refresh_token,
           });
@@ -101,326 +66,192 @@ export default function WelcomeScreen() {
     } catch (e: any) {
       setTraktCode(null);
       setTraktConnecting(false);
-      Alert.alert('Trakt error', e.message);
+      Alert.alert('Connection error', e.message);
     }
-  }, [traktClientId, saveKeys]);
-
-  // ── Gemini ────────────────────────────────────────────────────────────────
+  }, [saveKeys]);
 
   const handleFinish = async () => {
     setIsSaving(true);
-    const key = geminiKey.trim();
-    if (key) await saveKeys({ geminiKey: key });
     await markSetupDone();
     if (userId) await syncToCloud(userId);
     setIsSaving(false);
     router.replace('/(tabs)');
   };
-
-  const handleSkipToFinish = async () => {
-    setIsSaving(true);
-    await markSetupDone();
-    if (userId) await syncToCloud(userId);
-    setIsSaving(false);
-    router.replace('/(tabs)');
-  };
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={styles.container}>
       <LinearGradient
         colors={['#1a0e00', '#0d0d0d', Colors.background]}
         locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFill}
       />
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.safe}>
 
-      {/* ── Intro ── */}
-      {step === 'intro' && (
-        <View style={styles.center}>
-          <Image source={require('../assets/icon.png')} style={styles.logoImage} contentFit="contain" />
-          <Text style={styles.logo}>Next<Text style={styles.logoAccent}>Up</Text></Text>
-          <Text style={styles.tagline}>DISCOVER · TRACK · EXPERIENCE</Text>
+        {/* ── Intro ── */}
+        {step === 'intro' && (
+          <View style={styles.center}>
+            <Image source={require('../assets/icon.png')} style={styles.logoImage} contentFit="contain" />
+            <Text style={styles.logo}>Next<Text style={styles.logoAccent}>Up</Text></Text>
+            <Text style={styles.tagline}>DISCOVER · TRACK · EXPERIENCE</Text>
 
-          <View style={styles.featureList}>
-            {[
-              { icon: '🎬', label: 'Netflix-style home feed' },
-              { icon: '🔍', label: 'Search movies, shows & actors' },
-              { icon: '✦', label: 'AI-powered recommendations' },
-              { icon: '📅', label: 'New episode calendar' },
-              { icon: '📋', label: 'Watchlist with Trakt sync' },
-            ].map((f) => (
-              <View key={f.label} style={styles.featureRow}>
-                <Text style={styles.featureIcon}>{f.icon}</Text>
-                <Text style={styles.featureLabel}>{f.label}</Text>
-              </View>
-            ))}
-          </View>
+            <View style={styles.featureList}>
+              {[
+                { icon: '🎬', label: 'Personalised home feed' },
+                { icon: '✦', label: 'AI-powered recommendations' },
+                { icon: '📅', label: 'Episode calendar & alerts' },
+                { icon: '📋', label: 'Watchlist & progress tracking' },
+              ].map((f) => (
+                <View key={f.label} style={styles.featureRow}>
+                  <Text style={styles.featureIcon}>{f.icon}</Text>
+                  <Text style={styles.featureLabel}>{f.label}</Text>
+                </View>
+              ))}
+            </View>
 
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep('trakt')} activeOpacity={0.85}>
-            <Text style={styles.primaryBtnText}>Get Started →</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── Trakt step ── */}
-      {step === 'trakt' && (
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <StepDots current="trakt" />
-
-          <View style={styles.stepHeader}>
-            <Text style={styles.stepBadge}>Step 1 of 2 · Optional</Text>
-            <Text style={styles.stepTitle}>Connect Trakt</Text>
-            <Text style={styles.stepDesc}>
-              Sync your watch history for "Recently Watched", "New Eps This Week", and smart watchlist tabs.
-            </Text>
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>How to connect</Text>
-            {[
-              'Go to trakt.tv and create a free account',
-              'trakt.tv/oauth/applications → New Application',
-              'Name it anything, set redirect URI to urn:ietf:wg:oauth:2.0:oob',
-              'Copy your Client ID',
-            ].map((s, i) => (
-              <View key={i} style={styles.instructionRow}>
-                <View style={styles.stepCircle}><Text style={styles.stepCircleText}>{i + 1}</Text></View>
-                <Text style={styles.instructionText}>{s}</Text>
-              </View>
-            ))}
-            <TouchableOpacity
-              style={styles.linkBtn}
-              onPress={() => Linking.openURL('https://trakt.tv/oauth/applications/new')}
-            >
-              <Text style={styles.linkBtnText}>Open Trakt Developer ↗</Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep('trakt')} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Get Started →</Text>
             </TouchableOpacity>
           </View>
+        )}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Trakt Client ID</Text>
-            <TextInput
-              style={styles.input}
-              value={traktClientId}
-              onChangeText={setTraktClientId}
-              placeholder="Paste your Client ID..."
-              placeholderTextColor={Colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              selectionColor={Colors.primary}
-            />
-          </View>
+        {/* ── Trakt ── */}
+        {step === 'trakt' && (
+          <View style={styles.center}>
+            <Text style={styles.optionalBadge}>OPTIONAL</Text>
+            <Text style={styles.traktTitle}>Connect Trakt</Text>
+            <Text style={styles.traktDesc}>
+              Link your watch history so NextUp can learn your taste and personalise everything.
+            </Text>
 
-          {traktCode && (
-            <View style={styles.codeCard}>
-              <Text style={styles.codeLabel}>Enter this code at trakt.tv/activate</Text>
-              <Text style={styles.codeValue}>{traktCode.userCode}</Text>
-              <Text style={styles.codeHint}>Waiting for you to approve in your browser...</Text>
-              <ActivityIndicator color={Colors.primary} style={{ marginTop: 8 }} />
+            <View style={styles.benefits}>
+              {[
+                { icon: '✦', text: 'AI rows built around what you actually watch' },
+                { icon: '📅', text: 'Episode alerts for shows you follow' },
+                { icon: '✓',  text: "See what you've watched across your library" },
+              ].map((b) => (
+                <View key={b.icon} style={styles.benefitRow}>
+                  <Text style={styles.benefitIcon}>{b.icon}</Text>
+                  <Text style={styles.benefitText}>{b.text}</Text>
+                </View>
+              ))}
             </View>
-          )}
 
-          {traktConnected ? (
-            <View style={styles.connectedBanner}>
-              <Text style={styles.connectedText}>✓ Trakt connected successfully!</Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.primaryBtn, traktConnecting && styles.btnDisabled]}
-              onPress={handleTraktConnect}
-              disabled={traktConnecting}
-              activeOpacity={0.85}
-            >
-              {traktConnecting
-                ? <ActivityIndicator color={Colors.text} />
-                : <Text style={styles.primaryBtnText}>Connect via Trakt →</Text>
+            {traktCode ? (
+              <View style={styles.codeCard}>
+                <Text style={styles.codeLabel}>Go to trakt.tv/activate and enter:</Text>
+                <Text style={styles.codeValue}>{traktCode.userCode}</Text>
+                <Text style={styles.codeHint}>Waiting for approval in your browser…</Text>
+                <ActivityIndicator color={Colors.primary} style={{ marginTop: 8 }} />
+              </View>
+            ) : traktConnected ? (
+              <View style={styles.connectedBanner}>
+                <Text style={styles.connectedText}>✓ Trakt connected!</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.primaryBtn, traktConnecting && styles.btnDisabled]}
+                onPress={handleTraktConnect}
+                disabled={traktConnecting}
+                activeOpacity={0.85}
+              >
+                {traktConnecting
+                  ? <ActivityIndicator color={Colors.background} />
+                  : <Text style={styles.primaryBtnText}>Connect with Trakt →</Text>
+                }
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.skipBtn} onPress={handleFinish} disabled={isSaving} activeOpacity={0.85}>
+              {isSaving
+                ? <ActivityIndicator color={Colors.textMuted} />
+                : <Text style={styles.skipBtnText}>{traktConnected ? 'Enter App →' : 'Skip for now'}</Text>
               }
             </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.nextBtn}
-            onPress={() => setStep('gemini')}
-            disabled={isSaving}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.nextBtnText}>{traktConnected ? 'Continue →' : 'Skip for now'}</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      )}
-
-        {/* ── Gemini step ── */}
-        {step === 'gemini' && (
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <StepDots current="gemini" />
-
-          <View style={styles.stepHeader}>
-            <Text style={styles.stepBadge}>Step 2 of 2 · Optional</Text>
-            <Text style={styles.stepTitle}>Gemini AI Key</Text>
-            <Text style={styles.stepDesc}>
-              Enables AI chat, personalised recommendations, and the{' '}
-              <Text style={styles.highlight}>✦ AI Picks</Text> home rows.
-            </Text>
           </View>
+        )}
 
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>How to get your key</Text>
-            {[
-              'Go to aistudio.google.com',
-              'Sign in with your Google account',
-              'Click "Get API key" → Create API key',
-              'Copy the key and paste it below',
-            ].map((s, i) => (
-              <View key={i} style={styles.instructionRow}>
-                <View style={styles.stepCircle}><Text style={styles.stepCircleText}>{i + 1}</Text></View>
-                <Text style={styles.instructionText}>{s}</Text>
-              </View>
-            ))}
-            <TouchableOpacity
-              style={styles.linkBtn}
-              onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')}
-            >
-              <Text style={styles.linkBtnText}>Open Google AI Studio ↗</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Gemini API Key</Text>
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={[styles.input, styles.inputWithBtn]}
-                value={geminiKey}
-                onChangeText={setGeminiKey}
-                placeholder="AIza..."
-                placeholderTextColor={Colors.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                secureTextEntry={!showGeminiKey}
-                selectionColor={Colors.primary}
-              />
-              {geminiKey.length > 0 && (
-                <TouchableOpacity style={styles.showBtn} onPress={() => setShowGeminiKey((v) => !v)}>
-                  <Text style={styles.showBtnText}>{showGeminiKey ? '🙈' : '👁'}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <Text style={styles.hintText}>Free tier available — no credit card required for basic use.</Text>
-          </View>
-
-          <TouchableOpacity style={styles.primaryBtn} onPress={handleFinish} disabled={isSaving} activeOpacity={0.85}>
-            {isSaving ? <ActivityIndicator color={Colors.text} /> : <Text style={styles.primaryBtnText}>Enter App →</Text>}
-          </TouchableOpacity>
-
-          {!geminiKey.trim() && (
-            <TouchableOpacity style={styles.nextBtn} onPress={handleSkipToFinish} disabled={isSaving} activeOpacity={0.85}>
-              <Text style={styles.nextBtnText}>Skip for now</Text>
-            </TouchableOpacity>
-          )}
-
-          <Text style={styles.settingsNote}>All keys can be updated anytime in Settings.</Text>
-        </ScrollView>
-      )}
       </SafeAreaView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl },
+  safe: { flex: 1 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.lg,
+  },
 
-  // Logo / intro
-  logoImage: { width: 80, height: 80, borderRadius: 20, marginBottom: 12 },
+  // Intro
+  logoImage: { width: 80, height: 80, borderRadius: 20 },
   logo: { fontSize: 60, fontWeight: '900', color: Colors.text, letterSpacing: -2 },
   logoAccent: { color: Colors.primary },
-  tagline: { ...Typography.label, color: Colors.textMuted, letterSpacing: 3, marginTop: 4, marginBottom: Spacing.xxl },
-  featureList: { width: '100%', gap: Spacing.md, marginBottom: Spacing.xxl },
+  tagline: { ...Typography.label, color: Colors.textMuted, letterSpacing: 3, marginBottom: Spacing.md },
+  featureList: { width: '100%', gap: Spacing.md, marginBottom: Spacing.md },
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   featureIcon: { fontSize: 22, width: 32, textAlign: 'center' },
   featureLabel: { ...Typography.body, color: Colors.textSecondary },
 
-  // Step dots
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: Spacing.xl },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.border },
-  dotActive: { width: 20, backgroundColor: Colors.primary },
-  dotDone: { backgroundColor: Colors.primary + '60' },
-
-  // Step content
-  scrollContent: { paddingHorizontal: Spacing.xl, paddingTop: 60, paddingBottom: 48, gap: Spacing.xl },
-  stepHeader: { gap: Spacing.sm },
-  stepBadge: { ...Typography.label, color: Colors.primary, letterSpacing: 1 },
-  stepTitle: { fontSize: 28, fontWeight: '800', color: Colors.text, letterSpacing: -0.5 },
-  stepDesc: { ...Typography.body, color: Colors.textSecondary, lineHeight: 22 },
-  highlight: { color: Colors.success, fontWeight: '600' },
-
-  // Instruction card
-  card: {
-    backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
-    padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, gap: Spacing.md,
+  // Trakt step
+  optionalBadge: {
+    ...Typography.label,
+    color: Colors.primary,
+    letterSpacing: 2,
+    marginBottom: -Spacing.sm,
   },
-  cardLabel: { ...Typography.label, color: Colors.textMuted, letterSpacing: 1, marginBottom: 2 },
-  instructionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
-  stepCircle: {
-    width: 22, height: 22, borderRadius: 11, backgroundColor: Colors.primary,
-    alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0,
-  },
-  stepCircleText: { fontSize: 11, fontWeight: '700', color: Colors.background },
-  instructionText: { ...Typography.body, color: Colors.textSecondary, flex: 1, lineHeight: 20 },
-  linkBtn: { marginTop: Spacing.sm, alignSelf: 'flex-start', borderBottomWidth: 1, borderBottomColor: Colors.primary },
-  linkBtnText: { ...Typography.body, color: Colors.primary },
+  traktTitle: { fontSize: 32, fontWeight: '800', color: Colors.text, letterSpacing: -0.5, textAlign: 'center' },
+  traktDesc: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22 },
+  benefits: { width: '100%', gap: Spacing.md },
+  benefitRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
+  benefitIcon: { fontSize: 18, width: 28, textAlign: 'center', color: Colors.primary, marginTop: 1 },
+  benefitText: { ...Typography.body, color: Colors.textSecondary, flex: 1, lineHeight: 22 },
 
-  // Input
-  inputGroup: { gap: Spacing.sm },
-  inputLabel: { ...Typography.label, color: Colors.textSecondary, letterSpacing: 0.5 },
-  inputWrap: { position: 'relative' },
-  input: {
-    backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md, paddingVertical: 13,
-    ...Typography.body, color: Colors.text, borderWidth: 1, borderColor: Colors.border,
-  },
-  inputWithBtn: { paddingRight: 44 },
-  inputError: { borderColor: Colors.error },
-  errorText: { ...Typography.caption, color: Colors.error },
-  hintText: { ...Typography.caption, color: Colors.textMuted, lineHeight: 17 },
-  showBtn: {
-    position: 'absolute', right: 12, top: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  showBtnText: { fontSize: 16 },
-
-  // Trakt code display
+  // Code card
   codeCard: {
-    backgroundColor: Colors.primary + '12', borderRadius: BorderRadius.lg,
-    borderWidth: 1, borderColor: Colors.primary + '40',
-    padding: Spacing.lg, alignItems: 'center', gap: 6,
+    width: '100%',
+    backgroundColor: Colors.primary + '12',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.primary + '40',
+    padding: Spacing.lg,
+    alignItems: 'center',
+    gap: 6,
   },
   codeLabel: { ...Typography.caption, color: Colors.textSecondary },
-  codeValue: { fontSize: 28, fontWeight: '800', color: Colors.primary, letterSpacing: 4 },
+  codeValue: { fontSize: 32, fontWeight: '900', color: Colors.primary, letterSpacing: 6 },
   codeHint: { ...Typography.caption, color: Colors.textMuted },
 
-  // Connected banner
+  // Connected
   connectedBanner: {
-    backgroundColor: Colors.success + '18', borderRadius: BorderRadius.lg,
-    borderWidth: 1, borderColor: Colors.success + '40',
-    padding: Spacing.md, alignItems: 'center',
+    width: '100%',
+    backgroundColor: Colors.success + '18',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.success + '40',
+    padding: Spacing.md,
+    alignItems: 'center',
   },
   connectedText: { ...Typography.subheading, color: Colors.success, fontWeight: '700' },
 
   // Buttons
   primaryBtn: {
-    backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
-    height: 52, alignItems: 'center', justifyContent: 'center',
+    width: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  primaryBtnText: { ...Typography.subheading, color: Colors.background, fontWeight: '700' },
+  primaryBtnText: { ...Typography.subheading, color: Colors.background, fontWeight: '700', fontSize: 16 },
   btnDisabled: { opacity: 0.5 },
-  nextBtn: {
-    height: 48, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
+  skipBtn: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  nextBtnText: { ...Typography.subheading, color: Colors.textMuted },
-  settingsNote: { ...Typography.caption, color: Colors.textMuted, textAlign: 'center', lineHeight: 18 },
+  skipBtnText: { ...Typography.body, color: Colors.textMuted },
 });

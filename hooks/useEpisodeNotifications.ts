@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useApiKeysStore } from '../store/apiKeysStore';
-import { traktApi } from '../lib/trakt';
+import { traktApi, effectiveTraktClientId } from '../lib/trakt';
 import {
   requestNotificationPermission,
   setupNotificationChannel,
@@ -17,16 +17,14 @@ function todayString(): string {
 }
 
 export function useEpisodeNotifications() {
-  const { traktClientId, traktAccessToken, traktUsername } = useApiKeysStore();
+  const { traktClientId, traktAccessToken } = useApiKeysStore();
 
-  const hasAuth = !!traktClientId && (!!traktAccessToken || !!traktUsername);
+  const hasAuth = !!traktAccessToken;
+  const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
   const { data: calendarShows } = useQuery({
-    queryKey: ['trakt-calendar-notifications', traktClientId, todayString()],
-    queryFn: () =>
-      traktAccessToken
-        ? traktApi.getMyShowCalendar(traktClientId, traktAccessToken, todayString(), 7)
-        : traktApi.getAllShowCalendar(traktClientId, todayString(), 7),
+    queryKey: ['trakt-calendar-notifications', traktClientIdEff, todayString()],
+    queryFn: () => traktApi.getMyShowCalendar(traktClientIdEff, traktAccessToken, todayString(), 7),
     enabled: hasAuth,
     staleTime: 1000 * 60 * 60 * 12, // refetch twice a day
     gcTime: 1000 * 60 * 60 * 24,

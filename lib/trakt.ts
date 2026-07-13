@@ -1,5 +1,8 @@
 const BASE = 'https://api.trakt.tv';
 
+export const TRAKT_DEFAULT_CLIENT_ID = 'f96bdbb3af4329d022c1a303d59e132435bf177003';
+export const effectiveTraktClientId = (stored: string) => stored.trim() || TRAKT_DEFAULT_CLIENT_ID;
+
 export class TraktUnauthorizedError extends Error {
   constructor() {
     super('Trakt token expired or invalid — reconnect required');
@@ -126,13 +129,6 @@ export const traktApi = {
   getWatchedShows: (clientId: string, accessToken: string): Promise<TraktWatchedShow[]> =>
     get('/sync/watched/shows', clientId, accessToken),
 
-  // Public history (works with just clientId + username for public profiles)
-  getUserWatchedMovies: (username: string, clientId: string): Promise<TraktWatchedMovie[]> =>
-    get(`/users/${username}/watched/movies`, clientId),
-
-  getUserWatchedShows: (username: string, clientId: string): Promise<TraktWatchedShow[]> =>
-    get(`/users/${username}/watched/shows`, clientId),
-
   // Calendar — personal (requires access token)
   getMyShowCalendar: (
     clientId: string,
@@ -150,10 +146,4 @@ export const traktApi = {
   ): Promise<TraktCalendarMovie[]> =>
     get(`/calendars/my/movies/${startDate}/${days}`, clientId, accessToken),
 
-  // General calendar (no auth needed)
-  getAllShowCalendar: (clientId: string, startDate: string, days = 7): Promise<TraktCalendarShow[]> =>
-    get(`/calendars/all/shows/${startDate}/${days}`, clientId),
-
-  getAllMovieCalendar: (clientId: string, startDate: string, days = 30): Promise<TraktCalendarMovie[]> =>
-    get(`/calendars/all/movies/${startDate}/${days}`, clientId),
 };

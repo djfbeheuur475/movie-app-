@@ -20,7 +20,7 @@ import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useAuthStore } from '../../store/authStore';
 import { Ionicons } from '@expo/vector-icons';
 import { getPosterUrl, tmdbApi } from '../../lib/tmdb';
-import { traktApi } from '../../lib/trakt';
+import { traktApi, effectiveTraktClientId } from '../../lib/trakt';
 import type { WatchlistItem } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -65,7 +65,7 @@ export default function WatchlistScreen() {
   const insets = useSafeAreaInsets();
   const { items, removeFromWatchlist } = useWatchlistStore();
   const userId = useAuthStore((s) => s.user?.id);
-  const { traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
+  const { traktClientId, traktAccessToken } = useApiKeysStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [showMovies, setShowMovies] = useState(true);
   const [showShows, setShowShows] = useState(true);
@@ -82,24 +82,19 @@ export default function WatchlistScreen() {
     setShowShows((v) => !v);
   };
 
-  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
+  const hasTrakt = !!traktAccessToken;
+  const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
   const { data: traktMovies } = useQuery({
-    queryKey: ['trakt-watched-movies-wl', traktClientId, traktUsername, traktAccessToken],
-    queryFn: () =>
-      traktAccessToken
-        ? traktApi.getWatchedMovies(traktClientId, traktAccessToken)
-        : traktApi.getUserWatchedMovies(traktUsername, traktClientId),
+    queryKey: ['trakt-watched-movies-wl', traktClientIdEff, traktAccessToken],
+    queryFn: () => traktApi.getWatchedMovies(traktClientIdEff, traktAccessToken),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
   });
 
   const { data: traktShows } = useQuery({
-    queryKey: ['trakt-watched-shows-wl', traktClientId, traktUsername, traktAccessToken],
-    queryFn: () =>
-      traktAccessToken
-        ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
-        : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+    queryKey: ['trakt-watched-shows-wl', traktClientIdEff, traktAccessToken],
+    queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
   });
@@ -212,16 +207,25 @@ export default function WatchlistScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>My Watchlist</Text>
+        <Text style={styles.headerTitle}>My Watchlist</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => router.push('/(tabs)/search')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="search-outline" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="settings-outline" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => router.push('/settings')}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={styles.settingsIcon}>⚙</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Movies / TV Shows pill toggle */}
@@ -386,7 +390,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
@@ -403,12 +407,20 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 2,
   },
-  settingsBtn: {
-    marginTop: 4,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  settingsIcon: {
-    fontSize: 22,
-    color: Colors.textMuted,
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   typeToggleWrap: {
     flexDirection: 'row',
@@ -417,6 +429,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     padding: 4,
+    gap: 4,
     borderWidth: 1,
     borderColor: Colors.border,
   },

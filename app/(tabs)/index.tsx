@@ -1,11 +1,10 @@
-import React, { useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import {
   ScrollView,
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  RefreshControl,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
-import { traktApi, TraktUnauthorizedError } from '../../lib/trakt';
+import { traktApi, TraktUnauthorizedError, effectiveTraktClientId } from '../../lib/trakt';
 import { filterAndRankContent, passesQualityFilter } from '../../lib/quality';
 import {
   getTemporalContext, loadRecentRowTitles, saveShownRowTitles,
@@ -31,11 +30,10 @@ import type { GenreAffinity, TasteProfile } from '../../lib/tasteDna';
 import { selectRowTemplates, buildTasteNarration, applyProfileToTemplate, GENRE_LABELS } from '../../lib/templateSelector';
 import { isMismatchedNiche, rankItemsByProfile } from '../../lib/recommendations';
 import type { RecsContext, WatchSeed } from '../../lib/recommendations';
+import { useAIHomeFeed } from '../../hooks/useAIHomeFeed';
 import { useBecauseYouWatched } from '../../hooks/useBecauseYouWatched';
 import { useIfYouLiked } from '../../hooks/useIfYouLiked';
 import { useHiddenGems } from '../../hooks/useHiddenGems';
-import { useTrendingInGenre } from '../../hooks/useTrendingInGenre';
-import { useWatchlistSeed } from '../../hooks/useWatchlistSeed';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useAuthStore } from '../../store/authStore';
@@ -53,13 +51,13 @@ const HERO_SKELETON_HEIGHT = SCREEN_HEIGHT * 0.55;
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { traktClientId, traktUsername, traktAccessToken, geminiKey, handleTraktUnauthorized } = useApiKeysStore();
+  const { traktClientId, traktAccessToken, handleTraktUnauthorized } = useApiKeysStore();
   const { items: watchlistItems } = useWatchlistStore();
   const { user } = useAuthStore();
   const { favoriteGenres } = usePreferencesStore();
   const userId = user?.id ?? null;
-  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
-  const hasGemini = !!(geminiKey?.trim());
+  const hasTrakt = !!traktAccessToken;
+  const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
   // Stable for the lifetime of this component mount — changes only on app restart,
   // which gives each session a fresh template selection for thematic rows.
@@ -67,21 +65,10 @@ export default function HomeScreen() {
 
   // ─── Trending (hero only) ──────────────────────────────────────────────────
 
-  const { data: trending, isLoading: trendingLoading, refetch: refetchTrending } = useQuery({
+  const { data: trending, isLoading: trendingLoading } = useQuery({
     queryKey: ['trending'],
     queryFn: () => tmdbApi.getTrending('all', 'week'),
-  });
-
-  // ─── Popular content ───────────────────────────────────────────────────────
-
-  const { data: popularMovies, isLoading: moviesLoading } = useQuery({
-    queryKey: ['popular-movies'],
-    queryFn: () => tmdbApi.getPopularMovies(),
-  });
-
-  const { data: popularShows, isLoading: showsLoading } = useQuery({
-    queryKey: ['popular-shows'],
-    queryFn: () => tmdbApi.getPopularShows(),
+    staleTime: 1000 * 60 * 60 * 24,
   });
 
   // ─── Trakt watch history ───────────────────────────────────────────────────
@@ -89,22 +76,16 @@ export default function HomeScreen() {
   const queryClient = useQueryClient();
 
   const { data: traktMovies, isFetched: traktMoviesFetched, error: traktMoviesError } = useQuery({
-    queryKey: ['trakt-watched-movies', traktClientId, traktUsername, traktAccessToken],
-    queryFn: () =>
-      traktAccessToken
-        ? traktApi.getWatchedMovies(traktClientId, traktAccessToken)
-        : traktApi.getUserWatchedMovies(traktUsername, traktClientId),
+    queryKey: ['trakt-watched-movies', traktClientIdEff, traktAccessToken],
+    queryFn: () => traktApi.getWatchedMovies(traktClientIdEff, traktAccessToken),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
     retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
   });
 
   const { data: traktShows, isFetched: traktShowsFetched } = useQuery({
-    queryKey: ['trakt-watched-shows', traktClientId, traktUsername, traktAccessToken],
-    queryFn: () =>
-      traktAccessToken
-        ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
-        : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+    queryKey: ['trakt-watched-shows', traktClientIdEff, traktAccessToken],
+    queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
     retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
@@ -344,7 +325,19 @@ export default function HomeScreen() {
   // Wait until Trakt has settled before firing so DNA gets real history
   const traktReady = !hasTrakt || (traktMoviesFetched && traktShowsFetched);
 
-  const { data: thematicData, isLoading: thematicLoading, refetch: refetchThematic } = useQuery({
+  // ─── AI Home Feed (orchestrator) ──────────────────────────────────────────
+  const { data: aiFeed, isLoading: aiFeedLoading } = useAIHomeFeed({
+    watchedMovies: traktMovies ?? [],
+    watchedShows: traktShows ?? [],
+    enabled: traktReady && !!userId,
+  });
+
+  const aiHeroSection = aiFeed?.sections.find((s) => s.type === 'hero');
+  // Cap at 4 rows — the server sends up to 5 (4 DNA rows + 1 trending fallback).
+  // The fallback only appears when a DNA pool is empty, keeping the count at 4.
+  const aiRowSections = (aiFeed?.sections.filter((s) => s.type === 'row' || s.type === 'spotlight') ?? []).slice(0, 4);
+
+  const { data: thematicData, isLoading: thematicLoading } = useQuery({
     queryKey: ['thematic-rows-v10', traktMovieFingerprint, traktShowFingerprint, sessionKey],
     queryFn: async () => {
       const movies = traktMovies ?? [];
@@ -495,7 +488,7 @@ export default function HomeScreen() {
       return { tasteProfile, tasteMode, rows, profile };
     },
     enabled: traktReady, // no longer requires Gemini key
-    staleTime: 1000 * 60 * 60 * 6,
+    staleTime: 1000 * 60 * 60 * 24,
     retry: 1,
   });
 
@@ -526,46 +519,28 @@ export default function HomeScreen() {
   }, [thematicData, userId]);
   const thematicWaiting = !traktReady || thematicLoading;
 
-  // ─── If You Liked… ────────────────────────────────────────────────────────
-  // Pick 2 seeds from the top-6 history pool. Seed2 is chosen to be as different
-  // as possible from seed1 — prefer a different media type, then different top genre.
-  // Both rotate daily so the pair changes overnight.
-  const [seed1, seed2] = useMemo(() => {
-    const pool = recentIds.slice(0, Math.min(6, recentIds.length));
-    if (pool.length === 0) return [null, null] as const;
-
+  // ─── Daily seed rotation (BYW + IYL) ─────────────────────────────────────
+  // dayHash increments by ~1 each calendar day (sum of date-string char codes),
+  // so with a 7-item pool each pick cycles through all 7 items over 7 days.
+  const dayHash = useMemo(() => {
     const dayKey = temporal.dateKey.slice(0, 10);
-    const dayHash = dayKey.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-    const i1 = dayHash % pool.length;
-    const s1 = pool[i1];
-    if (pool.length === 1) return [s1, null] as const;
+    return dayKey.split('').reduce((acc: number, ch: string) => acc + ch.charCodeAt(0), 0);
+  }, [temporal.dateKey]);
 
-    // Build a quick genre lookup from historyItems
-    const historyGenres = new Map<number, Set<number>>(
-      (historyItems ?? []).map(item => [item.id, new Set(item.genres ?? [])])
-    );
-    const s1Genres = historyGenres.get(s1.tmdbId) ?? new Set<number>();
+  // IYL seed: one title from the top 7, changes every day
+  const seed1 = useMemo((): WatchSeed | null => {
+    const pool = recentIds.slice(0, Math.min(7, recentIds.length));
+    if (pool.length === 0) return null;
+    return pool[dayHash % pool.length];
+  }, [recentIds, dayHash]);
 
-    // Score each candidate for seed2: prefer different type, then fewer shared genres
-    const candidates = pool
-      .map((item, i) => {
-        if (i === i1) return null;
-        const typeDiff = item.mediaType !== s1.mediaType ? 2 : 0;
-        const genres = historyGenres.get(item.tmdbId) ?? new Set<number>();
-        const sharedGenres = [...s1Genres].filter(g => genres.has(g)).length;
-        // Higher score = more different from seed1
-        return { item, diversity: typeDiff + Math.max(0, 4 - sharedGenres) };
-      })
-      .filter((x): x is { item: typeof pool[0]; diversity: number } => x !== null);
-
-    candidates.sort((a, b) => b.diversity - a.diversity || 0);
-    // Among equally diverse candidates, rotate daily
-    const topDiversity = candidates[0]?.diversity ?? 0;
-    const topCandidates = candidates.filter(c => c.diversity === topDiversity);
-    const s2 = topCandidates[dayHash % topCandidates.length]?.item ?? candidates[0]?.item ?? null;
-
-    return [s1, s2] as const;
-  }, [recentIds, temporal.dateKey, historyItems]);
+  // BYW seed: same pool, offset by half so it never picks the same title as IYL
+  const bywSeed = useMemo((): WatchSeed | null => {
+    const pool = recentIds.slice(0, Math.min(7, recentIds.length));
+    if (pool.length === 0) return null;
+    const offset = Math.max(1, Math.floor(pool.length / 2));
+    return pool[(dayHash + offset) % pool.length];
+  }, [recentIds, dayHash]);
 
   // ─── Shared recommendation context ──────────────────────────────────────────
   const recsCtx: RecsContext = {
@@ -577,18 +552,12 @@ export default function HomeScreen() {
   };
 
   // ─── Row module hooks ─────────────────────────────────────────────────────────
-  const bywSeeds: WatchSeed[] = recentIds.slice(0, 3);
+  const bywSeeds: WatchSeed[] = bywSeed ? [bywSeed] : [];
   const { data: bywRows } = useBecauseYouWatched(bywSeeds, recsCtx);
-  const { data: ifYouLikedRows } = useIfYouLiked(seed1, seed2, recsCtx);
-  const { data: trendingInGenreData } = useTrendingInGenre(topGenreEntries, recsCtx);
+  const { data: ifYouLikedRows } = useIfYouLiked(seed1, null, recsCtx);
   const { data: hiddenGemsData } = useHiddenGems(topGenreEntries, recsCtx);
 
-  // ─── Watchlist-seeded row ─────────────────────────────────────────────────
-  const { seed: watchlistSeed, items: watchlistSeedItems } = useWatchlistSeed(watchlistItems, recsCtx);
-
   // ─── Cross-row dedup (render-time) ────────────────────────────────────────
-  // Personal rows take priority over thematic editorial rows.
-  // Dedup order: BYW > IYL > watchlist-seed > thematic.
 
   const bywIds = useMemo(() => {
     const ids = new Set<number>();
@@ -609,121 +578,51 @@ export default function HomeScreen() {
     return ids;
   }, [filteredIylRows]);
 
-  const filteredWatchlistSeedItems = useMemo(() =>
-    (watchlistSeedItems ?? []).filter(i => !bywIds.has(i.id) && !iylIds.has(i.id)),
-    [watchlistSeedItems, bywIds, iylIds]
-  );
-
-  const watchlistIds = useMemo(() => {
-    const ids = new Set<number>();
-    filteredWatchlistSeedItems.forEach(i => ids.add(i.id));
-    return ids;
-  }, [filteredWatchlistSeedItems]);
-
-  const filteredTrendingGenreItems = useMemo(() =>
-    (trendingInGenreData?.items ?? []).filter(
-      i => !bywIds.has(i.id) && !iylIds.has(i.id) && !watchlistIds.has(i.id)
-    ),
-    [trendingInGenreData, bywIds, iylIds, watchlistIds]
-  );
-
-  // All personal IDs before hidden gems — used to dedup hidden gems itself
-  const priorPersonalIds = useMemo(() => {
-    const ids = new Set<number>([...bywIds, ...iylIds, ...watchlistIds]);
-    filteredTrendingGenreItems.forEach(i => ids.add(i.id));
-    return ids;
-  }, [bywIds, iylIds, watchlistIds, filteredTrendingGenreItems]);
+  const personalIds = useMemo(() => new Set<number>([...bywIds, ...iylIds]), [bywIds, iylIds]);
 
   const filteredHiddenGemsItems = useMemo(() =>
-    (hiddenGemsData?.items ?? []).filter(i => !priorPersonalIds.has(i.id)),
-    [hiddenGemsData, priorPersonalIds]
+    (hiddenGemsData?.items ?? []).filter(i => !personalIds.has(i.id)),
+    [hiddenGemsData, personalIds]
   );
 
-  // Full personal ID set — thematic editorial rows are filtered against this
-  const personalIds = useMemo(() => {
-    const ids = new Set<number>([...priorPersonalIds]);
-    filteredHiddenGemsItems.forEach(i => ids.add(i.id));
-    return ids;
-  }, [priorPersonalIds, filteredHiddenGemsItems]);
-
   const filteredThematicRows = useMemo(() =>
-    thematicRows
-      .map((row: any) => ({ ...row, items: row.items.filter((i: ContentItem) => !personalIds.has(i.id)) }))
-      .filter((r: any) => r.items.length >= 3),
-    [thematicRows, personalIds]
+    thematicRows.filter((r: any) => r.items.length >= 3),
+    [thematicRows]
   );
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
-  const heroItem: ContentItem | null = useMemo(() => {
-    if (!trending?.length) return null;
-    const qualified = (trending as any[])
-      .slice(0, 10)
-      .map((item: any) =>
-        'title' in item ? normalizeMovie(item) : normalizeTVShow(item)
-      )
-      .filter((item) => passesQualityFilter(item, 'trending'));
-    if (!qualified.length) return null;
+  // Hero carousel — AI items when available, otherwise trending sorted by affinity
+  const heroItems: ContentItem[] = useMemo(() => {
+    if (aiHeroSection?.items.length) return aiHeroSection.items;
 
-    // When taste data is available, pick the trending item that best matches
-    // the user's genre affinity instead of a generic stable pick.
+    if (!trending?.length) return [];
+    const qualified = (trending as any[])
+      .map((item: any) => ('title' in item ? normalizeMovie(item) : normalizeTVShow(item)))
+      .filter((item) => passesQualityFilter(item, 'trending'));
+    if (!qualified.length) return [];
+
     if (Object.keys(genreAffinity).length > 0) {
-      const scored = qualified.map(item => {
-        const itemGenres = new Set(item.genres ?? []);
-        const score = Object.entries(genreAffinity)
-          .reduce((s, [id, w]) => s + (itemGenres.has(Number(id)) ? w : 0), 0);
-        return { item, score };
-      });
-      return scored.sort((a, b) => b.score - a.score)[0].item;
+      return qualified
+        .map(item => {
+          const itemGenres = new Set(item.genres ?? []);
+          const score = Object.entries(genreAffinity)
+            .reduce((s, [id, w]) => s + (itemGenres.has(Number(id)) ? w : 0), 0);
+          return { item, score };
+        })
+        .sort((a, b) => b.score - a.score)
+        .map(({ item }) => item)
+        .slice(0, 10);
     }
 
-    // No history yet: stable pick from top 3 so hero doesn't jump on re-render
-    const seed = (trending[0] as any).id ?? 0;
-    return qualified[seed % Math.min(3, qualified.length)];
-  }, [trending, genreAffinity]);
-
-  // Trending row — mixed movies + TV, hero item excluded to avoid duplication
-  const trendingItems: ContentItem[] = useMemo(() => {
-    if (!trending?.length) return [];
-    const heroId = heroItem?.id;
-    return (trending as any[])
-      .map((item: any) => ('title' in item ? normalizeMovie(item) : normalizeTVShow(item)))
-      .filter((item) => passesQualityFilter(item, 'trending'))
-      .filter((item) => item.id !== heroId)
-      .slice(0, 20);
-  }, [trending, heroItem]);
-
-  const popularMovieItems: ContentItem[] = useMemo(
-    () => filterAndRankContent((popularMovies ?? []).map(normalizeMovie), 'default', 20),
-    [popularMovies]
-  );
-
-  const popularShowItems: ContentItem[] = useMemo(
-    () => filterAndRankContent((popularShows ?? []).map(normalizeTVShow), 'default', 20),
-    [popularShows]
-  );
-
-  const [isManualRefreshing, setIsManualRefreshing] = React.useState(false);
-  const isRefreshing = trendingLoading || isManualRefreshing;
-
-  const onRefresh = useCallback(async () => {
-    setIsManualRefreshing(true);
-    await Promise.all([refetchTrending(), refetchThematic()]);
-    setIsManualRefreshing(false);
-  }, [refetchTrending, refetchThematic]);
+    return qualified.slice(0, 10);
+  }, [aiHeroSection, trending, genreAffinity]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={Colors.primary}
-          />
-        }
       >
         {/* Header */}
         <View style={styles.header}>
@@ -758,23 +657,12 @@ export default function HomeScreen() {
         {/* Hero */}
         {trendingLoading ? (
           <LoadingSkeleton width="100%" height={HERO_SKELETON_HEIGHT} borderRadius={0} />
-        ) : heroItem ? (
-          <HeroSection item={heroItem} />
+        ) : heroItems.length > 0 ? (
+          <HeroSection items={heroItems} />
         ) : null}
 
         {/* Rows */}
         <View style={styles.rows}>
-          {/* Trending — always at the top so users can browse what's current */}
-          {(trendingLoading || trendingItems.length > 0) && (
-            <ContentRow
-              title="Trending Now"
-              subtitle="What everyone's watching this week"
-              items={trendingItems}
-              isLoading={trendingLoading}
-              showRating
-              showType
-            />
-          )}
           {/* Continue Watching — highest intent: user is mid-series */}
           {continueWatchingItems.length >= 2 && (
             <ContentRow
@@ -819,30 +707,6 @@ export default function HomeScreen() {
               showRating
             />
           ))}
-          {watchlistSeed && filteredWatchlistSeedItems.length >= 3 && (
-            <ContentRow
-              title={`Because you saved ${watchlistSeed.title}`}
-              titleComponent={
-                <>
-                  {'Because you saved '}
-                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{watchlistSeed.title}</Text>
-                </>
-              }
-              subtitle="Similar titles you haven't seen yet"
-              items={filteredWatchlistSeedItems}
-              isLoading={false}
-              showRating
-            />
-          )}
-          {trendingInGenreData && filteredTrendingGenreItems.length >= 3 && (
-            <ContentRow
-              title={trendingInGenreData.title}
-              subtitle="Popular right now in the genres you love"
-              items={filteredTrendingGenreItems}
-              isLoading={false}
-              showRating
-            />
-          )}
           {filteredHiddenGemsItems.length >= 3 && (
             <ContentRow
               title="Hidden Gems For You"
@@ -852,18 +716,11 @@ export default function HomeScreen() {
               showRating
             />
           )}
-          {(newEpsLoading || newEpsThisWeek.length > 0) && (
-            <NewEpsRow
-              title="New Eps This Week"
-              shows={newEpsThisWeek}
-              isLoading={newEpsLoading}
-            />
-          )}
-          {/* Editorial/thematic rows below personal content */}
-          {thematicWaiting ? (
-            [0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+          {/* AI-curated rows — Brain + Candidate Builder + Curator pipeline */}
+          {aiFeedLoading && traktReady && !!userId ? (
+            [0, 1, 2, 3].map((i) => (
               <ContentRow
-                key={`skeleton-${i}`}
+                key={`ai-skeleton-${i}`}
                 title="✦ Curating your picks..."
                 subtitle=""
                 items={[]}
@@ -872,7 +729,20 @@ export default function HomeScreen() {
                 accent
               />
             ))
-          ) : filteredThematicRows.length > 0 ? (
+          ) : aiRowSections.length > 0 ? (
+            aiRowSections.map((section) => (
+              <ContentRow
+                key={section.id}
+                title={`✦ ${section.heading ?? section.id}`}
+                subtitle={section.subheading}
+                items={section.items}
+                isLoading={false}
+                showRating
+                accent
+              />
+            ))
+          ) : !aiFeedLoading && filteredThematicRows.length > 0 ? (
+            // Fallback to thematic rows if AI feed failed
             filteredThematicRows.map((row, i) => (
               <ContentRow
                 key={`thematic-${i}`}
@@ -884,23 +754,13 @@ export default function HomeScreen() {
                 accent
               />
             ))
-          ) : (
-            <>
-              <ContentRow
-                title="Popular Movies"
-                subtitle="Trending with audiences worldwide"
-                items={popularMovieItems}
-                isLoading={moviesLoading}
-                showRating
-              />
-              <ContentRow
-                title="Top Series"
-                subtitle="Binge-worthy shows everyone's talking about"
-                items={popularShowItems}
-                isLoading={showsLoading}
-                showRating
-              />
-            </>
+          ) : null}
+          {(newEpsLoading || newEpsThisWeek.length > 0) && (
+            <NewEpsRow
+              title="New Eps This Week"
+              shows={newEpsThisWeek}
+              isLoading={newEpsLoading}
+            />
           )}
           {hasTrakt && (
             <RecentlyWatchedRow

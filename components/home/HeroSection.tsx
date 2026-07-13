@@ -1,11 +1,11 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  Animated,
+  FlatList,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,73 +16,104 @@ import type { ContentItem } from '../../types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.55;
+const AUTO_ADVANCE_MS = 6000;
 
 interface Props {
-  item: ContentItem;
-  aiExplanation?: string;
+  items: ContentItem[];
 }
 
-export default function HeroSection({ item, aiExplanation }: Props) {
-  const router = useRouter();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
+function HeroSlide({ item, onPress }: { item: ContentItem; onPress: () => void }) {
   const backdropUrl = getBackdropUrl(item.backdropPath, 'large');
   const posterUrl = getPosterUrl(item.posterPath, 'large');
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true,
-    }).start();
-  }, [item.id]);
-
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() => router.push(`/title/${item.id}?type=${item.mediaType}`)}
-    >
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+    <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={styles.slide}>
       <Image
         source={{ uri: backdropUrl ?? posterUrl ?? '' }}
-        style={styles.backdrop}
+        style={StyleSheet.absoluteFill}
         contentFit="cover"
-        transition={500}
+        transition={300}
       />
       <LinearGradient
         colors={['transparent', 'rgba(10,10,10,0.6)', 'rgba(10,10,10,0.95)', Colors.background]}
         locations={[0, 0.4, 0.7, 1]}
-        style={styles.gradient}
+        style={StyleSheet.absoluteFill}
       />
       <View style={styles.content}>
-        {/* Featured badge */}
         <View style={styles.featuredBadge}>
           <Text style={styles.featuredText}>
             FEATURED {item.mediaType === 'tv' ? 'SERIES' : 'FILM'}
             {item.rating > 0 ? `  ★ ${item.rating.toFixed(1)}` : ''}
           </Text>
         </View>
-
         <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-
         {item.overview ? (
           <Text style={styles.overview} numberOfLines={2}>{item.overview}</Text>
         ) : null}
-
-        {aiExplanation && (
-          <View style={styles.aiTag}>
-            <Text style={styles.aiTagText}>✦ AI Pick</Text>
-            <Text style={styles.aiExplanation} numberOfLines={2}>{aiExplanation}</Text>
-          </View>
-        )}
-
         <View style={styles.meta}>
           <Text style={styles.metaText}>{item.releaseDate?.slice(0, 4)}</Text>
         </View>
-
       </View>
-    </Animated.View>
     </TouchableOpacity>
+  );
+}
+
+export default function HeroSection({ items }: Props) {
+  const router = useRouter();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const listRef = useRef<FlatList<ContentItem>>(null);
+  const activeIndexRef = useRef(0);
+
+  useEffect(() => {
+    if (items.length <= 1) return;
+    const timer = setInterval(() => {
+      const next = (activeIndexRef.current + 1) % items.length;
+      activeIndexRef.current = next;
+      setActiveIndex(next);
+      listRef.current?.scrollToIndex({ index: next, animated: true });
+    }, AUTO_ADVANCE_MS);
+    return () => clearInterval(timer);
+  }, [items.length]);
+
+  // Must be stable refs — FlatList warns if these change between renders
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems[0] != null) {
+      const idx = viewableItems[0].index ?? 0;
+      activeIndexRef.current = idx;
+      setActiveIndex(idx);
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+
+  if (!items.length) return null;
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        ref={listRef}
+        data={items}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={({ item }) => (
+          <HeroSlide
+            item={item}
+            onPress={() => router.push(`/title/${item.id}?type=${item.mediaType}`)}
+          />
+        )}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        getItemLayout={(_, index) => ({
+          length: SCREEN_WIDTH,
+          offset: SCREEN_WIDTH * index,
+          index,
+        })}
+        decelerationRate="fast"
+        scrollEventThrottle={16}
+      />
+    </View>
   );
 }
 
@@ -91,11 +122,9 @@ const styles = StyleSheet.create({
     height: HERO_HEIGHT,
     width: SCREEN_WIDTH,
   },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-  },
-  gradient: {
-    ...StyleSheet.absoluteFill,
+  slide: {
+    width: SCREEN_WIDTH,
+    height: HERO_HEIGHT,
   },
   content: {
     position: 'absolute',
@@ -134,19 +163,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: Spacing.sm,
   },
-  aiTag: {
-    marginBottom: Spacing.sm,
-  },
-  aiTagText: {
-    ...Typography.label,
-    color: Colors.primary,
-    marginBottom: 2,
-  },
-  aiExplanation: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
   meta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -156,14 +172,5 @@ const styles = StyleSheet.create({
   metaText: {
     ...Typography.caption,
     color: Colors.textSecondary,
-  },
-  rating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  star: {
-    color: Colors.accent,
-    fontSize: 12,
   },
 });

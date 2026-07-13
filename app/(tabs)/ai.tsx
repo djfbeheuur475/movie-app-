@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -8,8 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import ChatBubble from '../../components/ai/ChatBubble';
-import { askGemini, summariseConversation } from '../../lib/gemini';
-import { traktApi } from '../../lib/trakt';
+import { askAI, summariseConversation, DEFAULT_AI_MODEL } from '../../lib/ai-edge';
+import { traktApi, effectiveTraktClientId } from '../../lib/trakt';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { useQuery } from '@tanstack/react-query';
 import { useApiKeysStore } from '../../store/apiKeysStore';
@@ -157,6 +158,41 @@ function buildDefaultChips(): { mood: Chip[]; context: Chip[] } {
   };
 }
 
+// Title similarity for TMDB cross-type fallback (fixes AI putting TV shows in movies[])
+function normTitle(s: string) {
+  return s.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+function titleMatch(a: string, b: string): number {
+  const na = normTitle(a), nb = normTitle(b);
+  if (na === nb) return 1.0;
+  if (na.includes(nb) || nb.includes(na)) return 0.7;
+  return 0.0;
+}
+async function searchTitleWithFallback(
+  title: string,
+  year: number | undefined,
+  prefer: 'movie' | 'tv',
+): Promise<ContentItem | null> {
+  const THRESHOLD = 0.5;
+  try {
+    if (prefer === 'movie') {
+      const movies = await tmdbApi.searchMovies(title, 1, year);
+      if (movies[0] && titleMatch(movies[0].title, title) >= THRESHOLD) return normalizeMovie(movies[0]);
+      const shows = await tmdbApi.searchTVShows(title, 1, year);
+      if (shows[0] && titleMatch(shows[0].name, title) >= THRESHOLD) return normalizeTVShow(shows[0]);
+      return movies[0] ? normalizeMovie(movies[0]) : null;
+    } else {
+      const shows = await tmdbApi.searchTVShows(title, 1, year);
+      if (shows[0] && titleMatch(shows[0].name, title) >= THRESHOLD) return normalizeTVShow(shows[0]);
+      const movies = await tmdbApi.searchMovies(title, 1, year);
+      if (movies[0] && titleMatch(movies[0].title, title) >= THRESHOLD) return normalizeMovie(movies[0]);
+      return shows[0] ? normalizeTVShow(shows[0]) : null;
+    }
+  } catch {
+    return null;
+  }
+}
+
 let msgId = 0;
 const newId = () => String(++msgId);
 
@@ -164,31 +200,27 @@ const newId = () => String(++msgId);
 const MAX_RAW_TURNS = 8;
 
 export default function AITabScreen() {
-  const { geminiKey, traktClientId, traktUsername, traktAccessToken } = useApiKeysStore();
+  const router = useRouter();
+  const { aiModel, traktClientId, traktAccessToken } = useApiKeysStore();
   const { user } = useAuthStore();
   const userId = user?.id ?? null;
   const { favoriteGenres } = usePreferencesStore();
 
   const temporal = getTemporalContext();
-  const hasTrakt = !!(traktClientId && (traktUsername || traktAccessToken));
+  const hasTrakt = !!traktAccessToken;
+  const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
   // ─── Trakt via React Query (shared cache with home tab) ───────────────────
   const { data: traktMovies } = useQuery({
-    queryKey: ['trakt-watched-movies', traktClientId, traktUsername, traktAccessToken],
-    queryFn: () =>
-      traktAccessToken
-        ? traktApi.getWatchedMovies(traktClientId, traktAccessToken)
-        : traktApi.getUserWatchedMovies(traktUsername, traktClientId),
+    queryKey: ['trakt-watched-movies', traktClientIdEff, traktAccessToken],
+    queryFn: () => traktApi.getWatchedMovies(traktClientIdEff, traktAccessToken),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
   });
 
   const { data: traktShows } = useQuery({
-    queryKey: ['trakt-watched-shows', traktClientId, traktUsername, traktAccessToken],
-    queryFn: () =>
-      traktAccessToken
-        ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
-        : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+    queryKey: ['trakt-watched-shows', traktClientIdEff, traktAccessToken],
+    queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
     enabled: hasTrakt,
     staleTime: 1000 * 60 * 30,
   });
@@ -241,15 +273,14 @@ export default function AITabScreen() {
 
   // Trigger conversation summarisation when history grows beyond MAX_RAW_TURNS
   useEffect(() => {
-    const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
-    if (!cleanKey || messages.length <= MAX_RAW_TURNS + 2) return;
+    if (messages.length <= MAX_RAW_TURNS + 2) return;
 
     const toSummarise = messages.slice(0, -MAX_RAW_TURNS);
     if (toSummarise.length < 2) return;
 
     summariseConversation(
-      cleanKey,
       toSummarise.map(m => ({ role: m.role, content: m.content })),
+      aiModel || DEFAULT_AI_MODEL,
     ).then(summary => {
       if (summary) conversationSummaryRef.current = summary;
     }).catch(() => {});
@@ -258,16 +289,6 @@ export default function AITabScreen() {
   const sendMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isSendingRef.current) return;
-
-    const cleanKey = geminiKey.trim().replace(/[\n\r\t]/g, '');
-    if (!cleanKey) {
-      Alert.alert(
-        'Gemini API key needed',
-        'Add your free Gemini API key in Settings to enable AI recommendations.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
 
     isSendingRef.current = true;
 
@@ -278,17 +299,75 @@ export default function AITabScreen() {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    // Create assistant placeholder immediately — streaming text fills it progressively
+    const assistantId = newId();
+    const placeholder: ChatMessage = { id: assistantId, role: 'assistant', content: '', timestamp: new Date() };
+
+    setMessages(prev => [...prev, userMsg, placeholder]);
     setInput('');
     setIsLoading(true);
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
 
+    // Client-side streaming state machine: extract reply text from JSON stream
+    // Edge function streams raw model tokens; we buffer until '"reply":"' then emit
+    let streamPhase: 'buffering' | 'streaming' | 'done' = 'buffering';
+    let streamBuf = '';
+    const REPLY_NEEDLE = '"reply":"';
+    let firstChunkSeen = false;
+
+    const emitChunk = (text: string) => {
+      if (!text) return;
+      if (!firstChunkSeen) {
+        firstChunkSeen = true;
+        setIsLoading(false);
+      }
+      setMessages(prev => prev.map(m =>
+        m.id === assistantId ? { ...m, content: m.content + text } : m
+      ));
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 30);
+    };
+
+    const processToken = (token: string) => {
+      if (streamPhase === 'done') return;
+      // Stop at JSON field transitions (end of reply value)
+      for (const marker of ['","movies"', '","shows"']) {
+        const idx = token.indexOf(marker);
+        if (idx !== -1) {
+          streamPhase = 'done';
+          const safe = token.slice(0, idx).replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+          if (safe) emitChunk(safe);
+          return;
+        }
+      }
+      emitChunk(token.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+    };
+
+    const onChunk = (token: string) => {
+      if (streamPhase === 'done') return;
+      if (streamPhase === 'buffering') {
+        streamBuf += token;
+        const idx = streamBuf.indexOf(REPLY_NEEDLE);
+        if (idx !== -1) {
+          streamPhase = 'streaming';
+          const after = streamBuf.slice(idx + REPLY_NEEDLE.length);
+          streamBuf = '';
+          if (after) processToken(after);
+        } else if (streamBuf.length > 400) {
+          // Model didn't output JSON wrapper — stream raw
+          streamPhase = 'streaming';
+          processToken(streamBuf);
+          streamBuf = '';
+        }
+        return;
+      }
+      processToken(token);
+    };
+
     try {
       const allMessages = [...messages, userMsg];
 
-      // Only send the last MAX_RAW_TURNS messages raw; older context is in the summary
       const recentTurns = allMessages.slice(-MAX_RAW_TURNS);
-      const historyForGemini: { role: 'user' | 'assistant'; content: string }[] =
+      const historyForAI: { role: 'user' | 'assistant'; content: string }[] =
         conversationSummaryRef.current
           ? [
               { role: 'user', content: `[Context from earlier in our conversation: ${conversationSummaryRef.current}]` },
@@ -299,40 +378,33 @@ export default function AITabScreen() {
       const movies = traktMovies ?? [];
       const shows = traktShows ?? [];
 
-      // Merge in-session + cross-session seen titles
       const inSessionTitles = messages
         .filter(m => m.role === 'assistant' && m.recommendations?.length)
         .flatMap(m => m.recommendations!.map(r => r.title))
         .filter(Boolean);
       const alreadyRecommended = [...new Set([...crossSessionSeenRef.current, ...inSessionTitles])];
 
-      const { reply, movies: movieTitles, movieYears, shows: showTitles, showYears } = await askGemini(
-        cleanKey,
-        historyForGemini,
+      const { reply, movies: movieTitles, movieYears, shows: showTitles, showYears } = await askAI(
+        historyForAI,
         movies,
         shows,
         alreadyRecommended,
         favoriteGenres,
         tasteDnaRef.current,
+        aiModel || DEFAULT_AI_MODEL,
+        onChunk,
       );
 
       const PREFERRED_LANGS = new Set(['en', 'es', 'fr', 'ko', 'ja']);
       const fulfilled = <T,>(r: PromiseSettledResult<T>): r is PromiseFulfilledResult<T> => r.status === 'fulfilled';
 
-      // Year-aware TMDB search — dramatically reduces title disambiguation errors
       const [movieSearchRes, showSearchRes] = await Promise.all([
-        Promise.allSettled(
-          movieTitles.slice(0, 10).map((title, i) =>
-            tmdbApi.searchMovies(title, 1, movieYears[i] ?? undefined)
-              .then(results => results[0] ? normalizeMovie(results[0]) : null)
-          )
-        ),
-        Promise.allSettled(
-          showTitles.slice(0, 10).map((title, i) =>
-            tmdbApi.searchTVShows(title, 1, showYears[i] ?? undefined)
-              .then(results => results[0] ? normalizeTVShow(results[0]) : null)
-          )
-        ),
+        Promise.allSettled(movieTitles.slice(0, 10).map((title, i) =>
+          searchTitleWithFallback(title, movieYears[i] ?? undefined, 'movie')
+        )),
+        Promise.allSettled(showTitles.slice(0, 10).map((title, i) =>
+          searchTitleWithFallback(title, showYears[i] ?? undefined, 'tv')
+        )),
       ]);
 
       const allMovies = movieSearchRes.filter(fulfilled).map(r => r.value).filter((v): v is ContentItem => !!v);
@@ -341,12 +413,10 @@ export default function AITabScreen() {
       const posterItems = [...allMovies, ...allShows]
         .filter(item => !!item.posterPath && PREFERRED_LANGS.has(item.originalLanguage ?? 'en'))
         .slice(0, 6);
-
       const posterIds = new Set(posterItems.map(i => i.id));
       const linkOnlyItems = [...allMovies, ...allShows].filter(i => !posterIds.has(i.id));
       const recItems: ContentItem[] = [...posterItems, ...linkOnlyItems];
 
-      // Persist newly seen titles across sessions
       const newTitles = [...movieTitles, ...showTitles];
       if (newTitles.length > 0) {
         const updated = [...new Set([...newTitles, ...crossSessionSeenRef.current])].slice(0, 60);
@@ -354,44 +424,37 @@ export default function AITabScreen() {
         saveAiSeenTitles(newTitles, crossSessionSeenRef.current);
       }
 
-      const updatedMessages: ChatMessage[] = [
-        ...allMessages,
-        {
-          id: newId(),
-          role: 'assistant',
-          content: reply,
-          timestamp: new Date(),
-          recommendations: recItems,
-        },
-      ];
-      setMessages(updatedMessages);
+      // Replace placeholder with clean parsed reply + recommendations
+      setMessages(prev => prev.map(m =>
+        m.id === assistantId
+          ? { ...m, content: reply, recommendations: recItems }
+          : m
+      ));
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
 
-      // Persist AI conversation summary to cloud after each exchange
       if (userId && newTitles.length > 0) {
         const sessionSummary = `User asked: "${trimmed}". AI recommended: ${newTitles.join(', ')}.`;
         saveAiConversationToCloud(userId, sessionSummary, newTitles);
       }
     } catch (e: any) {
       const msg = e?.message ?? '';
-      const userFacing = msg.includes('No Gemini API key') || msg.includes('Invalid API key format')
-        ? msg
-        : msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')
-        ? "Your Gemini API key is invalid. Go to Settings and paste a fresh key from aistudio.google.com."
-        : msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('credits are depleted')
-        ? "Gemini quota exceeded. Check your usage at aistudio.google.com or try again shortly."
-        : msg.includes('PERMISSION_DENIED') || msg.includes('403')
-        ? "Permission denied — check your Gemini API key has the Generative Language API enabled."
-        : "Something went wrong reaching the AI. Check your Gemini API key in Settings.";
-      setMessages(prev => [
-        ...prev,
-        { id: newId(), role: 'assistant', content: userFacing, timestamp: new Date() },
-      ]);
+      const userFacing = msg.includes('Daily AI limit')
+        ? "You've reached today's AI limit (100 requests). Try again tomorrow."
+        : msg.includes('401') || msg.includes('Unauthorized')
+        ? "Session expired — please sign out and back in."
+        : msg.includes('429')
+        ? "Too many requests. Try again in a moment."
+        : msg.includes('503') || msg.includes('not configured')
+        ? "AI service is temporarily unavailable. Try again shortly."
+        : `Something went wrong reaching the AI. ${msg.slice(0, 80)}`;
+      setMessages(prev => prev.map(m =>
+        m.id === assistantId ? { ...m, content: userFacing } : m
+      ));
     } finally {
       isSendingRef.current = false;
       setIsLoading(false);
     }
-  }, [messages, geminiKey, traktMovies, traktShows, userId]);
+  }, [messages, aiModel, traktMovies, traktShows, userId]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -401,8 +464,8 @@ export default function AITabScreen() {
           <Text style={styles.headerIcon}>✦</Text>
           <Text style={styles.headerTitle}>AI Guide</Text>
         </View>
-        {!isInitialState && (
-          <View style={styles.headerRight}>
+        <View style={styles.headerRight}>
+          {!isInitialState && (
             <TouchableOpacity
               style={styles.resetBtn}
               onPress={() => {
@@ -423,17 +486,26 @@ export default function AITabScreen() {
             >
               <Text style={styles.resetBtnText}>New chat</Text>
             </TouchableOpacity>
-          </View>
-        )}
+          )}
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => router.push('/(tabs)/search')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="search-outline" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="settings-outline" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {!geminiKey && (
-        <View style={styles.keyNotice}>
-          <Text style={styles.keyNoticeText}>
-            ✦ Add your free Gemini API key in Settings to enable AI recommendations
-          </Text>
-        </View>
-      )}
 
       {isInitialState ? (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -599,6 +671,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#2a2a2a',
   },
   resetBtnText: { ...Typography.caption, color: Colors.textSecondary, fontWeight: '600' },
+  headerIconBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   // ── Key notice ───────────────────────────────────────────────────────────────
   keyNotice: {

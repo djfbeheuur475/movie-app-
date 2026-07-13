@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -156,6 +157,7 @@ function TVGenreRow({ id, name, subtitle }: { id: number; name: string; subtitle
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
 export default function DiscoverScreen() {
+  const router = useRouter();
   const [media, setMedia] = useState<MediaTab>('movies');
   const handleMediaChange = useCallback((m: MediaTab) => setMedia(m), []);
 
@@ -163,6 +165,24 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Discover</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => router.push('/(tabs)/search')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="search-outline" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="settings-outline" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.mediaToggle}>
@@ -259,9 +279,27 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.xl,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 28,
@@ -281,6 +319,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     padding: 4,
+    gap: 4,
     borderWidth: 1,
     borderColor: Colors.border,
   },

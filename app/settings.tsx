@@ -17,7 +17,8 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { useAuthStore } from '../store/authStore';
-import { requestDeviceCode, pollDeviceToken } from '../lib/trakt';
+import { requestDeviceCode, pollDeviceToken, effectiveTraktClientId } from '../lib/trakt';
+import { clearRecommendationCache } from '../lib/tasteDna';
 
 // ─── Reusable input component ─────────────────────────────────────────────────
 
@@ -117,14 +118,12 @@ export default function SettingsScreen() {
   const { user, signOut } = useAuthStore();
   const userId = user?.id ?? null;
   const {
-    traktClientId, traktUsername, traktAccessToken, geminiKey,
-    saveKeys, clearKeys, syncToCloud,
+    traktClientId, traktAccessToken,
+    saveKeys, syncToCloud,
   } = useApiKeysStore();
 
   const [fields, setFields] = useState({
     traktClientId,
-    traktUsername,
-    geminiKey,
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -132,8 +131,8 @@ export default function SettingsScreen() {
   const [traktCode, setTraktCode] = useState<{ userCode: string; verifyUrl: string } | null>(null);
 
   useEffect(() => {
-    setFields({ traktClientId, traktUsername, geminiKey });
-  }, [traktClientId, traktUsername, geminiKey]);
+    setFields({ traktClientId });
+  }, [traktClientId]);
 
   const set = (key: keyof typeof fields) => (val: string) =>
     setFields((f) => ({ ...f, [key]: val }));
@@ -147,11 +146,7 @@ export default function SettingsScreen() {
   };
 
   const handleTraktConnect = useCallback(async () => {
-    const clientId = fields.traktClientId.trim();
-    if (!clientId) {
-      Alert.alert('Missing Client ID', 'Enter your Trakt Client ID first.');
-      return;
-    }
+    const clientId = effectiveTraktClientId(fields.traktClientId);
     setTraktConnecting(true);
     setTraktCode(null);
     try {
@@ -206,18 +201,17 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const handleReset = () => {
+  const handleRefreshRecs = () => {
     Alert.alert(
-      'Reset all settings?',
-      'This will clear all stored keys and return you to the welcome screen.',
+      'Refresh recommendations?',
+      'This clears your recently shown rows and item history so the home screen generates a fresh set of recommendations.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset',
-          style: 'destructive',
+          text: 'Refresh',
           onPress: async () => {
-            await clearKeys();
-            router.replace('/welcome');
+            await clearRecommendationCache();
+            Alert.alert('Done', 'Pull down on the home screen to reload your recommendations.');
           },
         },
       ]
@@ -282,44 +276,12 @@ export default function SettingsScreen() {
               badge="Optional"
             />
 
-            <Text style={styles.integrationDesc}>
-              Connect Trakt to unlock personalised AI recommendations based on your real watch history — movies and TV shows.
-            </Text>
-
-            <View style={styles.instructionBox}>
-              <Text style={styles.instructionTitle}>How to get a Trakt Client ID:</Text>
-              {[
-                'Go to trakt.tv/oauth/applications/new',
-                'Create a new app (name it anything)',
-                'Set Redirect URI to  urn:ietf:wg:oauth:2.0:oob',
-                'Copy the Client ID',
-              ].map((step, i) => (
-                <View key={i} style={styles.instructionRow}>
-                  <View style={styles.stepCircle}>
-                    <Text style={styles.stepNum}>{i + 1}</Text>
-                  </View>
-                  <Text style={styles.instructionText}>{step}</Text>
-                </View>
-              ))}
-              <TouchableOpacity onPress={() => Linking.openURL('https://trakt.tv/oauth/applications/new')}>
-                <Text style={styles.instructionLink}>trakt.tv/oauth/applications/new ↗</Text>
-              </TouchableOpacity>
-            </View>
-
             <KeyInput
               label="Trakt Client ID"
               value={fields.traktClientId}
               onChange={set('traktClientId')}
-              placeholder="Paste your Trakt Client ID (optional)..."
-              hint="Your Client ID from the Trakt application you created"
-            />
-
-            <KeyInput
-              label="Trakt Username"
-              value={fields.traktUsername}
-              onChange={set('traktUsername')}
-              placeholder="your-trakt-username"
-              hint="Used to fetch your public watch history"
+              placeholder="Uses NextUp's shared app by default"
+              hint="Advanced: override with your own Trakt application Client ID"
             />
 
             {traktCode && (
@@ -354,49 +316,6 @@ export default function SettingsScreen() {
             )}
           </Card>
 
-          {/* ── Gemini ── */}
-          <Card>
-            <CardHeader
-              icon="✦"
-              title="Gemini AI"
-              subtitle="Powers the AI recommendation engine"
-              badge={fields.geminiKey ? '✓ Set' : 'Optional'}
-            />
-
-            <Text style={styles.integrationDesc}>
-              Add your Gemini API key to enable AI-powered recommendations personalised to your Trakt watch history.
-            </Text>
-
-            <View style={styles.instructionBox}>
-              <Text style={styles.instructionTitle}>How to get a Gemini API key:</Text>
-              {[
-                'Go to aistudio.google.com',
-                'Sign in with your Google account',
-                'Click "Get API key" → Create API key',
-                'Copy the key and paste it below',
-              ].map((step, i) => (
-                <View key={i} style={styles.instructionRow}>
-                  <View style={styles.stepCircle}>
-                    <Text style={styles.stepNum}>{i + 1}</Text>
-                  </View>
-                  <Text style={styles.instructionText}>{step}</Text>
-                </View>
-              ))}
-              <TouchableOpacity onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')}>
-                <Text style={styles.instructionLink}>aistudio.google.com ↗</Text>
-              </TouchableOpacity>
-            </View>
-
-            <KeyInput
-              label="Gemini API Key"
-              value={fields.geminiKey}
-              onChange={set('geminiKey')}
-              placeholder="Paste your Gemini API key here..."
-              secure
-              hint="Free tier available — no billing required for personal use"
-            />
-          </Card>
-
           {/* ── Actions ── */}
           <View style={styles.actions}>
             <TouchableOpacity
@@ -411,9 +330,10 @@ export default function SettingsScreen() {
               }
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.resetBtn} onPress={handleReset} activeOpacity={0.8}>
-              <Text style={styles.resetBtnText}>Reset All Settings</Text>
+            <TouchableOpacity style={styles.refreshRecsBtn} onPress={handleRefreshRecs} activeOpacity={0.8}>
+              <Text style={styles.refreshRecsBtnText}>Refresh Recommendations</Text>
             </TouchableOpacity>
+
           </View>
 
           <View style={{ height: 48 }} />
@@ -517,31 +437,6 @@ const styles = StyleSheet.create({
   },
   signInBtnText: { ...Typography.subheading, color: Colors.background },
 
-  // Integration descriptions
-  integrationDesc: { ...Typography.body, color: Colors.textSecondary, lineHeight: 20 },
-  instructionBox: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    gap: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  instructionTitle: { ...Typography.label, color: Colors.text, fontWeight: '700', marginBottom: 4 },
-  instructionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
-  stepCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-    flexShrink: 0,
-  },
-  stepNum: { fontSize: 11, fontWeight: '700', color: Colors.background },
-  instructionText: { ...Typography.caption, color: Colors.textSecondary, flex: 1, lineHeight: 18 },
-  instructionLink: { ...Typography.caption, color: Colors.primary, marginTop: 4 },
 
   // Trakt device code
   codeBox: {
@@ -624,14 +519,14 @@ const styles = StyleSheet.create({
   },
   saveBtnSuccess: { backgroundColor: Colors.success },
   saveBtnText: { ...Typography.subheading, color: Colors.text },
-  resetBtn: {
-    backgroundColor: Colors.error + '18',
+  refreshRecsBtn: {
+    backgroundColor: Colors.primary + '18',
     borderRadius: BorderRadius.md,
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.error + '60',
+    borderColor: Colors.primary + '60',
   },
-  resetBtnText: { ...Typography.subheading, color: Colors.error },
+  refreshRecsBtnText: { ...Typography.subheading, color: Colors.primary },
 });

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useApiKeysStore } from '../store/apiKeysStore';
-import { traktApi } from '../lib/trakt';
+import { traktApi, effectiveTraktClientId } from '../lib/trakt';
 
 interface WatchedData {
   movieIds: Set<number>;
@@ -21,20 +21,17 @@ function epKey(season: number, episode: number): string {
 }
 
 export function useTraktWatched() {
-  const { traktClientId, traktAccessToken, traktUsername } = useApiKeysStore();
+  const { traktClientId, traktAccessToken } = useApiKeysStore();
 
-  const hasAuth = !!traktClientId && (!!traktAccessToken || !!traktUsername);
+  const hasAuth = !!traktAccessToken;
+  const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
   const { data = EMPTY } = useQuery({
-    queryKey: ['trakt-watched', traktClientId, traktAccessToken || traktUsername],
+    queryKey: ['trakt-watched', traktClientIdEff, traktAccessToken],
     queryFn: async (): Promise<WatchedData> => {
       const [movies, shows] = await Promise.all([
-        traktAccessToken
-          ? traktApi.getWatchedMovies(traktClientId, traktAccessToken)
-          : traktApi.getUserWatchedMovies(traktUsername, traktClientId),
-        traktAccessToken
-          ? traktApi.getWatchedShows(traktClientId, traktAccessToken)
-          : traktApi.getUserWatchedShows(traktUsername, traktClientId),
+        traktApi.getWatchedMovies(traktClientIdEff, traktAccessToken),
+        traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
       ]);
 
       const movieIds = new Set(

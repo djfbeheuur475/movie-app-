@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { TraktWatchedMovie, TraktWatchedShow } from './trakt';
 import type { ContentItem } from '../types';
 import { supabase } from './supabase';
@@ -160,8 +159,8 @@ export function deterministicPage(dateKey: string, rowIndex: number): number {
 // ─── Item-level cooldowns (7-day suppression) ────────────────────────────────
 
 const COOLDOWN_KEY = 'item_cooldowns_v1';
-const COOLDOWN_DAYS = 7;
-const COOLDOWN_MAX = 500;
+const COOLDOWN_DAYS = 3;
+const COOLDOWN_MAX = 200;
 
 interface ItemCooldownRecord { id: number; at: number }
 
@@ -281,6 +280,13 @@ export async function saveShownRowTitles(titles: string[]): Promise<void> {
       .slice(0, RECENT_ROWS_MAX);
     await AsyncStorage.setItem(RECENT_ROWS_KEY, JSON.stringify(merged));
   } catch {}
+}
+
+export async function clearRecommendationCache(): Promise<void> {
+  await Promise.all([
+    AsyncStorage.removeItem(COOLDOWN_KEY),
+    AsyncStorage.removeItem(RECENT_ROWS_KEY),
+  ]);
 }
 
 // ─── AI chat cross-session memory ─────────────────────────────────────────────
@@ -713,11 +719,8 @@ function getEditorialRows(temporal: TemporalContext): ThematicRow[] {
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
 
-const MODEL_CASCADE = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash-latest',
-] as const;
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+const DNA_FALLBACK_MODEL = 'qwen/qwen3-14b';
 
 function buildDNAPrompt(
   recentMovies: string,
@@ -838,6 +841,7 @@ export async function generateTasteDNA(
   genreAffinity: GenreAffinity = {},
   playsMap: Map<number, number> = new Map(),
   historyItems: ContentItem[] = [],
+  model: string = 'qwen/qwen3-32b',
 ): Promise<TasteDNA> {
   // Content fingerprint — DNA is reused across 6h rotations when watch history unchanged
   const fingerprint = computeContentFingerprint(movies, shows);
@@ -883,15 +887,29 @@ export async function generateTasteDNA(
   );
 
   const key = apiKey.trim().replace(/[\n\r\t]/g, '');
-  const genAI = new GoogleGenerativeAI(key);
 
-  for (let i = 0; i < MODEL_CASCADE.length; i++) {
-    const modelId = MODEL_CASCADE[i];
+  const cascade = model === DNA_FALLBACK_MODEL ? [model] : [model, DNA_FALLBACK_MODEL];
+  for (let i = 0; i < cascade.length; i++) {
+    const modelId = cascade[i];
     try {
       console.log(`[TasteDNA] Trying ${modelId} (${temporal.description})`);
-      const model = genAI.getGenerativeModel({ model: modelId });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().trim();
+      const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://nextup.app',
+          'X-Title': 'NextUp',
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const raw: string = data.choices?.[0]?.message?.content ?? '';
+      const text = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       const stripped = text.replace(/```(?:json)?\n?/g, '').replace(/```/g, '').trim();
       const first = stripped.indexOf('{');
       const last = stripped.lastIndexOf('}');
@@ -932,7 +950,7 @@ export async function generateTasteDNA(
       };
     } catch (e) {
       console.warn(`[TasteDNA] ${modelId} failed:`, String((e as any)?.message ?? '').slice(0, 100));
-      if (i < MODEL_CASCADE.length - 1) continue;
+      if (i < cascade.length - 1) continue;
     }
   }
 
