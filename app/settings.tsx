@@ -19,6 +19,14 @@ import { useApiKeysStore } from '../store/apiKeysStore';
 import { useAuthStore } from '../store/authStore';
 import { requestDeviceCode, pollDeviceToken, effectiveTraktClientId } from '../lib/trakt';
 import { clearRecommendationCache } from '../lib/tasteDna';
+import { supabase } from '../lib/supabase';
+
+// Not a security secret — just an opaque, hard-to-guess id for a personal
+// list URL (same sensitivity as a shared-doc link). No crypto dependency needed.
+function generateStremioToken(): string {
+  const rand = () => Math.random().toString(36).slice(2);
+  return `${Date.now().toString(36)}${rand()}${rand()}`;
+}
 
 // ─── Reusable input component ─────────────────────────────────────────────────
 
@@ -129,6 +137,20 @@ export default function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [traktConnecting, setTraktConnecting] = useState(false);
   const [traktCode, setTraktCode] = useState<{ userCode: string; verifyUrl: string } | null>(null);
+  const [stremioToken, setStremioToken] = useState<string | null>(null);
+  const [stremioLoading, setStremioLoading] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from('user_settings')
+      .select('stremio_token')
+      .eq('id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.stremio_token) setStremioToken(data.stremio_token);
+      });
+  }, [userId]);
 
   useEffect(() => {
     setFields({ traktClientId });
@@ -217,6 +239,35 @@ export default function SettingsScreen() {
       ]
     );
   };
+
+  const handleAddToStremio = useCallback(async () => {
+    if (!userId) {
+      Alert.alert('Sign in required', 'Sign in to install your personal watchlist addon.');
+      return;
+    }
+    setStremioLoading(true);
+    try {
+      let token = stremioToken;
+      if (!token) {
+        token = generateStremioToken();
+        const { error } = await supabase
+          .from('user_settings')
+          .upsert({ id: userId, stremio_token: token }, { onConflict: 'id' });
+        if (error) throw error;
+        setStremioToken(token);
+      }
+
+      const manifestUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/stremio-addon/${token}/manifest.json`;
+      const deepLink = `stremio://${manifestUrl.replace(/^https?:\/\//, '')}`;
+      await Linking.openURL(deepLink).catch(() =>
+        Linking.openURL(`https://web.strem.io/#/addons?addon=${encodeURIComponent(manifestUrl)}`)
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message ?? 'Could not set up the Stremio addon.');
+    } finally {
+      setStremioLoading(false);
+    }
+  }, [userId, stremioToken]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -314,6 +365,41 @@ export default function SettingsScreen() {
                 )}
               </TouchableOpacity>
             )}
+          </Card>
+
+          {/* ── Stremio ── */}
+          <Card>
+            <CardHeader
+              icon="🧩"
+              title="Stremio Addon"
+              subtitle="Install your NextUp watchlist as a live addon in Stremio"
+              badge="Optional"
+            />
+
+            {stremioToken && (
+              <View style={styles.connectedRow}>
+                <View style={styles.connectedDot} />
+                <Text style={styles.connectedText}>Addon set up for your account</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.connectBtn, stremioLoading && styles.connectBtnDisabled]}
+              onPress={handleAddToStremio}
+              disabled={stremioLoading}
+              activeOpacity={0.85}
+            >
+              {stremioLoading ? (
+                <ActivityIndicator color={Colors.text} size="small" />
+              ) : (
+                <Text style={styles.connectBtnText}>
+                  {stremioToken ? 'Open in Stremio' : 'Add to Stremio →'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.hint}>
+              Always pulls your latest watchlist, newest additions first. Works with any Stremio metadata/stream addon since titles are matched by IMDb ID.
+            </Text>
           </Card>
 
           {/* ── Actions ── */}

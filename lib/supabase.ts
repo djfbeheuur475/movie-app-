@@ -73,6 +73,7 @@ export type Database = {
           trakt_access_token: string | null;
           trakt_username: string | null;
           setup_done: boolean;
+          stremio_token: string | null;
         };
         Insert: {
           id: string;
@@ -82,6 +83,7 @@ export type Database = {
           trakt_access_token?: string | null;
           trakt_username?: string | null;
           setup_done?: boolean;
+          stremio_token?: string | null;
         };
         Update: Partial<Database['public']['Tables']['user_settings']['Insert']>;
         Relationships: [];

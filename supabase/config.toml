@@ -423,3 +423,11 @@ entrypoint = "./functions/ai-chat/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/ai-chat/*.html" ]
+
+[functions.stremio-addon]
+enabled = true
+# Public, unauthenticated by design — Stremio itself calls this with plain
+# GETs and no headers. The per-user token in the URL path is the credential.
+verify_jwt = false
+import_map = "./functions/stremio-addon/deno.json"
+entrypoint = "./functions/stremio-addon/index.ts"
