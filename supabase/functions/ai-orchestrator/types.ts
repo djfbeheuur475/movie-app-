@@ -52,6 +52,14 @@ export interface CacheMetadata {
   modelUsed: string;
   engineVersion: string;
   cacheVersion: number;
+  // Rolling window of recently-shown Trakt list IDs (last few generations),
+  // carried forward each cycle so the picker doesn't re-surface the same
+  // best-matching lists every other regeneration.
+  recentListIds?: number[];
+  // Device-local calendar date (YYYY-MM-DD) this cache was generated for.
+  // A mismatch against the client's current local date means their day has
+  // ticked over, so the cache is treated as stale regardless of expiresAt.
+  clientDateKey?: string;
 }
 
 // ─── Recommendation types ─────────────────────────────────────────────────────
@@ -152,6 +160,7 @@ export interface CandidateItem {
   title: string;
   year: number;
   voteAverage: number;
+  voteCount: number;
   popularity: number;
   genres: number[];
   overview?: string;
@@ -174,6 +183,64 @@ export interface DNARow {
   sortBy: string;
   voteAverageGte: number;
   voteCountGte?: number;
+}
+
+// ─── Theme-based recommendation pipeline ─────────────────────────────────────
+
+export type SlotType =
+  | "primary"
+  | "secondary"
+  | "format_switch"
+  | "discovery"
+  | "stretch"
+  | "prestige";
+
+export interface SlotDefinition {
+  slotType: SlotType;
+  mediaTypeHint: "movie" | "tv" | "either";
+  excludeTopGenreIds: number[];  // genres to exclude from TMDB queries (stretch row)
+  label: string;
+  instruction: string;
+}
+
+export interface ThemeDisplay {
+  heading: string;
+  subheading: string;
+}
+
+export interface ThemeRetrieval {
+  mediaType: "movie" | "tv";
+  primaryGenres: string[];    // genre names — mapped to IDs by pool builder
+  secondaryGenres: string[];
+  era: "classic" | "nineties" | "contemporary" | "recent" | "any";
+  minRating: number;
+  discovery: boolean;  // legacy flag kept for backward compat — prefer sortStrategy
+  // ─── Extended retrieval controls (AI should set these to match theme intent) ──
+  sortStrategy?: "popular" | "acclaimed" | "hidden" | "recent";
+  maxVoteCount?: number;    // vote_count.lte — caps historical vote count
+  minVoteCount?: number;    // overrides quality floor for obscure content
+  maxPopularity?: number;   // popularity.lte — caps TMDB rolling popularity score (better than vote count for "currently hidden")
+  originalLanguage?: string; // ISO 639-1, e.g. "ko", "fr", "ja" — null = any language
+  traktListIds?: number[];  // AI-selected Trakt list IDs from the catalog shown in theme-gen prompt
+}
+
+export interface ThemeSpec {
+  id: string;
+  slotType: SlotType;
+  display: ThemeDisplay;
+  retrieval: ThemeRetrieval;
+}
+
+export interface ThemePool {
+  themeSpec: ThemeSpec;
+  candidates: CandidateItem[];
+}
+
+export interface CuratedRow {
+  themeId: string;
+  slotType: SlotType;
+  reason: string;
+  tmdbIds: number[];
 }
 
 // ─── Action context ───────────────────────────────────────────────────────────

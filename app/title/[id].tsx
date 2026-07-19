@@ -17,6 +17,7 @@ import CastList from '../../components/detail/CastList';
 import EpisodeList from '../../components/detail/EpisodeList';
 import ContentRow from '../../components/home/ContentRow';
 import { useWatchlistStore } from '../../store/watchlistStore';
+import { useManualWatchedStore } from '../../store/manualWatchedStore';
 import { useAuthStore } from '../../store/authStore';
 import { useFollowStore } from '../../store/followStore';
 import { useTraktWatched } from '../../hooks/useTraktWatched';
@@ -46,6 +47,12 @@ export default function TitleDetailScreen() {
   // Auto-tick if in Trakt history (unless explicitly unfollowed); or explicitly followed
   const followActive = (traktHasWatched && !isUnfollowed(numId)) || isFollowed(numId);
 
+  const { markWatched, unmarkWatched, isManuallyWatched } = useManualWatchedStore();
+  const manuallyWatched = isManuallyWatched(numId, mediaType);
+  // Trakt history is authoritative when present; the manual mark only matters
+  // for titles Trakt has no record of.
+  const isWatched = traktHasWatched || manuallyWatched;
+
   const { data: detail, isLoading, error } = useQuery<DetailData>({
     queryKey: ['title-detail', numId, mediaType],
     queryFn: (): Promise<DetailData> =>
@@ -62,6 +69,23 @@ export default function TitleDetailScreen() {
       removeFromWatchlist(numId, mediaType, userId);
     } else {
       addToWatchlist({
+        tmdb_id: numId,
+        media_type: mediaType,
+        title,
+        poster_path: detail.poster_path,
+      }, userId);
+    }
+  };
+
+  const handleWatchedToggle = async () => {
+    if (!detail) return;
+    // Trakt already has this one — the manual mark has nothing to toggle off.
+    if (traktHasWatched) return;
+    const title = 'title' in detail ? (detail as TMDBMovieDetail).title : (detail as TMDBTVDetail).name;
+    if (manuallyWatched) {
+      unmarkWatched(numId, mediaType, userId);
+    } else {
+      markWatched({
         tmdb_id: numId,
         media_type: mediaType,
         title,
@@ -147,6 +171,8 @@ export default function TitleDetailScreen() {
           isFollowed={followActive}
           onFollowToggle={handleFollowToggle}
           showFollow={mediaType === 'tv' || !!getNextAirDate(detail)}
+          isWatched={isWatched}
+          onWatchedToggle={handleWatchedToggle}
         />
 
         <CastList

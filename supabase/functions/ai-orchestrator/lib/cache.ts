@@ -63,13 +63,27 @@ export interface CacheValidation {
   reason?: string;
 }
 
-export function isCacheValid(cached: CacheRow, current: Fingerprints): CacheValidation {
+export function isCacheValid(
+  cached: CacheRow,
+  current: Fingerprints,
+  clientDateKey?: string,
+): CacheValidation {
   if (new Date(cached.expires_at) < new Date()) {
     return { valid: false, reason: "expired" };
   }
 
   if (cached.cache_version !== CURRENT_CACHE_VERSION) {
     return { valid: false, reason: "version_mismatch" };
+  }
+
+  // Expire at the user's local midnight rather than a fixed 24h-from-generation
+  // window — a rolling TTL drifts with whatever time of day they last opened
+  // the app, so "today's" feed could still be showing at 11pm one day and
+  // 1pm the next. Both sides derive this from device-local time.
+  // deno-lint-ignore no-explicit-any
+  const cachedDateKey = (cached.payload as any)?.cacheMetadata?.clientDateKey as string | undefined;
+  if (cachedDateKey && clientDateKey && cachedDateKey !== clientDateKey) {
+    return { valid: false, reason: "new_day" };
   }
 
   if (cached.dna_fingerprint !== current.dna) {

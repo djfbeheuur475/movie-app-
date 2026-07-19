@@ -5,6 +5,7 @@ import { validateAuth, AuthError } from "./lib/auth.ts";
 import { assembleContext } from "./lib/context.ts";
 import { handlePing } from "./actions/ping.ts";
 import { handleHomepage } from "./actions/homepage.ts";
+import { handleIndexTrakt } from "./actions/index_trakt.ts";
 
 // Phase 8: import handleChat from actions/chat.ts
 
@@ -44,14 +45,24 @@ Deno.serve(async (req) => {
     const action = (typeof body.action === "string" ? body.action : "ping");
     const limit = RATE_LIMITS[action] ?? 50;
 
-    // 3. Rate limit + context assembly in parallel
-    const [{ data: allowed, error: rlErr }, ctx] = await Promise.all([
-      admin.rpc("check_ai_rate_limit", { p_user_id: user.id, p_action: action, p_limit: limit }),
-      assembleContext(admin, user.id, body, openRouterKey),
-    ]);
-
-    if (rlErr) console.error(`[orchestrator] rate limit error:`, rlErr.message);
-    if (allowed === false) return jsonError(`Daily limit reached for action '${action}'`, 429);
+    // 3. Rate limit + context assembly.
+    // "homepage" is cache-first — most calls just re-serve an unchanged feed
+    // and cost nothing, so it checks/consumes its own quota internally, only
+    // on an actual cache-miss regeneration. Gating it here unconditionally
+    // meant routine repeat opens (or a burst of testing) could exhaust the
+    // daily quota before a single real AI generation ever ran.
+    let ctx;
+    if (action === "homepage") {
+      ctx = await assembleContext(admin, user.id, body, openRouterKey);
+    } else {
+      const [{ data: allowed, error: rlErr }, assembledCtx] = await Promise.all([
+        admin.rpc("check_ai_rate_limit", { p_user_id: user.id, p_action: action, p_limit: limit }),
+        assembleContext(admin, user.id, body, openRouterKey),
+      ]);
+      if (rlErr) console.error(`[orchestrator] rate limit error:`, rlErr.message);
+      if (allowed === false) return jsonError(`Daily limit reached for action '${action}'`, 429);
+      ctx = assembledCtx;
+    }
 
     console.log(`[orchestrator] action=${action} user=${user.id.slice(0, 8)}`);
 
@@ -62,6 +73,9 @@ Deno.serve(async (req) => {
 
       case "homepage":
         return handleHomepage(ctx);
+
+      case "index_trakt":
+        return handleIndexTrakt(ctx);
 
       // Phase 8: case "chat": return handleChat(ctx);
 

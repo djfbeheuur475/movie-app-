@@ -10,6 +10,7 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useWatchlistStore } from '../store/watchlistStore';
+import { useManualWatchedStore } from '../store/manualWatchedStore';
 import { usePreferencesStore } from '../store/preferencesStore';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { useFollowStore } from '../store/followStore';
@@ -80,6 +81,7 @@ function NotificationTapHandler() {
 export default function RootLayout() {
   const loadUser = useAuthStore((s) => s.loadUser);
   const loadWatchlist = useWatchlistStore((s) => s.loadWatchlist);
+  const loadManualWatched = useManualWatchedStore((s) => s.loadManualWatched);
   const loadFromStorage = usePreferencesStore((s) => s.loadFromStorage);
   const loadKeys = useApiKeysStore((s) => s.loadKeys);
   const loadFollowed = useFollowStore((s) => s.load);
@@ -103,7 +105,7 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        await Promise.all([loadUser(), loadWatchlist(), loadFromStorage(), loadKeys(), loadFollowed()]);
+        await Promise.all([loadUser(), loadWatchlist(), loadManualWatched(), loadFromStorage(), loadKeys(), loadFollowed()]);
       } catch (e) {
         console.warn('Startup load error:', e);
       } finally {

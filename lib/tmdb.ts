@@ -296,32 +296,6 @@ export const tmdbApi = {
     }
   },
 
-  getHiddenGems: async (type: 'movie' | 'tv', page = 1) => {
-    if (type === 'movie') {
-      const { data } = await tmdb.get('/discover/movie', {
-        params: {
-          sort_by: 'vote_average.desc',
-          'vote_count.gte': 100,
-          'vote_average.gte': 7.0,
-          'vote_count.lte': 8000,
-          page,
-        },
-      });
-      return { results: data.results as TMDBMovie[], total_pages: data.total_pages as number };
-    } else {
-      const { data } = await tmdb.get('/discover/tv', {
-        params: {
-          sort_by: 'vote_average.desc',
-          'vote_count.gte': 100,
-          'vote_average.gte': 7.5,
-          'vote_count.lte': 5000,
-          page,
-        },
-      });
-      return { results: data.results as TMDBTVShow[], total_pages: data.total_pages as number };
-    }
-  },
-
   getByGenre: async (type: 'movie' | 'tv', genreId: number | string, page = 1) => {
     const endpoint = type === 'movie' ? '/discover/movie' : '/discover/tv';
     const { data } = await tmdb.get(endpoint, {

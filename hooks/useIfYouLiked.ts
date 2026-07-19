@@ -64,7 +64,7 @@ export function useIfYouLiked(
           .filter(item => passesQualityFilter(item, 'discover'))
           .filter(item => !isMismatchedNiche(item, [], genreAffinity, profile));
 
-        if (dominant.length === 0) return filtered.slice(0, 20);
+        if (dominant.length === 0) return filtered.slice(0, 30);
 
         const ranked = filtered.map(item => {
           const itemGenres = new Set(item.genres ?? []);
@@ -81,7 +81,7 @@ export function useIfYouLiked(
           return { item, score: genreMatch * 0.5 + eraScore * 0.15 + qualityBonus * 0.25 + popularityFit };
         });
 
-        return ranked.sort((a, b) => b.score - a.score).map(x => x.item).slice(0, 20);
+        return ranked.sort((a, b) => b.score - a.score).map(x => x.item).slice(0, 30);
       }
 
       const rowData = await Promise.all(seeds.map(fetchSimilarItems));

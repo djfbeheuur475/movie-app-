@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { useWatchlistStore } from '../../store/watchlistStore';
+import { useManualWatchedStore } from '../../store/manualWatchedStore';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useAuthStore } from '../../store/authStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,6 +65,7 @@ export default function WatchlistScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { items, removeFromWatchlist } = useWatchlistStore();
+  const isManuallyWatched = useManualWatchedStore((s) => s.isManuallyWatched);
   const userId = useAuthStore((s) => s.user?.id);
   const { traktClientId, traktAccessToken } = useApiKeysStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
@@ -99,22 +101,30 @@ export default function WatchlistScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  // Build lookup sets from Trakt data
+  // Build lookup sets from Trakt data, plus anything manually marked watched
+  // in-app (Trakt has no record of, e.g. watched somewhere that doesn't
+  // scrobble) — otherwise it's stuck showing under "To Watch" forever.
   const watchedMovieIds = useMemo(() => {
     const ids = new Set<number>();
     (traktMovies ?? []).forEach((m) => {
       if (m.movie.ids.tmdb) ids.add(m.movie.ids.tmdb);
     });
+    items.forEach((i) => {
+      if (i.media_type === 'movie' && isManuallyWatched(i.tmdb_id, 'movie')) ids.add(i.tmdb_id);
+    });
     return ids;
-  }, [traktMovies]);
+  }, [traktMovies, items, isManuallyWatched]);
 
   const watchedShowIds = useMemo(() => {
     const ids = new Set<number>();
     (traktShows ?? []).forEach((s) => {
       if (s.show.ids.tmdb) ids.add(s.show.ids.tmdb);
     });
+    items.forEach((i) => {
+      if (i.media_type === 'tv' && isManuallyWatched(i.tmdb_id, 'tv')) ids.add(i.tmdb_id);
+    });
     return ids;
-  }, [traktShows]);
+  }, [traktShows, items, isManuallyWatched]);
 
   // Fetch genres for each watchlist item — reuses the same cache key as the detail screen
   const genreQueries = useQueries({

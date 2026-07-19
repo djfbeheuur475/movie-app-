@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
+import { getListItemsPage } from '../../lib/trakt';
 import { hasGoodMetadata } from '../../lib/quality';
 import ContentRow from '../../components/home/ContentRow';
 import IndiePicksRow from '../../components/discover/IndiePicksRow';
@@ -85,16 +86,36 @@ async function fetchTVNewEpisodes(page: number): Promise<PageResult> {
   return { items, nextPage: page < total_pages ? page + 1 : null };
 }
 
+// Community-curated Trakt lists, not a raw TMDB rating query — a low vote-count
+// floor let tiny-fanbase niche titles (unproven quality, sometimes NSFW-adjacent)
+// dominate purely from vote volatility. These are real, vetted "hidden gem" lists.
+const MOVIE_HIDDEN_GEMS_LIST_ID = 808094; // "Great Movies You May Have Never Heard Of"
+const TV_HIDDEN_GEMS_LIST_ID = 21539470; // "Hidden Gems" (TV-dominant)
+
 async function fetchMovieHiddenGems(page: number): Promise<PageResult> {
-  const { results, total_pages } = await tmdbApi.getHiddenGems('movie', page);
-  const items = (results as any[]).map(normalizeMovie).filter(hasGoodMetadata);
-  return { items, nextPage: page < total_pages ? page + 1 : null };
+  const { items: listItems, pageCount } = await getListItemsPage(MOVIE_HIDDEN_GEMS_LIST_ID, page, 20);
+  const movieIds = listItems
+    .filter((i) => i.type === 'movie' && i.movie?.ids.tmdb)
+    .map((i) => i.movie!.ids.tmdb);
+  const enriched = await Promise.allSettled(movieIds.map((id) => tmdbApi.getMovieBasic(id)));
+  const items = enriched
+    .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+    .map((r) => normalizeMovie(r.value))
+    .filter(hasGoodMetadata);
+  return { items, nextPage: page < pageCount ? page + 1 : null };
 }
 
 async function fetchTVHiddenGems(page: number): Promise<PageResult> {
-  const { results, total_pages } = await tmdbApi.getHiddenGems('tv', page);
-  const items = (results as any[]).map(normalizeTVShow).filter(hasGoodMetadata);
-  return { items, nextPage: page < total_pages ? page + 1 : null };
+  const { items: listItems, pageCount } = await getListItemsPage(TV_HIDDEN_GEMS_LIST_ID, page, 20);
+  const showIds = listItems
+    .filter((i) => i.type === 'show' && i.show?.ids.tmdb)
+    .map((i) => i.show!.ids.tmdb);
+  const enriched = await Promise.allSettled(showIds.map((id) => tmdbApi.getTVBasic(id)));
+  const items = enriched
+    .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+    .map((r) => normalizeTVShow(r.value))
+    .filter(hasGoodMetadata);
+  return { items, nextPage: page < pageCount ? page + 1 : null };
 }
 
 function makeGenreFetcher(type: 'movie' | 'tv', genreId: number) {

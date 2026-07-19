@@ -305,8 +305,13 @@ function dnaRowsToIntents(ctx: ActionContext, sig: Signals): SectionIntent[] {
   //
   // TV row: /discover/tv is reliable with 2 genres + vote_average filter, so it
   // keeps the tighter spec.
+  // Keywords that imply the row should surface obscure content, not mainstream hits.
+  const HIDDEN_KEYWORDS = ["hidden", "underground", "micro", "overlooked", "undiscovered", "obscure", "forgotten", "underrated", "gem", "cult", "radar", "festival", "indie"];
+  const isObscureTheme = (title: string) => HIDDEN_KEYWORDS.some(kw => title.toLowerCase().includes(kw));
+
   const thematicRows: SectionIntent[] = rows.slice(0, 4).map((row, i) => {
     const isMovie = row.type === "movie";
+    const obscure = isObscureTheme(row.title);
     return {
       id: `row_dna_${i}`,
       type: "row" as const,
@@ -316,16 +321,21 @@ function dnaRowsToIntents(ctx: ActionContext, sig: Signals): SectionIntent[] {
       candidateSpec: {
         source: "discover" as const,
         mediaType: row.type,
-        // Movies: single genre (broadest pool, no AND restriction)
-        // TV: 2 genres work fine with TV discover
         genres: isMovie ? [row.genreIds[0]] : row.genreIds.slice(0, 2),
-        // Movies: no rating filter — rely on vote count + popularity sort
-        // TV: keep the quality bar
-        minRating: isMovie ? undefined : row.voteAverageGte,
-        minVoteCount: isMovie ? 300 : Math.round((row.voteCountGte ?? 300) / 2),
-        // Movies: popularity.desc reliably returns mainstream titles
-        // TV: keep DNA row's sort (vote_average.desc works fine for TV)
-        sortBy: isMovie ? "popularity.desc" : (row.sortBy ?? "vote_average.desc"),
+        // Quality floor for all DNA rows (movies previously had none, causing noise)
+        minRating: row.voteAverageGte ?? 7.0,
+        // Movies need more votes to be credibly rated; obscure rows allow fewer
+        minVoteCount: isMovie ? (obscure ? 200 : 500) : (obscure ? 100 : 200),
+        // Always sort by quality, not popularity — popularity.desc was returning
+        // mainstream blockbusters (Lion King) for thematic rows like "Human Condition"
+        sortBy: "vote_average.desc",
+        // Universal 2000+ floor: prevents pre-2000 classics (Cuckoo's Nest 1975,
+        // Apocalypse Now 1979, Rear Window 1954) from dominating vote_average.desc results.
+        // The AI curator then picks from this pool of quality contemporary films.
+        releaseDateGte: "2000-01-01",
+        // Obscure-themed rows cap popularity so mainstream hits (Succession, Chernobyl)
+        // can't appear in "Hidden TV" or "Festival Underground" rows.
+        maxPopularity: obscure ? 45 : undefined,
       },
     };
   });

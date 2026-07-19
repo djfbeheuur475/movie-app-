@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { useApiKeysStore } from './apiKeysStore';
 import { useWatchlistStore } from './watchlistStore';
+import { useManualWatchedStore } from './manualWatchedStore';
 import { usePreferencesStore } from './preferencesStore';
 
 export interface LocalUser {
@@ -96,6 +97,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (settings) {
       await useApiKeysStore.getState().restoreFromCloud(settings);
       await useWatchlistStore.getState().syncFromCloud(u.id);
+      await useManualWatchedStore.getState().syncFromCloud(u.id);
     }
     // Always restore preferences (non-blocking)
     usePreferencesStore.getState().restoreFromCloud(u.id).catch(() => {});

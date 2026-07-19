@@ -100,6 +100,20 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['watchlist']['Insert']>;
         Relationships: [];
       };
+      manual_watched: {
+        Row: {
+          id: string;
+          user_id: string;
+          tmdb_id: number;
+          media_type: 'movie' | 'tv';
+          watched_at: string;
+          title: string;
+          poster_path: string | null;
+        };
+        Insert: Omit<Database['public']['Tables']['manual_watched']['Row'], 'id' | 'watched_at'>;
+        Update: Partial<Database['public']['Tables']['manual_watched']['Insert']>;
+        Relationships: [];
+      };
       taste_dna: {
         Row: {
           user_id: string;

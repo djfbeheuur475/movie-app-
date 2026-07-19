@@ -28,7 +28,7 @@ import {
 } from '../../lib/tasteDna';
 import type { GenreAffinity, TasteProfile } from '../../lib/tasteDna';
 import { selectRowTemplates, buildTasteNarration, applyProfileToTemplate, GENRE_LABELS } from '../../lib/templateSelector';
-import { isMismatchedNiche, rankItemsByProfile } from '../../lib/recommendations';
+import { isMismatchedNiche, rankItemsByProfile, buildScoredWatchPool } from '../../lib/recommendations';
 import type { RecsContext, WatchSeed } from '../../lib/recommendations';
 import { useAIHomeFeed } from '../../hooks/useAIHomeFeed';
 import { useBecauseYouWatched } from '../../hooks/useBecauseYouWatched';
@@ -40,6 +40,7 @@ import { useAuthStore } from '../../store/authStore';
 import { usePreferencesStore } from '../../store/preferencesStore';
 import HeroSection from '../../components/home/HeroSection';
 import ContentRow from '../../components/home/ContentRow';
+import PaginatedAIRow from '../../components/home/PaginatedAIRow';
 import NewEpsRow from '../../components/home/NewEpsRow';
 import RecentlyWatchedRow from '../../components/home/RecentlyWatchedRow';
 import TasteModeChip from '../../components/home/TasteModeChip';
@@ -116,39 +117,18 @@ export default function HomeScreen() {
   }, [traktMovies, traktShows]);
 
   // Merge movies + shows, sort by play-count × recency, deduplicate, take top 30
-  const recentIds = useMemo(() => {
-    const recencyWeight = (watchedAt: string) => {
-      const days = (Date.now() - new Date(watchedAt).getTime()) / 86400000;
-      return Math.exp(-days / 90);
-    };
-    const combined = [
-      ...(traktMovies ?? []).map((m) => ({
-        tmdbId: m.movie.ids.tmdb,
-        mediaType: 'movie' as const,
-        watchedAt: m.last_watched_at,
-        title: m.movie.title,
-        score: m.plays * recencyWeight(m.last_watched_at),
-      })),
-      ...(traktShows ?? []).map((s) => ({
-        tmdbId: s.show.ids.tmdb,
-        mediaType: 'tv' as const,
-        watchedAt: s.last_watched_at,
-        title: s.show.title,
-        // Cap TV plays at 12 — episode count otherwise inflates score vs movies
-        score: Math.min(s.plays, 12) * recencyWeight(s.last_watched_at),
-      })),
-    ];
-    const seen = new Set<number>();
-    return combined
-      .filter(({ tmdbId }) => !!tmdbId)
-      .sort((a, b) => b.score - a.score)
-      .filter(({ tmdbId }) => {
-        if (seen.has(tmdbId)) return false;
-        seen.add(tmdbId);
-        return true;
-      })
-      .slice(0, 30);
-  }, [traktMovies, traktShows]);
+  const recentIds = useMemo(
+    () => buildScoredWatchPool(traktMovies, traktShows).slice(0, 30),
+    [traktMovies, traktShows],
+  );
+
+  // Same pool, but shows need 2+ total episode plays to qualify — keeps the
+  // "If You Liked" seed from landing on something sampled for one episode
+  // and dropped, which makes for a poor personalisation signal.
+  const iylEligibleIds = useMemo(
+    () => buildScoredWatchPool(traktMovies, traktShows, 2).slice(0, 10),
+    [traktMovies, traktShows],
+  );
 
   const { data: historyItems, isLoading: historyLoading } = useQuery({
     queryKey: ['home-history', recentIds.map((i) => `${i.tmdbId}-${i.mediaType}`)],
@@ -346,9 +326,8 @@ export default function HomeScreen() {
   });
 
   const aiHeroSection = aiFeed?.sections.find((s) => s.type === 'hero');
-  // Cap at 4 rows — the server sends up to 5 (4 DNA rows + 1 trending fallback).
-  // The fallback only appears when a DNA pool is empty, keeping the count at 4.
-  const aiRowSections = (aiFeed?.sections.filter((s) => s.type === 'row' || s.type === 'spotlight') ?? []).slice(0, 4);
+  // Trakt-list pipeline generates 6 rows — one per AI-picked list.
+  const aiRowSections = (aiFeed?.sections.filter((s) => s.type === 'row' || s.type === 'spotlight') ?? []).slice(0, 6);
 
   const { data: thematicData, isLoading: thematicLoading } = useQuery({
     queryKey: ['thematic-rows-v11', traktMovieFingerprint, traktShowFingerprint, dominantLanguage, sessionKey],
@@ -422,9 +401,11 @@ export default function HomeScreen() {
           // Apply profile-driven parameter modulation — same template, different content pool per user
           const row = applyProfileToTemplate(rawTemplate, profile);
 
-          // Fetch 3 pages (60 candidates) so heavy watchedIds filters still leave enough items
+          // Fetch 4 pages (80 candidates) so heavy watchedIds filters still leave enough items
           const offsetPage = deterministicPage(temporal.dateKey, rowIndex); // 1–3
-          const pages = offsetPage === 1 ? [1, 2, 3] : [1, offsetPage, Math.min(offsetPage + 1, 5)];
+          const pages = offsetPage === 1
+            ? [1, 2, 3, 4]
+            : [1, offsetPage, Math.min(offsetPage + 1, 5), Math.min(offsetPage + 2, 6)];
 
           async function fetchPage(p: number) {
             const cacheParams = {
@@ -480,11 +461,11 @@ export default function HomeScreen() {
           // Cap non-dominant-language items to 1 per row so foreign content
           // can surface occasionally but never floods the row.
           const items = (() => {
-            if (!dominantLanguage || row.originCountry) return ranked.slice(0, 20);
+            if (!dominantLanguage || row.originCountry) return ranked.slice(0, 30);
             const result: ContentItem[] = [];
             let foreignCount = 0;
             for (const item of ranked) {
-              if (result.length >= 20) break;
+              if (result.length >= 30) break;
               const isForeign = item.originalLanguage && item.originalLanguage !== dominantLanguage;
               if (isForeign) {
                 if (foreignCount < 1) { result.push(item); foreignCount++; }
@@ -557,20 +538,20 @@ export default function HomeScreen() {
     return dayKey.split('').reduce((acc: number, ch: string) => acc + ch.charCodeAt(0), 0);
   }, [temporal.dateKey]);
 
-  // IYL seed: one title from the top 7, changes every day
+  // IYL seed: one title from the top 7 qualifying shows/movies, changes every day
   const seed1 = useMemo((): WatchSeed | null => {
-    const pool = recentIds.slice(0, Math.min(7, recentIds.length));
+    const pool = iylEligibleIds.slice(0, Math.min(7, iylEligibleIds.length));
     if (pool.length === 0) return null;
     return pool[dayHash % pool.length];
-  }, [recentIds, dayHash]);
+  }, [iylEligibleIds, dayHash]);
 
-  // BYW seed: same pool, offset by half so it never picks the same title as IYL
+  // BYW seed: recency pool, excluding whatever IYL picked so the two rows never match
   const bywSeed = useMemo((): WatchSeed | null => {
-    const pool = recentIds.slice(0, Math.min(7, recentIds.length));
+    const pool = recentIds.filter((s) => s.tmdbId !== seed1?.tmdbId).slice(0, Math.min(7, recentIds.length));
     if (pool.length === 0) return null;
     const offset = Math.max(1, Math.floor(pool.length / 2));
     return pool[(dayHash + offset) % pool.length];
-  }, [recentIds, dayHash]);
+  }, [recentIds, seed1, dayHash]);
 
   // ─── Shared recommendation context ──────────────────────────────────────────
   const recsCtx: RecsContext = {
@@ -704,39 +685,6 @@ export default function HomeScreen() {
             />
           )}
           {/* Personal rows — most relevant to the user's current taste */}
-          {(bywRows ?? []).map(({ seed, items }) => (
-            <ContentRow
-              key={`byw-${seed.tmdbId}`}
-              title={`Because you watched ${seed.title}`}
-              titleComponent={
-                <>
-                  {'Because you watched '}
-                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
-                </>
-              }
-              subtitle="More like what you just finished"
-              items={items}
-              isLoading={false}
-              showRating
-            />
-          ))}
-          {filteredIylRows.map(({ seed, items }) => (
-            <ContentRow
-              key={`if-you-liked-${seed.tmdbId}`}
-              title={`If you liked ${seed.title}...`}
-              titleComponent={
-                <>
-                  {'If you liked '}
-                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
-                  {'...'}
-                </>
-              }
-              subtitle="You might also like these"
-              items={items}
-              isLoading={false}
-              showRating
-            />
-          ))}
           {filteredHiddenGemsItems.length >= 3 && (
             <ContentRow
               title="Hidden Gems For You"
@@ -761,14 +709,14 @@ export default function HomeScreen() {
             ))
           ) : aiRowSections.length > 0 ? (
             aiRowSections.map((section) => (
-              <ContentRow
+              <PaginatedAIRow
                 key={section.id}
-                title={`✦ ${section.heading ?? section.id}`}
+                title={section.heading ?? section.id}
                 subtitle={section.subheading}
-                items={section.items}
-                isLoading={false}
-                showRating
-                accent
+                initialItems={section.items}
+                traktListId={
+                  section.id.startsWith('list-') ? Number(section.id.slice(5)) || null : null
+                }
               />
             ))
           ) : !aiFeedLoading && filteredThematicRows.length > 0 ? (
@@ -792,6 +740,39 @@ export default function HomeScreen() {
               isLoading={newEpsLoading}
             />
           )}
+          {filteredIylRows.map(({ seed, items }) => (
+            <ContentRow
+              key={`if-you-liked-${seed.tmdbId}`}
+              title={`If you liked ${seed.title}...`}
+              titleComponent={
+                <>
+                  {'If you liked '}
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
+                  {'...'}
+                </>
+              }
+              subtitle="You might also like these"
+              items={items}
+              isLoading={false}
+              showRating
+            />
+          ))}
+          {(bywRows ?? []).map(({ seed, items }) => (
+            <ContentRow
+              key={`byw-${seed.tmdbId}`}
+              title={`Because you watched ${seed.title}`}
+              titleComponent={
+                <>
+                  {'Because you watched '}
+                  <Text style={{ fontStyle: 'italic', color: Colors.textMuted }}>{seed.title}</Text>
+                </>
+              }
+              subtitle="More like what you just finished"
+              items={items}
+              isLoading={false}
+              showRating
+            />
+          ))}
           {hasTrakt && (
             <RecentlyWatchedRow
               items={historyItems ?? []}

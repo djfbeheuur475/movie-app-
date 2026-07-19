@@ -21,6 +21,55 @@ export interface RecsContext {
   traktReady: boolean;
 }
 
+// ─── Scored watch pool ────────────────────────────────────────────────────────
+// Merges movies + shows into one recency×plays-scored, deduplicated pool.
+// minPlaysForShows filters out shows only sampled for a single episode — useful
+// for seeds that should reflect genuine engagement, not a quick bounce. Trakt's
+// /sync/watched/shows doesn't return a per-episode seasons breakdown in
+// practice, so the top-level `plays` count (total episode plays across the
+// show) is the only reliable engagement signal available.
+
+export function buildScoredWatchPool(
+  traktMovies: TraktWatchedMovie[] | undefined,
+  traktShows: TraktWatchedShow[] | undefined,
+  minPlaysForShows = 0,
+): WatchSeed[] {
+  const recencyWeight = (watchedAt: string) => {
+    const days = (Date.now() - new Date(watchedAt).getTime()) / 86400000;
+    return Math.exp(-days / 90);
+  };
+
+  const combined: WatchSeed[] = [
+    ...(traktMovies ?? []).map((m) => ({
+      tmdbId: m.movie.ids.tmdb,
+      mediaType: 'movie' as const,
+      watchedAt: m.last_watched_at,
+      title: m.movie.title,
+      score: m.plays * recencyWeight(m.last_watched_at),
+    })),
+    ...(traktShows ?? [])
+      .filter((s) => s.plays >= minPlaysForShows)
+      .map((s) => ({
+        tmdbId: s.show.ids.tmdb,
+        mediaType: 'tv' as const,
+        watchedAt: s.last_watched_at,
+        title: s.show.title,
+        // Cap TV plays at 12 — episode count otherwise inflates score vs movies
+        score: Math.min(s.plays, 12) * recencyWeight(s.last_watched_at),
+      })),
+  ];
+
+  const seen = new Set<number>();
+  return combined
+    .filter(({ tmdbId }) => !!tmdbId)
+    .sort((a, b) => b.score - a.score)
+    .filter(({ tmdbId }) => {
+      if (seen.has(tmdbId)) return false;
+      seen.add(tmdbId);
+      return true;
+    });
+}
+
 // ─── Niche content mismatch filter ───────────────────────────────────────────
 // Niche genres and eras bleed into broad queries because TMDB applies them as
 // secondary tags. Suppress content outside these niches unless the user's

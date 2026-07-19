@@ -35,6 +35,8 @@ interface Props {
   isFollowed?: boolean;
   onFollowToggle?: () => void;
   showFollow?: boolean;
+  isWatched?: boolean;
+  onWatchedToggle?: () => void;
 }
 
 export default function DetailHero({
@@ -46,6 +48,8 @@ export default function DetailHero({
   isFollowed,
   onFollowToggle,
   showFollow = true,
+  isWatched,
+  onWatchedToggle,
 }: Props) {
   const title = isMovie(detail) ? detail.title : (detail as TMDBTVDetail).name;
   const releaseDate = isMovie(detail) ? detail.release_date : (detail as TMDBTVDetail).first_air_date;
@@ -153,8 +157,22 @@ export default function DetailHero({
 
       {/* Actions */}
       <View style={styles.actions}>
-        {/* Row 1: Save | Follow | Share */}
+        {/* Row 1: Watched | Save | Follow | Share */}
         <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[styles.iconBtn, isWatched && styles.iconBtnActive]}
+            onPress={onWatchedToggle}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={isWatched ? 'checkmark-circle' : 'checkmark-circle-outline'}
+              size={20}
+              color={isWatched ? Colors.primary : Colors.textMuted}
+            />
+            <Text style={[styles.iconBtnLabel, isWatched && styles.iconBtnLabelActive]}>
+              Watched
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.iconBtn, isInWatchlist && styles.iconBtnActive]}
             onPress={onWatchlistToggle}

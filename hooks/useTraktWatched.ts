@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useApiKeysStore } from '../store/apiKeysStore';
+import { useManualWatchedStore } from '../store/manualWatchedStore';
 import { traktApi, effectiveTraktClientId } from '../lib/trakt';
 
 interface WatchedData {
@@ -63,10 +64,13 @@ export function useTraktWatched() {
     retry: 1,
   });
 
+  const isManuallyWatched = useManualWatchedStore((s) => s.isManuallyWatched);
+
   const isWatched = useCallback((id: number, type: 'movie' | 'tv'): boolean => {
+    if (isManuallyWatched(id, type)) return true;
     if (!hasAuth) return false;
     return type === 'movie' ? data.movieIds.has(id) : data.showIds.has(id);
-  }, [data, hasAuth]);
+  }, [data, hasAuth, isManuallyWatched]);
 
   const isEpisodeWatched = useCallback((showId: number, season: number, episode: number): boolean => {
     if (!hasAuth) return false;

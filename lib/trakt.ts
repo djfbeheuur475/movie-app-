@@ -1,6 +1,6 @@
 const BASE = 'https://api.trakt.tv';
 
-export const TRAKT_DEFAULT_CLIENT_ID = 'f96bdbb3af4329d022c1a303d59e132435bf177003';
+export const TRAKT_DEFAULT_CLIENT_ID = 'f2709b8b2160742dabafd2f96bdbb3af4329d022c1a303d59e132435bf177003';
 export const effectiveTraktClientId = (stored: string) => stored.trim() || TRAKT_DEFAULT_CLIENT_ID;
 
 export class TraktUnauthorizedError extends Error {
@@ -15,6 +15,10 @@ function headers(clientId: string, accessToken?: string): HeadersInit {
     'Content-Type': 'application/json',
     'trakt-api-version': '2',
     'trakt-api-key': clientId,
+    // Trakt's WAF blocks requests with a missing/generic User-Agent (e.g. React
+    // Native's default) on anonymous, client-id-only calls — a browser-style
+    // UA passes.
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 14) NextUp/1.0',
   };
   if (accessToken) h['Authorization'] = `Bearer ${accessToken}`;
   return h;
@@ -119,6 +123,29 @@ export interface TraktCalendarShow {
 export interface TraktCalendarMovie {
   released: string;
   movie: { title: string; year: number; ids: { tmdb: number; imdb: string; trakt: number } };
+}
+
+export interface TraktListItem {
+  type: 'movie' | 'show';
+  movie?: { title: string; year: number; ids: { tmdb: number } };
+  show?: { title: string; year: number; ids: { tmdb: number } };
+}
+
+// Public list browsing — no access token needed, just the client-id header.
+// Used for curated community "hidden gems" style rows in Discover.
+export async function getListItemsPage(
+  listId: number,
+  page: number,
+  limit = 20,
+): Promise<{ items: TraktListItem[]; pageCount: number }> {
+  const res = await fetch(
+    `${BASE}/lists/${listId}/items?page=${page}&limit=${limit}`,
+    { headers: headers(TRAKT_DEFAULT_CLIENT_ID) },
+  );
+  if (!res.ok) throw new Error(`Trakt ${res.status}: /lists/${listId}/items`);
+  const items = (await res.json()) as TraktListItem[];
+  const pageCount = Number(res.headers.get('x-pagination-page-count') ?? '1');
+  return { items, pageCount };
 }
 
 export const traktApi = {

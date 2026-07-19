@@ -58,7 +58,7 @@ export function useBecauseYouWatched(seeds: WatchSeed[], ctx: RecsContext) {
           .filter(item => passesQualityFilter(item, 'discover'))
           .filter(item => !isMismatchedNiche(item, [], genreAffinity, profile));
 
-        if (dominant.length === 0) return filtered.slice(0, 20);
+        if (dominant.length === 0) return filtered.slice(0, 30);
 
         return filtered
           .map(item => {
@@ -70,7 +70,7 @@ export function useBecauseYouWatched(seeds: WatchSeed[], ctx: RecsContext) {
           })
           .sort((a, b) => b.score - a.score)
           .map(x => x.item)
-          .slice(0, 20);
+          .slice(0, 30);
       }
 
       const rowData = await Promise.all(seeds.map(fetchSeedItems));

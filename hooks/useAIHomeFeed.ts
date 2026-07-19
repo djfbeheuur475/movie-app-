@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { usePreferencesStore } from '../store/preferencesStore';
 import { useWatchlistStore } from '../store/watchlistStore';
+import { getTemporalContext } from '../lib/tasteDna';
 import type { ContentItem } from '../types';
 
 export interface AISection {
@@ -52,14 +53,20 @@ export function useAIHomeFeed({ watchedMovies, watchedShows, enabled }: UseAIHom
   const movieFingerprint = watchedMovies.slice(0, 5).map((m: any) => m.movie?.ids?.tmdb).join(',');
   const showFingerprint = watchedShows.slice(0, 5).map((s: any) => s.show?.ids?.tmdb).join(',');
 
+  // Device-local calendar date (YYYY-MM-DD) — lets the server expire the
+  // cache at the user's own midnight instead of a fixed 24h-from-generation
+  // window, so "today's" feed doesn't drift into the next day for people who
+  // open the app late or in a different timezone from the server.
+  const clientDateKey = getTemporalContext().dateKey.slice(0, 10);
+
   return useQuery({
-    queryKey: ['ai-home-feed-v1', movieFingerprint, showFingerprint],
+    queryKey: ['ai-home-feed-v1', movieFingerprint, showFingerprint, clientDateKey],
     queryFn: async (): Promise<AIFeedResult> => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25_000); // 25s hard limit
+      const timeoutId = setTimeout(() => controller.abort(), 40_000); // 40s — pipeline takes ~25-35s on cold cache
 
       let res: Response;
       try {
@@ -78,6 +85,7 @@ export function useAIHomeFeed({ watchedMovies, watchedShows, enabled }: UseAIHom
               watchedShows,
               watchlistIds,
               favoriteGenres,
+              clientDateKey,
             }),
             signal: controller.signal,
           }

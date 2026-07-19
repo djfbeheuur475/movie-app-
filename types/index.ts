@@ -294,6 +294,19 @@ export interface WatchlistItem {
   poster_path: string | null;
 }
 
+// A watch the user marked manually in-app, for titles Trakt has no record of
+// (watched somewhere that doesn't scrobble to Trakt, watched before they
+// connected their account, etc).
+export interface ManualWatchedItem {
+  id: string;
+  user_id: string;
+  tmdb_id: number;
+  media_type: MediaType;
+  watched_at: string;
+  title: string;
+  poster_path: string | null;
+}
+
 export interface HomeRow {
   id: string;
   title: string;

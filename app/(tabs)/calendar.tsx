@@ -204,9 +204,9 @@ export default function CalendarScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  // ── Trakt history → top shows not already in watchlist ───────────────────
+  // ── Trakt complete watch history (for exclusions + genre affinity) ─────────
 
-  const { data: traktWatchedShows, error: traktCalError } = useQuery({
+  const { data: traktWatchedShows, error: traktWatchedError } = useQuery({
     queryKey: ['trakt-cal-shows', traktClientIdEff, traktAccessToken],
     queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
     enabled: hasTrakt,
@@ -214,86 +214,182 @@ export default function CalendarScreen() {
     retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
   });
 
+  // ── Trakt personal show calendar — full history, next 60 days ────────────
+  // Uses /calendars/my/shows which returns every episode from every show the
+  // user has ever tracked on Trakt, so no cap on watch history.
+  // Trakt API max is 33 days per request; we make two calls to cover 60 days.
+
+  const { data: myTraktCal, isLoading: traktCalLoading, error: traktCalError } = useQuery({
+    queryKey: ['my-trakt-cal', traktClientIdEff, traktAccessToken],
+    queryFn: async () => {
+      const todayStr = format(startOfToday(), 'yyyy-MM-dd');
+      const midStr = format(addDays(startOfToday(), 30), 'yyyy-MM-dd');
+      const [first, second] = await Promise.allSettled([
+        traktApi.getMyShowCalendar(traktClientIdEff, traktAccessToken, todayStr, 30),
+        traktApi.getMyShowCalendar(traktClientIdEff, traktAccessToken, midStr, 30),
+      ]);
+      return [
+        ...(first.status === 'fulfilled' ? first.value : []),
+        ...(second.status === 'fulfilled' ? second.value : []),
+      ];
+    },
+    enabled: hasTrakt,
+    staleTime: 1000 * 60 * 60 * 2,
+    retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
+  });
+
   useEffect(() => {
-    if (traktCalError instanceof TraktUnauthorizedError) {
+    const err = traktWatchedError ?? traktCalError;
+    if (err instanceof TraktUnauthorizedError) {
       handleTraktUnauthorized().then((refreshed) => {
-        if (refreshed) queryClient.invalidateQueries({ queryKey: ['trakt-cal-shows'] });
+        if (refreshed) {
+          queryClient.invalidateQueries({ queryKey: ['trakt-cal-shows'] });
+          queryClient.invalidateQueries({ queryKey: ['my-trakt-cal'] });
+        }
       });
     }
-  }, [traktCalError]);
+  }, [traktWatchedError, traktCalError]);
 
+  // Unique TMDB show IDs in the calendar — for fetching posters
+  const traktCalShowTmdbIds = useMemo(() => {
+    if (!myTraktCal?.length) return [];
+    const seen = new Set<number>();
+    const ids: number[] = [];
+    for (const entry of myTraktCal) {
+      const id = entry.show.ids.tmdb;
+      if (id && !seen.has(id)) { seen.add(id); ids.push(id); }
+    }
+    return ids;
+  }, [myTraktCal]);
+
+  // Lightweight TMDB info (poster + genre_ids) for calendar shows
+  const { data: traktCalShowBasics } = useQuery({
+    queryKey: ['trakt-cal-show-basics', traktCalShowTmdbIds],
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        traktCalShowTmdbIds.map((id) => tmdbApi.getTVBasic(id))
+      );
+      const map = new Map<number, any>();
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled') map.set(traktCalShowTmdbIds[i], r.value);
+      });
+      return map;
+    },
+    enabled: traktCalShowTmdbIds.length > 0,
+    staleTime: 1000 * 60 * 60 * 24,
+  });
+
+  // Derive traktShowTmdbIds still needed for forYouGenreAffinity (top 20 only)
   const traktShowTmdbIds = useMemo(() => {
     if (!traktWatchedShows?.length) return [];
     return traktWatchedShows
       .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
       .map((s) => s.show.ids.tmdb)
       .filter((id): id is number => !!id && !watchlistShowIds.includes(id))
-      .slice(0, 40);
+      .slice(0, 20);
   }, [traktWatchedShows, watchlistShowIds]);
 
-  const { data: traktShowDetails, isLoading: traktShowsLoading } = useQuery({
-    queryKey: ['trakt-show-details-cal', traktShowTmdbIds],
+  // ── For You — airing-first pipeline ──────────────────────────────────────
+  // Start from what TMDB knows is airing in the next ~2 weeks (on_the_air +
+  // airing_today), filter out shows the user already watches, then rank the
+  // remainder by genre affinity derived from their watch history. Fetch
+  // details for the top 25 to get exact next_episode_to_air dates.
+  // This guarantees results — every show returned is confirmed to be airing.
+
+  const forYouGenreAffinity = useMemo(() => {
+    const count = new Map<number, number>();
+    // Watchlist shows: getTVDetail returns genres as [{id, name}]
+    for (const show of (watchlistShowDetails ?? [])) {
+      for (const g of (show.genres ?? [])) {
+        count.set(g.id, (count.get(g.id) ?? 0) + 1);
+      }
+    }
+    // Calendar shows: getTVBasic returns genre_ids as number[]
+    if (traktCalShowBasics) {
+      for (const show of traktCalShowBasics.values()) {
+        for (const gid of (show.genre_ids ?? [])) {
+          count.set(gid, (count.get(gid) ?? 0) + 1);
+        }
+      }
+    }
+    return count;
+  }, [watchlistShowDetails, traktCalShowBasics]);
+
+  const hasForYouData = forYouGenreAffinity.size > 0 || watchlistShowIds.length > 0 || hasTrakt;
+
+  const { data: forYouRecIds } = useQuery({
+    queryKey: ['for-you-airing', watchlistShowIds.join(','), traktShowTmdbIds.slice(0, 5).join(',')],
+    queryFn: async () => {
+      // Fetch 5 pages of on_the_air (next 7 days) + 2 pages of airing_today
+      const pages = await Promise.allSettled([
+        tmdbApi.getOnTheAir(1),
+        tmdbApi.getOnTheAir(2),
+        tmdbApi.getOnTheAir(3),
+        tmdbApi.getOnTheAir(4),
+        tmdbApi.getOnTheAir(5),
+        tmdbApi.getAiringToday(1),
+        tmdbApi.getAiringToday(2),
+      ]);
+      const allShows = pages
+        .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+        .flatMap((r) => r.value);
+
+      const allWatchedIds = new Set([
+        ...watchlistShowIds,
+        ...(traktWatchedShows ?? [])
+          .map((s) => s.show.ids.tmdb)
+          .filter((id): id is number => !!id),
+      ]);
+
+      const affinityEntries = [...forYouGenreAffinity.entries()];
+      const seen = new Set<number>();
+      const scored: { id: number; score: number }[] = [];
+
+      for (const show of allShows) {
+        if (seen.has(show.id) || allWatchedIds.has(show.id)) continue;
+        seen.add(show.id);
+        const showGenres = new Set<number>(show.genre_ids ?? []);
+        // Genre affinity score; fall back to popularity when no affinity data
+        const genreScore = affinityEntries.reduce(
+          (sum, [gid, cnt]) => (showGenres.has(gid) ? sum + cnt : sum), 0
+        );
+        scored.push({ id: show.id, score: genreScore > 0 ? genreScore : (show.popularity ?? 0) });
+      }
+
+      return scored
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 25)
+        .map((s) => s.id);
+    },
+    enabled: hasForYouData,
+    staleTime: 1000 * 60 * 60 * 6,
+  });
+
+  // Step 2 — fetch full details for top-ranked airing shows to get exact episode date
+  const { data: forYouShowDetails } = useQuery({
+    queryKey: ['for-you-show-details', (forYouRecIds ?? []).join(',')],
     queryFn: async () => {
       const results = await Promise.allSettled(
-        traktShowTmdbIds.map((id) => tmdbApi.getTVDetail(id))
+        (forYouRecIds ?? []).map((id) => tmdbApi.getTVDetail(id))
       );
       return results
         .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
         .map((r) => r.value);
     },
-    enabled: traktShowTmdbIds.length > 0,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  // ── For You — genre-matched upcoming releases ────────────────────────────
-
-  const topGenreIds = useMemo(() => {
-    const count = new Map<number, number>();
-    const allShows = [...(watchlistShowDetails ?? []), ...(traktShowDetails ?? [])];
-    for (const show of allShows) {
-      for (const g of (show.genres ?? [])) {
-        count.set(g.id, (count.get(g.id) ?? 0) + 1);
-      }
-    }
-    return [...count.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([id]) => id);
-  }, [watchlistShowDetails, traktShowDetails]);
-
-  const { data: forYouRaw } = useQuery({
-    queryKey: ['for-you-releases', topGenreIds.join(',')],
-    queryFn: async () => {
-      const todayStr = format(startOfToday(), 'yyyy-MM-dd');
-      const futureStr = format(addMonths(startOfToday(), 6), 'yyyy-MM-dd');
-      const genreStr = topGenreIds.join(',');
-      const settled = await Promise.allSettled([
-        tmdbApi.discoverMovies({ sort_by: 'popularity.desc', 'primary_release_date.gte': todayStr, 'primary_release_date.lte': futureStr, with_genres: genreStr, page: 1 }),
-        tmdbApi.discoverMovies({ sort_by: 'popularity.desc', 'primary_release_date.gte': todayStr, 'primary_release_date.lte': futureStr, with_genres: genreStr, page: 2 }),
-        tmdbApi.discoverTV({ sort_by: 'popularity.desc', 'first_air_date.gte': todayStr, 'first_air_date.lte': futureStr, with_genres: genreStr, page: 1 }),
-        tmdbApi.discoverTV({ sort_by: 'popularity.desc', 'first_air_date.gte': todayStr, 'first_air_date.lte': futureStr, with_genres: genreStr, page: 2 }),
-      ]);
-      const movieItems = settled.slice(0, 2)
-        .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
-        .flatMap((r) => r.value.map((m: any) => ({ ...m, _mediaType: 'movie' as const })));
-      const tvItems = settled.slice(2)
-        .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
-        .flatMap((r) => r.value.map((s: any) => ({ ...s, _mediaType: 'tv' as const })));
-      return [...movieItems, ...tvItems];
-    },
-    enabled: topGenreIds.length > 0,
-    staleTime: 1000 * 60 * 60 * 12,
+    enabled: (forYouRecIds?.length ?? 0) > 0,
+    staleTime: 1000 * 60 * 60 * 6,
   });
 
   // ── Season episode schedules ──────────────────────────────────────────────
   // For every show that has a scheduled next episode, fetch the full current
   // season so we can populate all future episodes (not just the next one).
 
+  // Season schedule only for watchlist shows — Trakt calendar handles episode
+  // dates for the rest of the watch history directly.
   const seasonFetchList = useMemo(() => {
     const list: { showId: number; seasonNumber: number }[] = [];
     const seen = new Set<string>();
-    const allShows = [...(watchlistShowDetails ?? []), ...(traktShowDetails ?? [])];
-    for (const show of allShows) {
+    for (const show of (watchlistShowDetails ?? [])) {
       const sn = show.next_episode_to_air?.season_number;
       if (!sn) continue;
       const key = `${show.id}-${sn}`;
@@ -302,7 +398,7 @@ export default function CalendarScreen() {
       list.push({ showId: show.id, seasonNumber: sn });
     }
     return list;
-  }, [watchlistShowDetails, traktShowDetails]);
+  }, [watchlistShowDetails]);
 
   const { data: seasonData, isLoading: seasonsLoading } = useQuery({
     queryKey: ['season-episodes', seasonFetchList.map((s) => `${s.showId}-${s.seasonNumber}`)],
@@ -345,29 +441,26 @@ export default function CalendarScreen() {
     [watchlist]
   );
 
+  const watchlistTvIdSet = useMemo(
+    () => new Set(watchlistShowIds),
+    [watchlistShowIds]
+  );
+
   const allEntries: CalendarEntry[] = useMemo(() => {
     const entries: CalendarEntry[] = [];
     const today = startOfToday();
     const cutoff = addYears(today, 1);
+    const seenEpKeys = new Set<string>();
 
-    // Build showId → episodes map from fetched season data
+    // ── Watchlist TV shows — season schedule via TMDB ──────────────────────
     const seasonEpMap = new Map<number, any[]>();
     for (const season of (seasonData ?? [])) {
       seasonEpMap.set(season.showId, season.episodes ?? []);
     }
 
-    // TV shows — watchlist (isFromWatchlist=true) + Trakt history (false)
-    const showSources = [
-      ...(watchlistShowDetails ?? []).map((s: any) => ({ show: s, fromWatchlist: true })),
-      ...(traktShowDetails ?? []).map((s: any) => ({ show: s, fromWatchlist: false })),
-    ];
-    const seenEpKeys = new Set<string>();
-
-    for (const { show, fromWatchlist } of showSources) {
+    for (const show of (watchlistShowDetails ?? [])) {
       const episodes = seasonEpMap.get(show.id);
-
       if (episodes?.length) {
-        // Full season schedule
         for (const ep of episodes) {
           if (!ep.air_date) continue;
           let airDate: Date;
@@ -384,12 +477,11 @@ export default function CalendarScreen() {
             posterPath: show.poster_path,
             airDate,
             note: `S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')} — ${ep.name ?? 'New episode'}`,
-            isFromWatchlist: fromWatchlist,
-            notifyEnabled: fromWatchlist ? true : !isUnfollowed(show.id),
+            isFromWatchlist: true,
+            notifyEnabled: true,
           });
         }
       } else if (show.next_episode_to_air?.air_date) {
-        // Fallback: season data not yet loaded / unavailable
         const next = show.next_episode_to_air;
         let airDate: Date;
         try { airDate = parseISO(next.air_date); } catch { continue; }
@@ -405,11 +497,41 @@ export default function CalendarScreen() {
             posterPath: show.poster_path,
             airDate,
             note: `S${String(next.season_number).padStart(2, '0')}E${String(next.episode_number).padStart(2, '0')} — ${next.name ?? 'New episode'}`,
-            isFromWatchlist: fromWatchlist,
-            notifyEnabled: fromWatchlist ? true : !isUnfollowed(show.id),
+            isFromWatchlist: true,
+            notifyEnabled: true,
           });
         }
       }
+    }
+
+    // ── Trakt personal calendar — complete watch history, next 60 days ──────
+    // Uses Trakt's /calendars/my/shows which covers every show ever tracked,
+    // not just the most recently watched N shows.
+    for (const entry of (myTraktCal ?? [])) {
+      const tmdbId = entry.show.ids.tmdb;
+      if (!tmdbId) continue;
+      // Skip shows already in watchlist (already added above)
+      if (watchlistTvIdSet.has(tmdbId)) continue;
+      let airDate: Date;
+      try { airDate = parseISO(entry.first_aired.slice(0, 10)); } catch { continue; }
+      if (isBefore(airDate, today) || isAfter(airDate, cutoff)) continue;
+      const s = String(entry.episode.season).padStart(2, '0');
+      const e = String(entry.episode.number).padStart(2, '0');
+      const key = `${tmdbId}-S${s}E${e}`;
+      if (seenEpKeys.has(key)) continue;
+      seenEpKeys.add(key);
+      const basic = traktCalShowBasics?.get(tmdbId);
+      entries.push({
+        id: key,
+        tmdbId,
+        mediaType: 'tv',
+        title: entry.show.title,
+        posterPath: basic?.poster_path ?? null,
+        airDate,
+        note: `S${s}E${e} — ${entry.episode.title ?? 'New episode'}`,
+        isFromWatchlist: false,
+        notifyEnabled: !isUnfollowed(tmdbId),
+      });
     }
 
     // Movies — full year
@@ -434,7 +556,7 @@ export default function CalendarScreen() {
     }
 
     return entries;
-  }, [seasonData, watchlistShowDetails, traktShowDetails, upcomingMoviesYear, watchlistMovieIds, isFollowed, isUnfollowed]);
+  }, [seasonData, watchlistShowDetails, myTraktCal, traktCalShowBasics, watchlistTvIdSet, upcomingMoviesYear, watchlistMovieIds, isFollowed, isUnfollowed]);
 
   // ── Filter sets ───────────────────────────────────────────────────────────
 
@@ -443,11 +565,6 @@ export default function CalendarScreen() {
       (traktWatchedShows ?? []).map((s) => s.show.ids.tmdb).filter((id): id is number => !!id)
     );
   }, [traktWatchedShows]);
-
-  const watchlistTvIdSet = useMemo(
-    () => new Set(watchlistShowIds),
-    [watchlistShowIds]
-  );
 
   const anticipatedEntries = useMemo(() => {
     const cutoff = addYears(today, 1);
@@ -478,40 +595,37 @@ export default function CalendarScreen() {
     return entries;
   }, [anticipatedRaw, watchlistMovieIds, isFollowed, isUnfollowed, today]);
 
-  const watchingTvIdSet = useMemo(
-    () => new Set([...watchlistShowIds, ...traktShowTmdbIds]),
-    [watchlistShowIds, traktShowTmdbIds]
-  );
-
   const forYouEntries = useMemo(() => {
-    const cutoff = addYears(today, 1);
-    const seenKeys = new Set<string>();
+    const futureCutoff = addDays(today, 14);
     const entries: CalendarEntry[] = [];
-    for (const item of (forYouRaw ?? [])) {
-      const isMovie = item._mediaType === 'movie';
-      const dateStr = isMovie ? item.release_date : item.first_air_date;
-      const title = isMovie ? item.title : item.name;
-      const key = `${item._mediaType}-${item.id}`;
-      if (!dateStr || !title || seenKeys.has(key)) continue;
-      if (!isMovie && watchingTvIdSet.has(item.id)) continue;
-      seenKeys.add(key);
+    // Safety net: exclude anything in the full watch history even if Step 1
+    // missed it (e.g. stale cache built before user added a show)
+    const alreadyWatched = new Set([
+      ...watchedShowTmdbIds,
+      ...watchlistTvIdSet,
+    ]);
+    for (const show of (forYouShowDetails ?? [])) {
+      if (alreadyWatched.has(show.id)) continue;
+      const next = show.next_episode_to_air;
+      if (!next?.air_date) continue;
       let airDate: Date;
-      try { airDate = parseISO(dateStr); } catch { continue; }
-      if (isBefore(airDate, today) || isAfter(airDate, cutoff)) continue;
+      try { airDate = parseISO(next.air_date); } catch { continue; }
+      if (isBefore(airDate, today) || isAfter(airDate, futureCutoff)) continue;
+      const epLabel = `S${String(next.season_number).padStart(2, '0')}E${String(next.episode_number).padStart(2, '0')}`;
       entries.push({
-        id: isMovie ? `movie-${item.id}` : `forYou-tv-${item.id}`,
-        tmdbId: item.id,
-        mediaType: item._mediaType,
-        title,
-        posterPath: item.poster_path,
+        id: `forYou-${show.id}-${epLabel}`,
+        tmdbId: show.id,
+        mediaType: 'tv',
+        title: show.name,
+        posterPath: show.poster_path,
         airDate,
-        note: 'Based on your taste',
-        isFromWatchlist: isMovie ? watchlistMovieIds.has(item.id) : false,
-        notifyEnabled: watchlistMovieIds.has(item.id) || isFollowed(item.id),
+        note: `${epLabel} — you might like this`,
+        isFromWatchlist: false,
+        notifyEnabled: isFollowed(show.id),
       });
     }
     return entries;
-  }, [forYouRaw, watchlistMovieIds, watchingTvIdSet, isFollowed, today]);
+  }, [forYouShowDetails, watchedShowTmdbIds, watchlistTvIdSet, isFollowed, today]);
 
   const toggleWatching = () => {
     if (showWatching && !showNewMovies && !showAnticipated && !showForYou) return;
@@ -578,7 +692,7 @@ export default function CalendarScreen() {
     setSearchActive(false);
   }, []);
 
-  const isLoading = moviesLoading || traktShowsLoading || seasonsLoading;
+  const isLoading = moviesLoading || traktCalLoading || seasonsLoading;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -716,16 +830,12 @@ export default function CalendarScreen() {
         <View style={styles.empty}>
           <Ionicons name="calendar-outline" size={48} color={Colors.textMuted} />
           <Text style={styles.emptyTitle}>
-            {showForYou && topGenreIds.length === 0
-              ? 'No taste data yet'
-              : !hasTrakt && showWatching && !showNewMovies && !showAnticipated && !showForYou
+            {!hasTrakt && showWatching && !showNewMovies && !showAnticipated && !showForYou
               ? 'Connect Trakt to see your shows'
               : 'Nothing scheduled'}
           </Text>
           <Text style={styles.emptyText}>
-            {showForYou && topGenreIds.length === 0
-              ? 'Add shows to your watchlist or connect Trakt so we can match your taste.'
-              : !hasTrakt && showWatching && !showNewMovies && !showAnticipated && !showForYou
+            {!hasTrakt && showWatching && !showNewMovies && !showAnticipated && !showForYou
               ? 'Go to Settings → Trakt to connect your account.'
               : 'No upcoming releases for the selected filters.'}
           </Text>

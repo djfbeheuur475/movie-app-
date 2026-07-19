@@ -56,7 +56,7 @@ export function useHiddenGems(topGenreIds: number[], ctx: RecsContext) {
       const items = merged
         .filter(item => !watchedSet.has(item.id))
         .filter(item => passesQualityFilter(item, 'discover'))
-        .slice(0, 24);
+        .slice(0, 30);
 
       return { items };
     },
