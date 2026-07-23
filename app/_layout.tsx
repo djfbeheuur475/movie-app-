@@ -3,10 +3,10 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, AppState, type AppStateStatus } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useWatchlistStore } from '../store/watchlistStore';
@@ -33,22 +33,23 @@ function NavigationGuard() {
   const router = useRouter();
   const segments = useSegments();
   const { isSetupDone, isLoaded: keysLoaded } = useApiKeysStore();
-  const { isAuthenticated, isLoaded: authLoaded } = useAuthStore();
+  const { isAuthenticated, isGuest, isLoaded: authLoaded } = useAuthStore();
 
   useEffect(() => {
     if (!keysLoaded || !authLoaded) return;
 
     const inAuth = segments[0] === '(auth)';
     const inWelcome = segments[0] === 'welcome';
+    const canBrowse = isAuthenticated || isGuest;
 
-    if (!isAuthenticated && !inAuth) {
+    if (!canBrowse && !inAuth) {
       router.replace('/(auth)/login');
     } else if (isAuthenticated && !isSetupDone && !inWelcome) {
       router.replace('/welcome');
     } else if (isAuthenticated && isSetupDone && (inAuth || inWelcome)) {
       router.replace('/(tabs)');
     }
-  }, [keysLoaded, authLoaded, isAuthenticated, isSetupDone, segments]);
+  }, [keysLoaded, authLoaded, isAuthenticated, isGuest, isSetupDone, segments]);
 
   return null;
 }
@@ -116,6 +117,19 @@ export default function RootLayout() {
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
+  }, []);
+
+  // Wires React Query's "focus" concept to the app actually coming to the
+  // foreground (there's no browser window to focus on RN). Every query app-wide
+  // — Trakt watch history, the watched-status hook, the AI home feed — already
+  // refetches on focus if its data is stale by default, so this one listener is
+  // what makes "reopen the app and it's fresh" happen everywhere automatically,
+  // with no per-screen wiring and no user-facing refresh button needed.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (status: AppStateStatus) => {
+      focusManager.setFocused(status === 'active');
+    });
+    return () => subscription.remove();
   }, []);
 
   return (

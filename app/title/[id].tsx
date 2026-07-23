@@ -43,7 +43,11 @@ export default function TitleDetailScreen() {
 
   const { follow, unfollow, isFollowed, isUnfollowed } = useFollowStore();
   const traktWatched = useTraktWatched();
-  const traktHasWatched = traktWatched.isWatched(numId, mediaType);
+  // Trakt's own record only — NOT the combined isWatched() below, which also
+  // folds in manual marks. Conflating the two here meant a manual mark could
+  // never be un-toggled: the guard on handleWatchedToggle would see its own
+  // manual mark reflected back and assume Trakt already had it.
+  const traktHasWatched = traktWatched.isTraktWatched(numId, mediaType);
   // Auto-tick if in Trakt history (unless explicitly unfollowed); or explicitly followed
   const followActive = (traktHasWatched && !isUnfollowed(numId)) || isFollowed(numId);
 

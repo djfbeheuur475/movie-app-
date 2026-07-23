@@ -1,9 +1,12 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { useApiKeysStore } from './apiKeysStore';
 import { useWatchlistStore } from './watchlistStore';
 import { useManualWatchedStore } from './manualWatchedStore';
 import { usePreferencesStore } from './preferencesStore';
+
+const GUEST_FLAG_KEY = 'nextup_is_guest';
 
 export interface LocalUser {
   id: string;
@@ -15,9 +18,11 @@ export interface LocalUser {
 interface AuthState {
   user: LocalUser | null;
   isAuthenticated: boolean;
+  isGuest: boolean;
   isLoaded: boolean;
 
   loadUser: () => Promise<void>;
+  continueAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
   _refreshFromSession: () => Promise<void>;
 }
@@ -25,6 +30,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
+  isGuest: false,
   isLoaded: false,
 
   loadUser: async () => {
@@ -40,6 +46,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             avatarUrl: u.user_metadata?.avatar_url ?? null,
           },
           isAuthenticated: true,
+          isGuest: false,
           isLoaded: true,
         });
         return;
@@ -47,7 +54,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (e) {
       console.warn('Auth session load error:', e);
     }
-    set({ isLoaded: true });
+    const guestFlag = await AsyncStorage.getItem(GUEST_FLAG_KEY);
+    set({ isGuest: guestFlag === 'true', isLoaded: true });
+  },
+
+  // "Continue without account" — persisted so a guest doesn't get bounced
+  // back to the login screen on the next cold start.
+  continueAsGuest: async () => {
+    await AsyncStorage.setItem(GUEST_FLAG_KEY, 'true');
+    set({ isGuest: true });
   },
 
   _refreshFromSession: async () => {
@@ -102,11 +117,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Always restore preferences (non-blocking)
     usePreferencesStore.getState().restoreFromCloud(u.id).catch(() => {});
 
-    set({ user: localUser, isAuthenticated: true, isLoaded: true });
+    await AsyncStorage.removeItem(GUEST_FLAG_KEY);
+    set({ user: localUser, isAuthenticated: true, isGuest: false, isLoaded: true });
   },
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ user: null, isAuthenticated: false });
+    await AsyncStorage.removeItem(GUEST_FLAG_KEY);
+    set({ user: null, isAuthenticated: false, isGuest: false });
   },
 }));

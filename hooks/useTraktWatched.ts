@@ -1,8 +1,8 @@
-import { useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { useManualWatchedStore } from '../store/manualWatchedStore';
-import { traktApi, effectiveTraktClientId } from '../lib/trakt';
+import { traktApi, TraktUnauthorizedError, effectiveTraktClientId } from '../lib/trakt';
 
 interface WatchedData {
   movieIds: Set<number>;
@@ -22,12 +22,13 @@ function epKey(season: number, episode: number): string {
 }
 
 export function useTraktWatched() {
-  const { traktClientId, traktAccessToken } = useApiKeysStore();
+  const { traktClientId, traktAccessToken, handleTraktUnauthorized } = useApiKeysStore();
+  const queryClient = useQueryClient();
 
   const hasAuth = !!traktAccessToken;
   const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
-  const { data = EMPTY } = useQuery({
+  const { data = EMPTY, error } = useQuery({
     queryKey: ['trakt-watched', traktClientIdEff, traktAccessToken],
     queryFn: async (): Promise<WatchedData> => {
       const [movies, shows] = await Promise.all([
@@ -61,16 +62,37 @@ export function useTraktWatched() {
     enabled: hasAuth,
     staleTime: 1000 * 60 * 30,
     gcTime: 1000 * 60 * 60,
-    retry: 1,
+    retry: (count, err) => !(err instanceof TraktUnauthorizedError) && count < 2,
   });
+
+  // A stale/expired access token 401s here just like it does on Home — but
+  // unlike Home, nothing else was refreshing it for this hook, so a "watched"
+  // check would silently fall back to EMPTY (never watched) until the app
+  // happened to hit the one screen that did refresh it. Recover the same way
+  // Home does, right at the source, so every consumer of this hook benefits.
+  useEffect(() => {
+    if (error instanceof TraktUnauthorizedError) {
+      handleTraktUnauthorized().then((refreshed) => {
+        if (refreshed) queryClient.invalidateQueries({ queryKey: ['trakt-watched'] });
+      });
+    }
+  }, [error, handleTraktUnauthorized, queryClient]);
 
   const isManuallyWatched = useManualWatchedStore((s) => s.isManuallyWatched);
 
-  const isWatched = useCallback((id: number, type: 'movie' | 'tv'): boolean => {
-    if (isManuallyWatched(id, type)) return true;
+  // Trakt's own record only — no manual-mark fallback. Callers that need to
+  // distinguish "Trakt itself says watched" from "I marked this watched
+  // in-app" (e.g. to decide whether a manual mark can still be toggled back
+  // off) need this, not the combined isWatched below.
+  const isTraktWatched = useCallback((id: number, type: 'movie' | 'tv'): boolean => {
     if (!hasAuth) return false;
     return type === 'movie' ? data.movieIds.has(id) : data.showIds.has(id);
-  }, [data, hasAuth, isManuallyWatched]);
+  }, [data, hasAuth]);
+
+  const isWatched = useCallback((id: number, type: 'movie' | 'tv'): boolean => {
+    if (isManuallyWatched(id, type)) return true;
+    return isTraktWatched(id, type);
+  }, [isManuallyWatched, isTraktWatched]);
 
   const isEpisodeWatched = useCallback((showId: number, season: number, episode: number): boolean => {
     if (!hasAuth) return false;
@@ -89,5 +111,5 @@ export function useTraktWatched() {
     return count;
   }, [data, hasAuth]);
 
-  return { isWatched, isEpisodeWatched, watchedInSeason };
+  return { isWatched, isTraktWatched, isEpisodeWatched, watchedInSeason };
 }

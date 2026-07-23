@@ -13,15 +13,15 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useQuery, useQueries } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { useWatchlistStore } from '../../store/watchlistStore';
-import { useManualWatchedStore } from '../../store/manualWatchedStore';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useAuthStore } from '../../store/authStore';
+import { useTraktWatched } from '../../hooks/useTraktWatched';
 import { Ionicons } from '@expo/vector-icons';
 import { getPosterUrl, tmdbApi } from '../../lib/tmdb';
-import { traktApi, effectiveTraktClientId } from '../../lib/trakt';
+import WatchedBadge from '../../components/common/WatchedBadge';
 import type { WatchlistItem } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -31,7 +31,7 @@ const CARD_HEIGHT = CARD_WIDTH * 1.5;
 
 type FilterTab = 'all' | 'watchlist' | 'watching' | 'watched';
 
-function WatchlistCard({ item, onRemove }: { item: WatchlistItem; onRemove: () => void }) {
+function WatchlistCard({ item, watched, onRemove }: { item: WatchlistItem; watched: boolean; onRemove: () => void }) {
   const router = useRouter();
   const posterUrl = getPosterUrl(item.poster_path, 'medium');
 
@@ -50,6 +50,7 @@ function WatchlistCard({ item, onRemove }: { item: WatchlistItem; onRemove: () =
             <Text style={styles.cardPlaceholderText}>{item.title?.charAt(0) ?? '?'}</Text>
           </View>
         )}
+        {watched && <WatchedBadge />}
         <View style={[styles.mediaTypeBadge, item.media_type === 'tv' && styles.mediaTypeBadgeTv]}>
           <Text style={[styles.mediaTypeBadgeText, item.media_type === 'tv' && styles.mediaTypeBadgeTextTv]}>
             {item.media_type === 'tv' ? 'TV' : 'Movie'}
@@ -65,9 +66,9 @@ export default function WatchlistScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { items, removeFromWatchlist } = useWatchlistStore();
-  const isManuallyWatched = useManualWatchedStore((s) => s.isManuallyWatched);
+  const { isWatched } = useTraktWatched();
   const userId = useAuthStore((s) => s.user?.id);
-  const { traktClientId, traktAccessToken } = useApiKeysStore();
+  const { traktAccessToken } = useApiKeysStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [showMovies, setShowMovies] = useState(true);
   const [showShows, setShowShows] = useState(true);
@@ -85,46 +86,26 @@ export default function WatchlistScreen() {
   };
 
   const hasTrakt = !!traktAccessToken;
-  const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
-  const { data: traktMovies } = useQuery({
-    queryKey: ['trakt-watched-movies-wl', traktClientIdEff, traktAccessToken],
-    queryFn: () => traktApi.getWatchedMovies(traktClientIdEff, traktAccessToken),
-    enabled: hasTrakt,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  const { data: traktShows } = useQuery({
-    queryKey: ['trakt-watched-shows-wl', traktClientIdEff, traktAccessToken],
-    queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
-    enabled: hasTrakt,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  // Build lookup sets from Trakt data, plus anything manually marked watched
-  // in-app (Trakt has no record of, e.g. watched somewhere that doesn't
-  // scrobble) — otherwise it's stuck showing under "To Watch" forever.
+  // Lookup sets built from the shared useTraktWatched hook — combines Trakt
+  // history with anything manually marked watched in-app, and (unlike the
+  // duplicate queries this used to run inline) recovers automatically if the
+  // Trakt access token needed a refresh.
   const watchedMovieIds = useMemo(() => {
     const ids = new Set<number>();
-    (traktMovies ?? []).forEach((m) => {
-      if (m.movie.ids.tmdb) ids.add(m.movie.ids.tmdb);
-    });
     items.forEach((i) => {
-      if (i.media_type === 'movie' && isManuallyWatched(i.tmdb_id, 'movie')) ids.add(i.tmdb_id);
+      if (i.media_type === 'movie' && isWatched(i.tmdb_id, 'movie')) ids.add(i.tmdb_id);
     });
     return ids;
-  }, [traktMovies, items, isManuallyWatched]);
+  }, [items, isWatched]);
 
   const watchedShowIds = useMemo(() => {
     const ids = new Set<number>();
-    (traktShows ?? []).forEach((s) => {
-      if (s.show.ids.tmdb) ids.add(s.show.ids.tmdb);
-    });
     items.forEach((i) => {
-      if (i.media_type === 'tv' && isManuallyWatched(i.tmdb_id, 'tv')) ids.add(i.tmdb_id);
+      if (i.media_type === 'tv' && isWatched(i.tmdb_id, 'tv')) ids.add(i.tmdb_id);
     });
     return ids;
-  }, [traktShows, items, isManuallyWatched]);
+  }, [items, isWatched]);
 
   // Fetch genres for each watchlist item — reuses the same cache key as the detail screen
   const genreQueries = useQueries({
@@ -370,7 +351,11 @@ export default function WatchlistScreen() {
           contentContainerStyle={styles.gridContent}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <WatchlistCard item={item} onRemove={() => handleRemove(item)} />
+            <WatchlistCard
+              item={item}
+              watched={isWatched(item.tmdb_id, item.media_type)}
+              onRemove={() => handleRemove(item)}
+            />
           )}
           ListEmptyComponent={
             activeTab !== 'all' ? (
@@ -539,7 +524,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   gridRow: {
-    justifyContent: 'space-between',
+    gap: CARD_GAP,
     marginBottom: Spacing.md,
   },
   card: {

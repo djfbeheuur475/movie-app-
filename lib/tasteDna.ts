@@ -282,13 +282,6 @@ export async function saveShownRowTitles(titles: string[]): Promise<void> {
   } catch {}
 }
 
-export async function clearRecommendationCache(): Promise<void> {
-  await Promise.all([
-    AsyncStorage.removeItem(COOLDOWN_KEY),
-    AsyncStorage.removeItem(RECENT_ROWS_KEY),
-  ]);
-}
-
 // ─── AI chat cross-session memory ─────────────────────────────────────────────
 
 const AI_SEEN_TITLES_KEY = 'ai_seen_titles_v1';

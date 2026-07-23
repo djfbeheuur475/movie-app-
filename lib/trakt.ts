@@ -31,6 +31,33 @@ async function get<T>(path: string, clientId: string, accessToken?: string): Pro
   return res.json();
 }
 
+// Trakt caps `limit` at 250 server-side regardless of what's requested, and
+// silently truncates to a single page if you don't ask for more — there's no
+// error, no warning, just a smaller-than-real watched history. Loop pages
+// until X-Pagination-Page-Count says there's nothing left.
+async function getAllPages<T>(path: string, clientId: string, accessToken: string): Promise<T[]> {
+  const limit = 250;
+  const results: T[] = [];
+  let page = 1;
+  let pageCount = 1;
+
+  do {
+    const sep = path.includes('?') ? '&' : '?';
+    const res = await fetch(`${BASE}${path}${sep}page=${page}&limit=${limit}`, {
+      headers: headers(clientId, accessToken),
+    });
+    if (res.status === 401) throw new TraktUnauthorizedError();
+    if (!res.ok) throw new Error(`Trakt ${res.status}: ${path}`);
+    const data: T[] = await res.json();
+    results.push(...data);
+    const pc = res.headers.get('x-pagination-page-count');
+    pageCount = pc ? parseInt(pc, 10) : 1;
+    page++;
+  } while (page <= pageCount);
+
+  return results;
+}
+
 export async function refreshTraktToken(
   refreshToken: string,
   clientId: string,
@@ -149,12 +176,14 @@ export async function getListItemsPage(
 }
 
 export const traktApi = {
-  // Watch history (requires access token for private accounts)
+  // Watch history (requires access token for private accounts). Paginated —
+  // see getAllPages; a large history silently came back truncated to the
+  // first 100-250 items without this.
   getWatchedMovies: (clientId: string, accessToken: string): Promise<TraktWatchedMovie[]> =>
-    get('/sync/watched/movies', clientId, accessToken),
+    getAllPages('/sync/watched/movies', clientId, accessToken),
 
   getWatchedShows: (clientId: string, accessToken: string): Promise<TraktWatchedShow[]> =>
-    get('/sync/watched/shows', clientId, accessToken),
+    getAllPages('/sync/watched/shows', clientId, accessToken),
 
   // Calendar — personal (requires access token)
   getMyShowCalendar: (

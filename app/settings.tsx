@@ -18,7 +18,6 @@ import { Colors, Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { useAuthStore } from '../store/authStore';
 import { requestDeviceCode, pollDeviceToken, effectiveTraktClientId } from '../lib/trakt';
-import { clearRecommendationCache } from '../lib/tasteDna';
 import { supabase } from '../lib/supabase';
 
 // Not a security secret — just an opaque, hard-to-guess id for a personal
@@ -223,23 +222,6 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const handleRefreshRecs = () => {
-    Alert.alert(
-      'Refresh recommendations?',
-      'This clears your recently shown rows and item history so the home screen generates a fresh set of recommendations.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Refresh',
-          onPress: async () => {
-            await clearRecommendationCache();
-            Alert.alert('Done', 'Pull down on the home screen to reload your recommendations.');
-          },
-        },
-      ]
-    );
-  };
-
   const handleAddToStremio = useCallback(async () => {
     if (!userId) {
       Alert.alert('Sign in required', 'Sign in to install your personal watchlist addon.');
@@ -414,10 +396,6 @@ export default function SettingsScreen() {
                 ? <ActivityIndicator color={Colors.text} />
                 : <Text style={styles.saveBtnText}>{saved ? '✓ Saved!' : 'Save Settings'}</Text>
               }
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.refreshRecsBtn} onPress={handleRefreshRecs} activeOpacity={0.8}>
-              <Text style={styles.refreshRecsBtnText}>Refresh Recommendations</Text>
             </TouchableOpacity>
 
           </View>
@@ -605,14 +583,4 @@ const styles = StyleSheet.create({
   },
   saveBtnSuccess: { backgroundColor: Colors.success },
   saveBtnText: { ...Typography.subheading, color: Colors.text },
-  refreshRecsBtn: {
-    backgroundColor: Colors.primary + '18',
-    borderRadius: BorderRadius.md,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.primary + '60',
-  },
-  refreshRecsBtnText: { ...Typography.subheading, color: Colors.primary },
 });

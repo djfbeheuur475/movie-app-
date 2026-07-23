@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator, SectionList, TextInput, FlatList,
+  ActivityIndicator, SectionList, TextInput, FlatList, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -719,8 +719,14 @@ export default function CalendarScreen() {
         </View>
       </View>
 
-      {/* Filter buttons */}
-      <View style={styles.filterRow}>
+      {/* Filter buttons — horizontally scrollable so it never wraps to an
+          orphaned second row, and scales cleanly if more filters get added. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterRow}
+        contentContainerStyle={styles.filterRowContent}
+      >
         <TouchableOpacity
           style={[styles.filterBtn, showWatching && styles.filterBtnActive]}
           onPress={toggleWatching}
@@ -745,7 +751,7 @@ export default function CalendarScreen() {
           activeOpacity={0.8}
         >
           <Ionicons name="flame-outline" size={14} color={showAnticipated ? Colors.background : Colors.textSecondary} />
-          <Text style={[styles.filterBtnText, showAnticipated && styles.filterBtnTextActive]}>Most Anticipated</Text>
+          <Text style={[styles.filterBtnText, showAnticipated && styles.filterBtnTextActive]}>Anticipated TV</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -756,7 +762,7 @@ export default function CalendarScreen() {
           <Ionicons name="sparkles-outline" size={14} color={showForYou ? Colors.background : Colors.textSecondary} />
           <Text style={[styles.filterBtnText, showForYou && styles.filterBtnTextActive]}>For You</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {/* Show search */}
       <View style={styles.searchWrap}>
@@ -875,9 +881,13 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface,
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginHorizontal: Spacing.lg, marginBottom: Spacing.sm },
+  filterRow: { height: 44, marginBottom: Spacing.sm, flexGrow: 0, flexShrink: 0 },
+  filterRowContent: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg, paddingVertical: 6,
+  },
   filterBtn: {
-    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center',
     gap: 6, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border,
     backgroundColor: Colors.surface, paddingHorizontal: 14, paddingVertical: 7,
   },

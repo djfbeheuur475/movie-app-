@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
@@ -28,6 +28,7 @@ import {
 } from '../../lib/tasteDna';
 import type { GenreAffinity, TasteProfile } from '../../lib/tasteDna';
 import { selectRowTemplates, buildTasteNarration, applyProfileToTemplate, GENRE_LABELS } from '../../lib/templateSelector';
+import { pickDailyCuratedLists, fetchCuratedListPage, type CuratedFallbackList } from '../../lib/curatedFallbackLists';
 import { isMismatchedNiche, rankItemsByProfile, buildScoredWatchPool } from '../../lib/recommendations';
 import type { RecsContext, WatchSeed } from '../../lib/recommendations';
 import { useAIHomeFeed } from '../../hooks/useAIHomeFeed';
@@ -49,6 +50,33 @@ import type { ContentItem } from '../../types';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_SKELETON_HEIGHT = SCREEN_HEIGHT * 0.55;
+
+// Guests (no account) have no server session to fetch a personalized/AI feed
+// with, so they get this instead — real curated Trakt lists, rotated daily,
+// with the same endless-scroll behaviour as the AI-picked rows.
+function CuratedFallbackRow({ list }: { list: CuratedFallbackList }) {
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
+    queryKey: ['curated-fallback-row', list.id],
+    queryFn: ({ pageParam }) => fetchCuratedListPage(list.id, pageParam as number),
+    initialPageParam: 1,
+    getNextPageParam: (last) => last.nextPage ?? undefined,
+    staleTime: 1000 * 60 * 60 * 24,
+  });
+  const items = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+
+  return (
+    <ContentRow
+      title={`✦ ${list.name}`}
+      subtitle={list.subtitle}
+      items={items}
+      isLoading={isLoading}
+      isLoadingMore={isFetchingNextPage}
+      onEndReached={hasNextPage ? () => fetchNextPage() : undefined}
+      showRating
+      accent
+    />
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -311,6 +339,12 @@ export default function HomeScreen() {
   // sessionKey in the query key ensures each app launch gets a fresh template
   // selection; tab navigation within the session serves the cache.
   const temporal = useMemo(() => getTemporalContext(), []);
+
+  // Guests only — today's rotation of curated fallback lists (see CuratedFallbackRow above).
+  const todaysCuratedLists = useMemo(
+    () => (userId ? [] : pickDailyCuratedLists(temporal.dateKey.slice(0, 10))),
+    [userId, temporal.dateKey]
+  );
 
   const traktMovieFingerprint = (traktMovies ?? []).slice(0, 10).map((m) => m.movie.ids.tmdb).join(',');
   const traktShowFingerprint = (traktShows ?? []).slice(0, 10).map((s) => s.show.ids.tmdb).join(',');
@@ -695,7 +729,16 @@ export default function HomeScreen() {
             />
           )}
           {/* AI-curated rows — Brain + Candidate Builder + Curator pipeline */}
-          {aiFeedLoading && traktReady && !!userId ? (
+          {!userId ? (
+            // Guest (no account) — no server session to build an AI/personalized
+            // feed with (any cached aiFeed/thematic-row data here would be stale
+            // leftovers from a previous signed-in session), so serve the same
+            // curated-list treatment new accounts get server-side: real Trakt
+            // lists, rotated daily, endless scroll.
+            todaysCuratedLists.map((list) => (
+              <CuratedFallbackRow key={list.id} list={list} />
+            ))
+          ) : aiFeedLoading && traktReady ? (
             [0, 1, 2, 3].map((i) => (
               <ContentRow
                 key={`ai-skeleton-${i}`}
@@ -735,7 +778,7 @@ export default function HomeScreen() {
           ) : null}
           {(newEpsLoading || newEpsThisWeek.length > 0) && (
             <NewEpsRow
-              title="New Eps This Week"
+              title="New Eps of Shows You're Watching"
               shows={newEpsThisWeek}
               isLoading={newEpsLoading}
             />

@@ -9,8 +9,15 @@ export async function assembleContext(
   body: Record<string, unknown>,
   openRouterKey: string,
 ): Promise<ActionContext> {
-  const watchedMovies = (body.watchedMovies as WatchedMovie[]) ?? [];
-  const watchedShows = (body.watchedShows as WatchedShow[]) ?? [];
+  // Sorted newest-first — the client sends raw Trakt order, which isn't
+  // guaranteed to be recency order, so every downstream consumer that slices
+  // "the first N" to mean "the most recent N" (prompts, fingerprinting) needs
+  // this to actually be true.
+  const byRecency = <T extends { last_watched_at: string }>(items: T[]) =>
+    [...items].sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime());
+
+  const watchedMovies = byRecency((body.watchedMovies as WatchedMovie[]) ?? []);
+  const watchedShows = byRecency((body.watchedShows as WatchedShow[]) ?? []);
   const watchlistIds = (body.watchlistIds as number[]) ?? [];
   const favoriteGenres = (body.favoriteGenres as number[]) ?? [];
   const modelOverride = typeof body.model === "string" ? body.model.trim() : undefined;

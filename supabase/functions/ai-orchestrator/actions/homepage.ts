@@ -160,19 +160,53 @@ async function buildRowFromList(
   return section;
 }
 
-// ─── New-user fallback (TMDB trending, no AI) ────────────────────────────────
+// ─── Curated fallback lists (no taste signal yet) ────────────────────────────
+// Real, community-vetted Trakt lists used for brand-new accounts (no watch
+// history → no taste DNA) and for the equivalent guest/no-account home feed
+// on the client (see lib/curatedFallbackLists.ts — keep both in sync).
+// Picked from the top of the indexed catalog by community likes, favouring
+// broad, universally-recognizable appeal over niche/fandom-specific lists.
+const CURATED_FALLBACK_LISTS: TaggedList[] = [
+  { id: 2142753, name: "IMDB: Top Rated Movies", description: "The 250 highest-rated films, as voted by millions of viewers.", itemCount: 250, likes: 0, tags: [], mediaType: "mixed" },
+  { id: 2143363, name: "IMDB: Top Rated TV Shows", description: "The 250 highest-rated shows, ranked by IMDB voters.", itemCount: 241, likes: 0, tags: [], mediaType: "mixed" },
+  { id: 832943, name: "Academy Awards — Best Picture Winners", description: "Every Best Picture winner in Oscar history.", itemCount: 98, likes: 0, tags: [], mediaType: "mixed" },
+  { id: 805405, name: "1001 Movies You Must See Before You Die", description: "The definitive checklist of essential cinema.", itemCount: 1001, likes: 0, tags: [], mediaType: "mixed" },
+  { id: 808094, name: "Great Movies You May Have Never Heard Of", description: "Quietly brilliant films that flew under the radar.", itemCount: 443, likes: 0, tags: [], mediaType: "mixed" },
+  { id: 2748259, name: "Rolling Stone's 100 Greatest TV Shows of All Time", description: "The magazine's definitive ranking of TV's best.", itemCount: 100, likes: 0, tags: [], mediaType: "mixed" },
+];
 
-async function handleNewUser(ctx: ActionContext, tmdbKey: string): Promise<Response> {
-  const intents = generateSectionIntents(ctx);
-  const pools = await buildCandidatePools(intents, ctx, tmdbKey);
+// Deterministic day number so the rotation changes at the user's own midnight
+// (clientDateKey), not a fixed UTC boundary — same freshness model the rest
+// of the app uses.
+function dayNumber(clientDateKey?: string): number {
+  const d = clientDateKey ? new Date(`${clientDateKey}T00:00:00Z`) : new Date();
+  return Math.floor(d.getTime() / 86_400_000);
+}
+
+// Sliding window over the shortlist: shifts by one list per day, so a repeat
+// visit the next day sees mostly-the-same-but-refreshed picks instead of
+// either a static set or a fully random shuffle.
+function pickDailyCuratedLists(clientDateKey: string | undefined, count: number): TaggedList[] {
+  const n = CURATED_FALLBACK_LISTS.length;
+  const start = ((dayNumber(clientDateKey) % n) + n) % n;
+  return Array.from({ length: Math.min(count, n) }, (_, i) => CURATED_FALLBACK_LISTS[(start + i) % n]);
+}
+
+// ─── New-user fallback (curated Trakt lists, no AI) ──────────────────────────
+// Used both for brand-new accounts (no taste DNA) and as the last-resort
+// fallback if the main pipeline can't build any sections at all.
+async function handleNewUser(ctx: ActionContext, tmdbKey: string, clientDateKey?: string): Promise<Response> {
   const now = new Date();
-  const sections: Section[] = pools
+
+  // Hero stays trending-based — independent of the curated lists so it's
+  // never empty even if Trakt is unreachable.
+  const heroIntents = generateSectionIntents(ctx).filter((i) => i.type === "hero");
+  const heroPools = await buildCandidatePools(heroIntents, ctx, tmdbKey);
+  const heroSections: Section[] = heroPools
     .filter((p) => p.candidates.length > 0)
     .map((p): Section => ({
       id: p.sectionIntent.id,
-      type: p.sectionIntent.type === "hero" ? "hero" : "row",
-      heading: p.sectionIntent.theme,
-      subheading: "",
+      type: "hero",
       items: p.candidates.slice(0, 10).map((c, rank): RecommendationItem => ({
         tmdbId: c.tmdbId, mediaType: c.mediaType, title: c.title, year: c.year,
         confidence: 0.7, novelty: 0.3, source: "trending",
@@ -181,6 +215,22 @@ async function handleNewUser(ctx: ActionContext, tmdbKey: string): Promise<Respo
         voteAverage: c.voteAverage, genres: c.genres,
       })),
     }));
+
+  // Rows: today's rotation of curated lists, built the same way as the
+  // personalized pipeline's list rows — so they get real headings/blurbs
+  // and the client's existing "list-" row pagination (endless scroll) for free.
+  const todaysLists = pickDailyCuratedLists(clientDateKey, 4);
+  const rowResults = await Promise.allSettled(
+    todaysLists.map((list) =>
+      buildRowFromList({ id: list.id, reason: list.description }, CURATED_FALLBACK_LISTS, tmdbKey)
+    ),
+  );
+  const rowSections: Section[] = rowResults
+    .filter((r): r is PromiseFulfilledResult<Section | null> => r.status === "fulfilled")
+    .map((r) => r.value)
+    .filter((s): s is Section => s !== null);
+
+  const sections = [...heroSections, ...rowSections];
   const feed: HomeFeed = {
     sections,
     generatedFor: now.toLocaleDateString("en-AU", { weekday: "long", month: "long", year: "numeric" }),
@@ -232,7 +282,7 @@ export async function handleHomepage(ctx: ActionContext): Promise<Response> {
 
   if (!hasDNA) {
     console.log(`[homepage] new user — serving trending content`);
-    return handleNewUser(ctx, tmdbKey);
+    return handleNewUser(ctx, tmdbKey, clientDateKey);
   }
 
   // 2. Get Trakt list catalog: pre-indexed DB first, live fetch fallback
@@ -256,7 +306,7 @@ export async function handleHomepage(ctx: ActionContext): Promise<Response> {
 
   if (catalog.length === 0) {
     console.warn("[homepage] no catalog available — returning new-user fallback");
-    return handleNewUser(ctx, tmdbKey);
+    return handleNewUser(ctx, tmdbKey, clientDateKey);
   }
 
   // Exclude whatever was shown across the last few cycles — a stable taste
@@ -290,7 +340,7 @@ export async function handleHomepage(ctx: ActionContext): Promise<Response> {
 
   if (picks.length === 0) {
     console.warn("[homepage] no valid list picks — returning new-user fallback");
-    return handleNewUser(ctx, tmdbKey);
+    return handleNewUser(ctx, tmdbKey, clientDateKey);
   }
 
   // 4. Fetch + enrich all 6 lists in parallel
@@ -305,7 +355,7 @@ export async function handleHomepage(ctx: ActionContext): Promise<Response> {
 
   if (sections.length === 0) {
     console.warn("[homepage] no sections built — returning new-user fallback");
-    return handleNewUser(ctx, tmdbKey);
+    return handleNewUser(ctx, tmdbKey, clientDateKey);
   }
 
   // 5. Rewrite each row's heading + subheading from its ACTUAL fetched titles.
