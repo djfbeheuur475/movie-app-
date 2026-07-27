@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NextUp Account Deletion</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.8em; }
+  h2 { font-size: 1.25em; margin-top: 2em; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  .updated { color: #666; font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { text-align: left; padding: 8px 10px; border: 1px solid #ddd; font-size: 0.95em; vertical-align: top; }
+  th { background: #f5f5f5; }
+  .box { background: #f5f5f5; border-radius: 8px; padding: 16px 20px; margin: 1em 0; }
+</style>
+</head>
+<body>
+<h1>Delete Your NextUp Account</h1>
+<p class="updated">Last updated: July 28, 2026</p>
+
+<p>You can request deletion of your NextUp account and its associated data at any time. This page explains how to do that, what gets deleted, and what (if anything) we retain.</p>
+
+<h2>How to request deletion</h2>
+<div class="box">
+<p>NextUp does not currently have an in-app self-service delete button. To request deletion, email us at:</p>
+<p style="font-size: 1.2em;"><strong>harpershive@proton.me</strong></p>
+<p>Send this request from the email address associated with your NextUp account (or tell us the email you signed up with), with the subject line <strong>"Account Deletion Request"</strong>. We may reply to confirm your identity before processing the request, to make sure someone else isn't deleting your account on your behalf.</p>
+</div>
+<p>We process verified deletion requests within <strong>30 days</strong>.</p>
+
+<h2>What gets deleted immediately</h2>
+<p>Once your request is verified, we permanently delete:</p>
+<ul>
+  <li>Your account and login credentials (Supabase Auth record)</li>
+  <li>Your watchlist, watched titles, and ratings</li>
+  <li>Your Taste DNA (preference/recommendation profile)</li>
+  <li>Your AI assistant conversation history and summaries</li>
+  <li>Your linked Trakt authorization tokens (the connection is also revoked)</li>
+  <li>Your saved preferences and settings</li>
+</ul>
+
+<h2>What may be retained, and why</h2>
+<p>We keep this to a minimum, and only where there's a genuine operational or legal reason:</p>
+<ul>
+  <li><strong>Aggregated, de-identified operational logs</strong> (e.g. AI request counts used for reliability monitoring) may be retained briefly after deletion. These are not linked back to you once your account is removed and are not used to reconstruct your activity.</li>
+  <li><strong>Backup snapshots</strong> of our database are retained on a rolling basis for disaster recovery. Deleted data is purged from backups within 30 days as older backups are cycled out.</li>
+  <li><strong>Legal or security exceptions</strong>: if we're required to retain specific data to comply with a legal obligation, resolve a dispute, or investigate abuse of the service, we'll retain only what's necessary for that purpose and for as long as required, then delete it.</li>
+</ul>
+<p>We do not retain your watchlist, ratings, AI conversations, or Trakt tokens beyond the deletion process above — there is no separate "archive" of your personal activity.</p>
+
+<h2>Third-party data</h2>
+<p>If you linked a Trakt account, deleting your NextUp account revokes NextUp's access to it but does not delete your Trakt account itself — that's managed separately by Trakt. We do not control data held directly by TMDB, Trakt, or OpenRouter outside of what we've sent them as described in our <a href="privacy-policy.html">Privacy Policy</a>.</p>
+
+<h2>Questions</h2>
+<p>If you have questions about this process, contact <strong>harpershive@proton.me</strong>.</p>
+
+<p><a href="privacy-policy.html">&larr; Back to Privacy Policy</a></p>
+</body>
+</html>
