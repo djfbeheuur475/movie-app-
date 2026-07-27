@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
 
-PACKAGE="com.nextup.app"
+PACKAGE="com.harpershive.nextup"
 
 echo ""
 printf "${BOLD}NextUp Doctor — Environment Check${NC}\n"
@@ -146,8 +146,11 @@ fi
 # ── App installed ─────────────────────────────────────────────────────────────
 section "App ($PACKAGE)"
 if [ -n "$FIRST_DEVICE" ] && [ -n "$ADB" ] && [ -x "$ADB" ]; then
-  INSTALLED=$("$ADB" -s "$FIRST_DEVICE" shell pm list packages 2>/dev/null \
-    | grep -c "package:$PACKAGE" || echo "0")
+  if "$ADB" -s "$FIRST_DEVICE" shell pm list packages 2>/dev/null | grep -q "package:$PACKAGE"; then
+    INSTALLED=1
+  else
+    INSTALLED=0
+  fi
   if [ "$INSTALLED" != "0" ]; then
     pass "Installed on $FIRST_DEVICE"
     # Show version

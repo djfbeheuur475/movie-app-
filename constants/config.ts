@@ -6,6 +6,7 @@ export const Config = {
   BACKEND_URL: process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001',
   SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL || '',
   SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+  PRIVACY_POLICY_URL: 'https://djfbeheuur475.github.io/movie-app-/privacy-policy.html',
 } as const;
 
 export const ImageSizes = {

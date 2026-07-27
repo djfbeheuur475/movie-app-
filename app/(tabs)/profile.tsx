@@ -10,7 +10,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
+import { Config } from '../../constants/config';
 import { useAuthStore } from '../../store/authStore';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import PosterCard from '../../components/common/PosterCard';
@@ -148,7 +150,11 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.settingsCard}>
             <SettingRow icon="📋" label="Terms of Service" onPress={() => {}} />
-            <SettingRow icon="🔒" label="Privacy Policy" onPress={() => {}} />
+            <SettingRow
+              icon="🔒"
+              label="Privacy Policy"
+              onPress={() => WebBrowser.openBrowserAsync(Config.PRIVACY_POLICY_URL)}
+            />
             <SettingRow icon="ℹ️" label="Version" value="1.0.0" />
           </View>
         </View>

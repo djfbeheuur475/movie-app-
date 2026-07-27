@@ -11,7 +11,7 @@ ok()    { printf "${GREEN}✓${NC} %s\n" "$1"; }
 warn()  { printf "${YELLOW}⚠${NC} %s\n" "$1"; }
 fatal() { printf "\n${RED}✗ ERROR:${NC} %s\n\n" "$1" >&2; exit 1; }
 
-PACKAGE="com.nextup.app"
+PACKAGE="com.harpershive.nextup"
 ACTIVITY=".MainActivity"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -77,8 +77,11 @@ fi
 ok "Emulator ready  ($DEVICE)"
 
 # ── 3. App install ────────────────────────────────────────────────────────────
-INSTALLED=$("$ADB" -s "$DEVICE" shell pm list packages 2>/dev/null \
-  | grep -c "package:$PACKAGE" || echo "0")
+if "$ADB" -s "$DEVICE" shell pm list packages 2>/dev/null | grep -q "package:$PACKAGE"; then
+  INSTALLED=1
+else
+  INSTALLED=0
+fi
 
 if [ "$INSTALLED" = "0" ]; then
   warn "App not installed — building now (first run: 3–5 min, subsequent: ~60s)..."
