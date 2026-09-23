@@ -4,9 +4,14 @@ import { db, must, selectAll } from './db.ts';
 import { getFramework, LATEST_FRAMEWORK, type CompiledFramework } from './framework.ts';
 import { searchTitle, fetchTitle } from './tmdb.ts';
 import { askJev, buildQuestions, questionsFor, toProfile, JevError, type JevResponse } from './jev.ts';
-import { buildState, type StoredTitle } from './state.ts';
+import { buildState, buildNameOnlyState, type StoredTitle } from './state.ts';
+import { scoreFamiliarity } from './familiarity.ts';
 import { optionalNumber, requireEnv } from './env.ts';
-import { writeReport } from './report.ts';
+import { writeReport, writeComparison } from './report.ts';
+import { loadMembers } from './trakt_export.ts';
+import { buildCatalogue } from './catalogue.ts';
+import { runExperiment } from './experiment_run.ts';
+import { buildBlind } from './blind.ts';
 
 // ── Args ────────────────────────────────────────────────────────────────────
 
@@ -103,7 +108,8 @@ async function frameworkSync() {
 }
 
 async function testsetLoad() {
-  const spec = JSON.parse(readFileSync(`${ROOT}testset/v1.json`, 'utf8')) as { name: string; titles: { t: string; y: number; type: 'movie' | 'tv'; label: string }[] };
+  const file = (flag('file') as string) ?? 'testset/v1.json';
+  const spec = JSON.parse(readFileSync(`${ROOT}${file}`, 'utf8')) as { name: string; titles: { t: string; y: number; type: 'movie' | 'tv'; label: string }[] };
   const resolved: { t: string; y: number; type: string; label: string; tmdb_id: number | null; matched?: string }[] = [];
   for (const s of spec.titles) {
     const isTv = s.type === 'tv';
@@ -118,8 +124,18 @@ async function testsetLoad() {
     if (t.year !== s.y || t.title.toLowerCase() !== s.t.toLowerCase()) log(`CHECK "${s.t}" (${s.y}) → ${matched}`);
     resolved.push({ ...s, tmdb_id: tmdbId, matched });
   }
-  writeFileSync(`${ROOT}testset/v1.resolved.json`, JSON.stringify(resolved, null, 1) + '\n');
+  writeFileSync(`${ROOT}${file.replace(/\.json$/, '.resolved.json')}`, JSON.stringify(resolved, null, 1) + '\n');
   log(`Test set: ${resolved.filter((r) => r.tmdb_id).length}/${spec.titles.length} resolved and stored.`);
+}
+
+/** Invented titles (negative tmdb_id) that must score LOW familiarity. */
+async function syntheticLoad() {
+  const spec = JSON.parse(readFileSync(`${ROOT}testset/synthetic.json`, 'utf8')) as { name: string; titles: (Record<string, unknown> & { label: string })[] };
+  for (const { label, ...row } of spec.titles) {
+    const saved = must(await db().from('kb_titles').upsert({ ...row, keyword_ids: [] }, { onConflict: 'tmdb_id,is_tv' }).select('id').single(), 'synthetic upsert');
+    must(await db().from('kb_sets').upsert([{ name: spec.name, title_id: saved.id, label }, { name: 'synthetic', title_id: saved.id, label }], { onConflict: 'name,title_id' }), 'set upsert');
+  }
+  log(`Loaded ${spec.titles.length} synthetic titles into sets '${spec.name}' and 'synthetic'.`);
 }
 
 /** Measures how Jev bills: is question text charged once per request, or per question? */
@@ -189,18 +205,33 @@ async function profile() {
           const { vals, conf, missing } = toProfile(fw, r.answers, t.is_tv);
           if (missing.length) throw new Error(`missing answers: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}`);
           if (!models.has(r.model)) models.set(r.model, await modelId(r.model));
-          const cost = Number(r.consumed) || r.usage.cost || 0;
+          let cost = Number(r.consumed) || r.usage.cost || 0;
+          let tokens = r.usage.input_tokens;
+
+          // Familiarity probe: same questions subset, title/year/type only.
+          let fam = {};
+          let nameAnswers: unknown = null;
+          if (fw.nameOnly.length) {
+            const n = await jevWithRetry(buildNameOnlyState(t), buildQuestions(fw.nameOnly), () => totals.retries++);
+            const probe = toProfile(fw, n.answers, t.is_tv);
+            fam = scoreFamiliarity(fw.nameOnly, vals, conf, probe.vals, probe.conf);
+            cost += Number(n.consumed) || n.usage.cost || 0;
+            tokens += n.usage.input_tokens;
+            nameAnswers = n.answers;
+          }
+
           must(await db().from('kb_title_profiles').upsert({
-            title_id: t.id, framework_id: fwId, model_id: models.get(r.model), vals, conf,
+            title_id: t.id, framework_id: fwId, model_id: models.get(r.model), vals, conf, ...fam,
             meta_version: t.meta_version, classified_at: new Date().toISOString(),
           }, { onConflict: 'title_id,framework_id' }), 'profile upsert');
           must(await db().from('kb_classification_runs').update({
-            status: 'done', last_error: null, input_tokens: r.usage.input_tokens, cost_usd: cost,
+            status: 'done', last_error: null, input_tokens: tokens, cost_usd: cost,
             duration_ms: Date.now() - t0, processed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
           }).eq('title_id', t.id).eq('framework_id', fwId), 'run done');
-          if (saveRaw) appendFileSync(rawFile, JSON.stringify({ title_id: t.id, title: t.title, year: t.year, model: r.model, usage: r.usage, consumed: r.consumed, answers: r.answers }) + '\n');
-          totals.ok++; totals.tokens += r.usage.input_tokens; totals.cost += cost;
-          log(`✓ ${t.title} (${t.year}) ${r.usage.input_tokens} tok $${cost.toFixed(6)} ${Date.now() - t0}ms`);
+          if (saveRaw) appendFileSync(rawFile, JSON.stringify({ title_id: t.id, title: t.title, year: t.year, model: r.model, usage: r.usage, consumed: r.consumed, answers: r.answers, name_answers: nameAnswers }) + '\n');
+          totals.ok++; totals.tokens += tokens; totals.cost += cost;
+          const f = fam as { familiarity?: number };
+          log(`✓ ${t.title} (${t.year}) ${tokens} tok $${cost.toFixed(6)}${f.familiarity != null ? ` fam ${f.familiarity}` : ''} ${Date.now() - t0}ms`);
         } catch (e) {
           totals.failed++;
           const msg = (e as Error).message.slice(0, 500);
@@ -289,9 +320,34 @@ async function report() {
   log(`Report written: ${path}`);
 }
 
+async function catalogueBuild() {
+  const members = loadMembers(`${ROOT}${(flag('members') as string) ?? 'experiment/members.json'}`);
+  await buildCatalogue(members, num('target', 2500), log);
+}
+
+async function experimentRun() {
+  requireEnv('KB_LLM_TOKEN'); requireEnv('EXPERIMENT_USER_EMAIL');
+  await runExperiment(ROOT, (flag('members') as string) ?? 'experiment/members.json', num('folds', 4), num('rounds', 5), log);
+}
+
+async function experimentBlind() {
+  await buildBlind(ROOT, (flag('members') as string) ?? 'experiment/members.json', log);
+}
+
+async function compare() {
+  const fa = getFramework((flag('a') as string) ?? '1.0'), fb = getFramework((flag('b') as string) ?? LATEST_FRAMEWORK);
+  const anchors = ['Hot Fuzz', 'Detectorists', 'Aftersun', 'Hereditary', 'Slow Horses', 'Succession', 'Paddington 2', 'Breaking Bad', 'Arrival', 'Taskmaster', 'In Bruges', 'Barbie', 'The Office', 'Fleabag', 'Seinfeld'];
+  log(`Comparison written: ${await writeComparison(fa, await frameworkId(fa), fb, await frameworkId(fb), ROOT, anchors)}`);
+}
+
 const commands: Record<string, () => Promise<void>> = {
+  compare,
+  'catalogue:build': catalogueBuild,
+  'experiment:run': experimentRun,
+  'experiment:blind': experimentBlind,
   'framework:sync': frameworkSync,
   'testset:load': testsetLoad,
+  'testset:synthetic': syntheticLoad,
   probe,
   profile,
   retest,

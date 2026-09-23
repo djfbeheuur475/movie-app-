@@ -134,3 +134,13 @@ export const GENRE_NAMES: Record<number, string> = {
   10752: 'War', 37: 'Western', 10759: 'Action & Adventure', 10762: 'Kids', 10763: 'News',
   10764: 'Reality', 10765: 'Sci-Fi & Fantasy', 10766: 'Soap', 10767: 'Talk', 10768: 'War & Politics',
 };
+
+export async function tmdbRecommendations(id: number, isTv: boolean): Promise<number[]> {
+  const d = await tmdb<{ results: { id: number }[] }>(isTv ? `/tv/${id}/recommendations` : `/movie/${id}/recommendations`);
+  return d.results.map((r) => r.id);
+}
+
+export async function tmdbDiscover(isTv: boolean, params: Record<string, string | number>): Promise<number[]> {
+  const d = await tmdb<{ results: { id: number }[] }>(isTv ? '/discover/tv' : '/discover/movie', { include_adult: 'false', ...params });
+  return d.results.map((r) => r.id);
+}

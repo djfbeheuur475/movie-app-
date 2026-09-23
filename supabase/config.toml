@@ -437,3 +437,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/trakt-token/deno.json"
 entrypoint = "./functions/trakt-token/index.ts"
+
+[functions.kb-llm]
+enabled = true
+verify_jwt = false
+import_map = "./functions/kb-llm/deno.json"
+entrypoint = "./functions/kb-llm/index.ts"

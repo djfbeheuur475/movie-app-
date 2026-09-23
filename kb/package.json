@@ -15,6 +15,11 @@
     "profile:failed": "node --env-file=.env src/cli.ts profile --failed",
     "retest": "node --env-file=.env src/cli.ts retest --set test --limit 20",
     "report": "node --env-file=.env src/cli.ts report --set test",
+    "compare": "node --env-file=.env src/cli.ts compare",
+    "catalogue:build": "node --env-file=.env src/cli.ts catalogue:build",
+    "experiment:run": "node --env-file=.env src/cli.ts experiment:run",
+    "experiment:blind": "node --env-file=.env src/cli.ts experiment:blind",
+    "testset:synthetic": "node --env-file=.env src/cli.ts testset:synthetic",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

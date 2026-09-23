@@ -1,0 +1,18 @@
+{
+  "name": "test",
+  "notes": "Invented titles whose names contradict their descriptions — the familiarity score must be LOW for all of these. Stored with negative tmdb_id and set 'synthetic' so they never enter a real catalogue.",
+  "titles": [
+    { "tmdb_id": -1, "is_tv": false, "title": "Blood Harvest at Midnight", "year": 2020, "runtime": 94, "cert": "US:PG",
+      "genre_ids": [35, 10751], "creators": ["Claire Dunmore"], "cast_names": ["Tom Ashby", "Mary Kells"],
+      "overview": "A gentle, sunny comedy about the retirees of a small Cotswolds village and their fiercely polite annual competition to grow the heaviest pumpkin.", "lang": "en", "countries": ["GB"], "label": "synthetic: horror-sounding cosy comedy" },
+    { "tmdb_id": -2, "is_tv": true, "title": "Sunny Days at Pemberton Bay", "year": 2023, "runtime": 58, "seasons": 1, "cert": "US:TV-MA",
+      "genre_ids": [80, 18, 9648], "creators": ["Owen Stroud"], "cast_names": ["Dana Wick", "Idris Kane"],
+      "overview": "In a bleak fishing town, a detective hunts a serial killer who leaves his victims on the beach, while the town's secrets unravel into violence.", "lang": "en", "countries": ["GB"], "label": "synthetic: cosy-sounding bleak crime" },
+    { "tmdb_id": -3, "is_tv": false, "title": "The Glass Orchard", "year": 2019, "runtime": 118, "cert": "US:PG-13",
+      "genre_ids": [878, 28], "creators": ["Rafael Ortiz"], "cast_names": ["Nia Cole", "Sam Rourke"],
+      "overview": "A crew of mercenaries stages a zero-gravity heist aboard an orbital casino, triggering explosive gunfights as the station tears apart.", "lang": "en", "countries": ["US"], "label": "synthetic: arthouse-sounding sci-fi action" },
+    { "tmdb_id": -4, "is_tv": true, "title": "Harrowgate Lane", "year": 2021, "runtime": 24, "seasons": 3, "cert": "US:TV-PG",
+      "genre_ids": [35, 10751], "creators": ["Beth Morrow"], "cast_names": ["Jo Tanner", "Ray Holt"],
+      "overview": "Three generations of a chaotic, loving family share one small house in this warm, silly sitcom full of misunderstandings and Sunday dinners.", "lang": "en", "countries": ["GB"], "label": "synthetic: ominous-sounding family sitcom" }
+  ]
+}

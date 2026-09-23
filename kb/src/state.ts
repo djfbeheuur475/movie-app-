@@ -46,3 +46,12 @@ export function buildState(t: StoredTitle, keywordNames: Map<number, string>): s
   ];
   return lines.filter(Boolean).join('\n');
 }
+
+/** Familiarity probe: deliberately ONLY title, year and format — no evidence. */
+export function buildNameOnlyState(t: Pick<StoredTitle, 'title' | 'year' | 'is_tv'>): string {
+  return [
+    'Profile this title for a film & TV recommendation engine. Use what you know about it.',
+    `Title: ${t.title}${t.year ? ` (${t.year})` : ''}`,
+    t.is_tv ? 'TV series' : 'Film',
+  ].join('\n');
+}

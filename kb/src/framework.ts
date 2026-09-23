@@ -1,9 +1,14 @@
 import { createHash } from 'node:crypto';
 import { FRAMEWORK_V1, type Dimension, type Framework } from '../framework/v1.ts';
+import { FRAMEWORK_V1_1, NAME_ONLY_KEYS as NAME_ONLY_V1_1 } from '../framework/v1_1.ts';
 
 // All known framework versions. Add new versions here; never edit old ones.
-const FRAMEWORKS: Record<string, Framework> = { '1.0': FRAMEWORK_V1 };
-export const LATEST_FRAMEWORK = '1.0';
+// nameOnly: the subset asked with title/year/type only, for the familiarity score.
+const FRAMEWORKS: Record<string, { fw: Framework; nameOnly: string[] }> = {
+  '1.0': { fw: FRAMEWORK_V1, nameOnly: [] },
+  '1.1': { fw: FRAMEWORK_V1_1, nameOnly: NAME_ONLY_V1_1 },
+};
+export const LATEST_FRAMEWORK = '1.1';
 
 export interface CompiledDimension extends Dimension {
   ordinal: number;   // 1-based position in conf[]
@@ -18,12 +23,15 @@ export interface CompiledFramework {
   hash: string;
   dimensions: CompiledDimension[];
   slotCount: number;
+  /** Dimensions used for the name-only familiarity probe (empty for v1.0). */
+  nameOnly: CompiledDimension[];
 }
 
 export function getFramework(version = LATEST_FRAMEWORK): CompiledFramework {
-  const fw = FRAMEWORKS[version];
-  if (!fw) throw new Error(`Unknown framework version ${version}. Known: ${Object.keys(FRAMEWORKS).join(', ')}`);
+  const entry = FRAMEWORKS[version];
+  if (!entry) throw new Error(`Unknown framework version ${version}. Known: ${Object.keys(FRAMEWORKS).join(', ')}`);
 
+  const fw = entry.fw;
   const keys = new Set<string>();
   let slot = 1;
   const dimensions = fw.dimensions.map((d, i): CompiledDimension => {
@@ -39,8 +47,14 @@ export function getFramework(version = LATEST_FRAMEWORK): CompiledFramework {
     return compiled;
   });
 
-  const hash = createHash('sha256').update(JSON.stringify(fw)).digest('hex');
-  return { version: fw.version, notes: fw.notes, hash, dimensions, slotCount: slot - 1 };
+  // v1.0's hash covers only its dimensions (as synced); later versions also hash the probe subset.
+  const hash = createHash('sha256').update(JSON.stringify(entry.nameOnly.length ? { fw, nameOnly: entry.nameOnly } : fw)).digest('hex');
+  const nameOnly = entry.nameOnly.map((k) => {
+    const d = dimensions.find((x) => x.key === k);
+    if (!d || d.type !== 'score') throw new Error(`name-only key ${k} must be a score dimension`);
+    return d;
+  });
+  return { version: fw.version, notes: fw.notes, hash, dimensions, slotCount: slot - 1, nameOnly };
 }
 
 export const appliesTo = (d: Dimension, isTv: boolean) =>

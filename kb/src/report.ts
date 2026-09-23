@@ -5,7 +5,7 @@ import type { CompiledFramework, CompiledDimension } from './framework.ts';
 // Framework QC report for a title set: what to cut, merge or reword before
 // scaling. Written to kb/output/report-v<version>.md (gitignored).
 
-interface Row { title_id: number; vals: (number | null)[]; conf: (number | null)[] }
+interface Row { title_id: number; vals: (number | null)[]; conf: (number | null)[]; familiarity?: number | null; agreement?: number | null; name_conf?: number | null; full_conf?: number | null }
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
 const sd = (xs: number[]) => { const m = mean(xs); return Math.sqrt(mean(xs.map((x) => (x - m) ** 2))); };
@@ -19,7 +19,7 @@ function pearson(a: number[], b: number[]) {
 export async function writeReport(fw: CompiledFramework, fwId: number, set: string, root: string): Promise<string> {
   const members = must(await db().from('kb_sets').select('title_id, label').eq('name', set), 'set');
   const labels = new Map(members.map((m) => [m.title_id, m.label as string]));
-  const rows = must(await db().from('kb_title_profiles').select('title_id, vals, conf').eq('framework_id', fwId).in('title_id', members.map((m) => m.title_id)), 'profiles') as Row[];
+  const rows = must(await db().from('kb_title_profiles').select('title_id, vals, conf, familiarity, agreement, name_conf, full_conf').eq('framework_id', fwId).in('title_id', members.map((m) => m.title_id)), 'profiles') as Row[];
   const titles = new Map(must(await db().from('kb_titles').select('id, title, year, is_tv').in('id', rows.map((r) => r.title_id)), 'titles').map((t) => [t.id, t]));
   const name = (id: number) => { const t = titles.get(id); return t ? `${t.title} (${t.year})` : `#${id}`; };
 
@@ -93,6 +93,17 @@ export async function writeReport(fw: CompiledFramework, fwId: number, set: stri
   }
   L.push('');
 
+  // Familiarity (v1.1+)
+  const famRows = rows.filter((r) => r.familiarity != null);
+  if (famRows.length) {
+    const byFam = [...famRows].sort((a, b) => (a.familiarity ?? 0) - (b.familiarity ?? 0));
+    const buckets = [0, 20, 40, 60, 80].map((lo) => `${lo}–${lo + 19}: ${famRows.filter((r) => r.familiarity! >= lo && r.familiarity! < lo + 20 || (lo === 80 && r.familiarity! === 100)).length}`);
+    const line = (r: Row) => `- ${name(r.title_id)} _${labels.get(r.title_id) ?? ''}_ — familiarity **${r.familiarity}** (agreement ${r.agreement}, name-only conf ${r.name_conf}, full conf ${r.full_conf})`;
+    const bluffs = famRows.filter((r) => (r.name_conf ?? 0) >= 60 && (r.agreement ?? 100) < 50);
+    L.push('## Familiarity (trust signal)', '', `Distribution: ${buckets.join(' · ')}`, '', '**Lowest 12:**', '', ...byFam.slice(0, 12).map(line), '', '**Highest 6:**', '', ...byFam.slice(-6).reverse().map(line), '');
+    L.push('**False-confidence cases** (name-only confidence ≥ 60 but agreement < 50 — Jev sounded sure from the name, evidence disagreed):', '', ...(bluffs.length ? bluffs.map(line) : ['- none']), '');
+  }
+
   // 6. Title cards + nearest neighbours (cosine over z-scored scalars)
   const z = new Map(stats.map((s) => [s.d.key, s]));
   const vec = (r: Row) => scalars.map((d) => { const v = r.vals[d.slotStart - 1]; const s = z.get(d.key)!; return v == null || !s.sd ? 0 : (v - s.mean) / s.sd; });
@@ -114,6 +125,41 @@ export async function writeReport(fw: CompiledFramework, fwId: number, set: stri
   }
 
   const path = `${root}output/report-v${fw.version}.md`;
+  writeFileSync(path, L.join('\n'));
+  return path;
+}
+
+/** v-a vs v-b on the titles profiled under both. */
+export async function writeComparison(fa: CompiledFramework, idA: number, fb: CompiledFramework, idB: number, root: string, anchors: string[]): Promise<string> {
+  const get = async (id: number) => must(await db().from('kb_title_profiles').select('title_id, vals, conf').eq('framework_id', id), 'profiles') as Row[];
+  const [ra, rb] = await Promise.all([get(idA), get(idB)]);
+  const common = new Set(ra.map((r) => r.title_id).filter((id) => rb.some((x) => x.title_id === id)));
+  const titles = new Map(must(await db().from('kb_titles').select('id, title, year').in('id', [...common]), 'titles').map((t) => [t.id, `${t.title} (${t.year})`]));
+  const stats = (fw: CompiledFramework, rows: Row[]) => {
+    rows = rows.filter((r) => common.has(r.title_id));
+    const sc = fw.dimensions.filter((d) => d.type !== 'choice' && d.appliesTo === 'all');
+    const cols = sc.map((d) => rows.map((r) => r.vals[d.slotStart - 1] ?? 0));
+    let pairs = 0, maxAbs = 0;
+    for (let i = 0; i < sc.length; i++) for (let j = i + 1; j < sc.length; j++) { const r = Math.abs(pearson(cols[i], cols[j])); if (r >= 0.75) pairs++; maxAbs = Math.max(maxAbs, r); }
+    const confs = rows.flatMap((r) => r.conf.filter((c): c is number => c != null));
+    const mu = cols.map(mean), sdv = cols.map(sd);
+    const vec = new Map(rows.map((r) => [r.title_id, sc.map((d, i) => sdv[i] ? ((r.vals[d.slotStart - 1] ?? mu[i]) - mu[i]) / sdv[i] : 0)]));
+    const cos = (a: number[], b: number[]) => { let n = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { n += a[i] * b[i]; x += a[i] ** 2; y += b[i] ** 2; } return n / Math.sqrt(x * y); };
+    const nn = (id: number) => [...vec].filter(([o]) => o !== id).map(([o, v]) => ({ o, s: cos(vec.get(id)!, v) })).sort((a, b) => b.s - a.s).slice(0, 3).map((x) => titles.get(x.o));
+    return { dims: fw.dimensions.length, sc: sc.length, pairs, meanConf: mean(confs), nn };
+  };
+  const A = stats(fa, ra), B = stats(fb, rb);
+  const L = [`# Framework ${fa.version} vs ${fb.version}`, '', `${common.size} titles profiled under both.`, '',
+    '| | ' + fa.version + ' | ' + fb.version + ' |', '|---|---|---|',
+    `| dimensions | ${A.dims} | ${B.dims} |`, `| scalar dimensions (all formats) | ${A.sc} | ${B.sc} |`,
+    `| correlated pairs (|r| ≥ 0.75) | ${A.pairs} | ${B.pairs} |`, `| mean confidence | ${A.meanConf.toFixed(1)} | ${B.meanConf.toFixed(1)} |`, '',
+    '## Nearest neighbours — anchor titles', ''];
+  for (const a of anchors) {
+    const id = [...titles].find(([, t]) => t.startsWith(a + ' ('))?.[0];
+    if (!id) continue;
+    L.push(`**${titles.get(id)}**`, `- ${fa.version}: ${A.nn(id).join(', ')}`, `- ${fb.version}: ${B.nn(id).join(', ')}`, '');
+  }
+  const path = `${root}output/compare-v${fa.version}-v${fb.version}.md`;
   writeFileSync(path, L.join('\n'));
   return path;
 }

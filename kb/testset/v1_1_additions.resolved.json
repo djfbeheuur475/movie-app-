@@ -1,0 +1,361 @@
+[
+ {
+  "t": "Moneyball",
+  "y": 2011,
+  "type": "movie",
+  "label": "sports",
+  "tmdb_id": 60308,
+  "matched": "Moneyball (2011)"
+ },
+ {
+  "t": "Rocky",
+  "y": 1976,
+  "type": "movie",
+  "label": "sports/older",
+  "tmdb_id": 1366,
+  "matched": "Rocky (1976)"
+ },
+ {
+  "t": "Ted Lasso",
+  "y": 2020,
+  "type": "tv",
+  "label": "sports/cosy tv",
+  "tmdb_id": 97546,
+  "matched": "Ted Lasso (2020)"
+ },
+ {
+  "t": "Formula 1: Drive to Survive",
+  "y": 2019,
+  "type": "tv",
+  "label": "sports docuseries",
+  "tmdb_id": 87083,
+  "matched": "Formula 1: Drive to Survive (2019)"
+ },
+ {
+  "t": "True Grit",
+  "y": 2010,
+  "type": "movie",
+  "label": "western",
+  "tmdb_id": 44264,
+  "matched": "True Grit (2010)"
+ },
+ {
+  "t": "Deadwood",
+  "y": 2004,
+  "type": "tv",
+  "label": "western tv",
+  "tmdb_id": 1406,
+  "matched": "Deadwood (2004)"
+ },
+ {
+  "t": "Whiplash",
+  "y": 2014,
+  "type": "movie",
+  "label": "music drama",
+  "tmdb_id": 244786,
+  "matched": "Whiplash (2014)"
+ },
+ {
+  "t": "Hamilton",
+  "y": 2020,
+  "type": "movie",
+  "label": "musical",
+  "tmdb_id": null
+ },
+ {
+  "t": "Only Murders in the Building",
+  "y": 2021,
+  "type": "tv",
+  "label": "cosy tv",
+  "tmdb_id": 107113,
+  "matched": "Only Murders in the Building (2021)"
+ },
+ {
+  "t": "Gilmore Girls",
+  "y": 2000,
+  "type": "tv",
+  "label": "cosy tv",
+  "tmdb_id": 4586,
+  "matched": "Gilmore Girls (2000)"
+ },
+ {
+  "t": "Abbott Elementary",
+  "y": 2021,
+  "type": "tv",
+  "label": "cosy sitcom",
+  "tmdb_id": 125935,
+  "matched": "Abbott Elementary (2021)"
+ },
+ {
+  "t": "Upstream Color",
+  "y": 2013,
+  "type": "movie",
+  "label": "obscure film",
+  "tmdb_id": 145197,
+  "matched": "Upstream Color (2013)"
+ },
+ {
+  "t": "The Endless",
+  "y": 2017,
+  "type": "movie",
+  "label": "obscure film",
+  "tmdb_id": 430231,
+  "matched": "The Endless (2017)"
+ },
+ {
+  "t": "Resolution",
+  "y": 2012,
+  "type": "movie",
+  "label": "obscure film",
+  "tmdb_id": 121606,
+  "matched": "Resolution (2013)"
+ },
+ {
+  "t": "Pure",
+  "y": 2019,
+  "type": "tv",
+  "label": "obscure tv",
+  "tmdb_id": 86401,
+  "matched": "Pure (2019)"
+ },
+ {
+  "t": "Toast of London",
+  "y": 2012,
+  "type": "tv",
+  "label": "obscure tv",
+  "tmdb_id": 61413,
+  "matched": "Toast of London (2013)"
+ },
+ {
+  "t": "The Rehearsal",
+  "y": 2022,
+  "type": "tv",
+  "label": "obscure tv",
+  "tmdb_id": 204284,
+  "matched": "The Rehearsal (2022)"
+ },
+ {
+  "t": "Home",
+  "y": 2015,
+  "type": "movie",
+  "label": "generic title",
+  "tmdb_id": 228161,
+  "matched": "Home (2015)"
+ },
+ {
+  "t": "Crash",
+  "y": 2004,
+  "type": "movie",
+  "label": "generic title",
+  "tmdb_id": 1640,
+  "matched": "Crash (2005)"
+ },
+ {
+  "t": "Room",
+  "y": 2015,
+  "type": "movie",
+  "label": "generic title",
+  "tmdb_id": 264644,
+  "matched": "Room (2015)"
+ },
+ {
+  "t": "Us",
+  "y": 2019,
+  "type": "movie",
+  "label": "generic title",
+  "tmdb_id": 458723,
+  "matched": "Us (2019)"
+ },
+ {
+  "t": "Funny Games",
+  "y": 1997,
+  "type": "movie",
+  "label": "misleading title",
+  "tmdb_id": 10234,
+  "matched": "Funny Games (1997)"
+ },
+ {
+  "t": "Happiness",
+  "y": 1998,
+  "type": "movie",
+  "label": "misleading title",
+  "tmdb_id": 10683,
+  "matched": "Happiness (1998)"
+ },
+ {
+  "t": "Life Is Beautiful",
+  "y": 1997,
+  "type": "movie",
+  "label": "misleading title",
+  "tmdb_id": 637,
+  "matched": "Life Is Beautiful (1997)"
+ },
+ {
+  "t": "Sweet Home",
+  "y": 2020,
+  "type": "tv",
+  "label": "misleading title",
+  "tmdb_id": 96648,
+  "matched": "Sweet Home (2020)"
+ },
+ {
+  "t": "Oldboy",
+  "y": 2003,
+  "type": "movie",
+  "label": "foreign",
+  "tmdb_id": 670,
+  "matched": "Oldboy (2003)"
+ },
+ {
+  "t": "Crouching Tiger, Hidden Dragon",
+  "y": 2000,
+  "type": "movie",
+  "label": "foreign",
+  "tmdb_id": 146,
+  "matched": "Crouching Tiger, Hidden Dragon (2000)"
+ },
+ {
+  "t": "Squid Game",
+  "y": 2021,
+  "type": "tv",
+  "label": "foreign tv",
+  "tmdb_id": 93405,
+  "matched": "Squid Game (2021)"
+ },
+ {
+  "t": "Money Heist",
+  "y": 2017,
+  "type": "tv",
+  "label": "foreign tv",
+  "tmdb_id": 71446,
+  "matched": "Money Heist (2017)"
+ },
+ {
+  "t": "Suspiria",
+  "y": 1977,
+  "type": "movie",
+  "label": "remake pair",
+  "tmdb_id": 11906,
+  "matched": "Suspiria (1977)"
+ },
+ {
+  "t": "Suspiria",
+  "y": 2018,
+  "type": "movie",
+  "label": "remake pair",
+  "tmdb_id": 361292,
+  "matched": "Suspiria (2018)"
+ },
+ {
+  "t": "Dune",
+  "y": 1984,
+  "type": "movie",
+  "label": "remake pair",
+  "tmdb_id": 841,
+  "matched": "Dune (1984)"
+ },
+ {
+  "t": "Dune",
+  "y": 2021,
+  "type": "movie",
+  "label": "remake pair",
+  "tmdb_id": 438631,
+  "matched": "Dune (2021)"
+ },
+ {
+  "t": "The Office",
+  "y": 2001,
+  "type": "tv",
+  "label": "shared title (UK)",
+  "tmdb_id": 2996,
+  "matched": "The Office (2001)"
+ },
+ {
+  "t": "Sinners",
+  "y": 2025,
+  "type": "movie",
+  "label": "recent",
+  "tmdb_id": 1233413,
+  "matched": "Sinners (2025)"
+ },
+ {
+  "t": "One Battle After Another",
+  "y": 2025,
+  "type": "movie",
+  "label": "recent",
+  "tmdb_id": 1054867,
+  "matched": "One Battle After Another (2025)"
+ },
+ {
+  "t": "Adolescence",
+  "y": 2025,
+  "type": "tv",
+  "label": "recent",
+  "tmdb_id": 249042,
+  "matched": "Adolescence (2025)"
+ },
+ {
+  "t": "The Studio",
+  "y": 2025,
+  "type": "tv",
+  "label": "recent",
+  "tmdb_id": 247767,
+  "matched": "The Studio (2025)"
+ },
+ {
+  "t": "12 Angry Men",
+  "y": 1957,
+  "type": "movie",
+  "label": "older",
+  "tmdb_id": 389,
+  "matched": "12 Angry Men (1957)"
+ },
+ {
+  "t": "Rear Window",
+  "y": 1954,
+  "type": "movie",
+  "label": "older",
+  "tmdb_id": 567,
+  "matched": "Rear Window (1954)"
+ },
+ {
+  "t": "Icarus",
+  "y": 2017,
+  "type": "movie",
+  "label": "documentary",
+  "tmdb_id": 432976,
+  "matched": "Icarus (2017)"
+ },
+ {
+  "t": "Tiger King",
+  "y": 2020,
+  "type": "tv",
+  "label": "docuseries",
+  "tmdb_id": 100698,
+  "matched": "Tiger King (2020)"
+ },
+ {
+  "t": "Your Name.",
+  "y": 2016,
+  "type": "movie",
+  "label": "anime",
+  "tmdb_id": 372058,
+  "matched": "Your Name. (2016)"
+ },
+ {
+  "t": "Attack on Titan",
+  "y": 2013,
+  "type": "tv",
+  "label": "anime tv",
+  "tmdb_id": 1429,
+  "matched": "Attack on Titan (2013)"
+ },
+ {
+  "t": "Cowboy Bebop",
+  "y": 1998,
+  "type": "tv",
+  "label": "anime tv",
+  "tmdb_id": 30991,
+  "matched": "Cowboy Bebop (1998)"
+ }
+]

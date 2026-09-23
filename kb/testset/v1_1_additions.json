@@ -1,0 +1,60 @@
+{
+  "name": "test",
+  "notes": "v1.1 validation additions: categories missing from v1.0 (sports, western, musical, cosy TV) and familiarity stress cases.",
+  "titles": [
+    { "t": "Moneyball", "y": 2011, "type": "movie", "label": "sports" },
+    { "t": "Rocky", "y": 1976, "type": "movie", "label": "sports/older" },
+    { "t": "Ted Lasso", "y": 2020, "type": "tv", "label": "sports/cosy tv" },
+    { "t": "Formula 1: Drive to Survive", "y": 2019, "type": "tv", "label": "sports docuseries" },
+    { "t": "True Grit", "y": 2010, "type": "movie", "label": "western" },
+    { "t": "Deadwood", "y": 2004, "type": "tv", "label": "western tv" },
+    { "t": "Whiplash", "y": 2014, "type": "movie", "label": "music drama" },
+    { "t": "Hamilton", "y": 2020, "type": "movie", "label": "musical" },
+    { "t": "Only Murders in the Building", "y": 2021, "type": "tv", "label": "cosy tv" },
+    { "t": "Gilmore Girls", "y": 2000, "type": "tv", "label": "cosy tv" },
+    { "t": "Abbott Elementary", "y": 2021, "type": "tv", "label": "cosy sitcom" },
+
+    { "t": "Upstream Color", "y": 2013, "type": "movie", "label": "obscure film" },
+    { "t": "The Endless", "y": 2017, "type": "movie", "label": "obscure film" },
+    { "t": "Resolution", "y": 2012, "type": "movie", "label": "obscure film" },
+    { "t": "Pure", "y": 2019, "type": "tv", "label": "obscure tv" },
+    { "t": "Toast of London", "y": 2012, "type": "tv", "label": "obscure tv" },
+    { "t": "The Rehearsal", "y": 2022, "type": "tv", "label": "obscure tv" },
+
+    { "t": "Home", "y": 2015, "type": "movie", "label": "generic title" },
+    { "t": "Crash", "y": 2004, "type": "movie", "label": "generic title" },
+    { "t": "Room", "y": 2015, "type": "movie", "label": "generic title" },
+    { "t": "Us", "y": 2019, "type": "movie", "label": "generic title" },
+
+    { "t": "Funny Games", "y": 1997, "type": "movie", "label": "misleading title" },
+    { "t": "Happiness", "y": 1998, "type": "movie", "label": "misleading title" },
+    { "t": "Life Is Beautiful", "y": 1997, "type": "movie", "label": "misleading title" },
+    { "t": "Sweet Home", "y": 2020, "type": "tv", "label": "misleading title" },
+
+    { "t": "Oldboy", "y": 2003, "type": "movie", "label": "foreign" },
+    { "t": "Crouching Tiger, Hidden Dragon", "y": 2000, "type": "movie", "label": "foreign" },
+    { "t": "Squid Game", "y": 2021, "type": "tv", "label": "foreign tv" },
+    { "t": "Money Heist", "y": 2017, "type": "tv", "label": "foreign tv" },
+
+    { "t": "Suspiria", "y": 1977, "type": "movie", "label": "remake pair" },
+    { "t": "Suspiria", "y": 2018, "type": "movie", "label": "remake pair" },
+    { "t": "Dune", "y": 1984, "type": "movie", "label": "remake pair" },
+    { "t": "Dune", "y": 2021, "type": "movie", "label": "remake pair" },
+    { "t": "The Office", "y": 2001, "type": "tv", "label": "shared title (UK)" },
+
+    { "t": "Sinners", "y": 2025, "type": "movie", "label": "recent" },
+    { "t": "One Battle After Another", "y": 2025, "type": "movie", "label": "recent" },
+    { "t": "Adolescence", "y": 2025, "type": "tv", "label": "recent" },
+    { "t": "The Studio", "y": 2025, "type": "tv", "label": "recent" },
+
+    { "t": "12 Angry Men", "y": 1957, "type": "movie", "label": "older" },
+    { "t": "Rear Window", "y": 1954, "type": "movie", "label": "older" },
+
+    { "t": "Icarus", "y": 2017, "type": "movie", "label": "documentary" },
+    { "t": "Tiger King", "y": 2020, "type": "tv", "label": "docuseries" },
+
+    { "t": "Your Name.", "y": 2016, "type": "movie", "label": "anime" },
+    { "t": "Attack on Titan", "y": 2013, "type": "tv", "label": "anime tv" },
+    { "t": "Cowboy Bebop", "y": 1998, "type": "tv", "label": "anime tv" }
+  ]
+}

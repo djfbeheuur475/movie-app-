@@ -58,3 +58,4 @@ google-play-key.json
 # Knowledge-base pipeline local artefacts
 kb/output/
 kb/logs/
+kb/experiment/
