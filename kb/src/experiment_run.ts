@@ -26,6 +26,7 @@ export async function runExperiment(root: string, membersPath: string, nFolds: n
     const watchlist = new Set(m.watchlist.map((w) => w.key));
     log(`${m.name}: ${folds.length} folds of ${folds[0]?.heldOut.length ?? 0} held-out titles`);
     for (const fold of folds) {
+      const controlStats = new Map<number, unknown>();
       log(`  fold ${fold.index}: cut-off ${fold.cutoff.slice(0, 10)}, ${fold.visible.size} visible titles, held out: ${fold.heldOut.map((h) => h.title).slice(0, 6).join(', ')}…`);
       const toResult = (system: string, ranked: string[], extra: Partial<SystemResult> = {}): SystemResult => ({
         system, top: ranked.slice(0, 20), labels: ranked.slice(0, 20).map((k) => label(catalogue.get(k), k)),
@@ -57,6 +58,7 @@ export async function runExperiment(root: string, membersPath: string, nFolds: n
       if (want('C_direct_ai')) {
         const t0 = Date.now();
         const c = await rankDirectAI(fold.visible, rounds, log);
+        controlStats.set(fold.index, c.stats);
         results.push({
           system: 'C_direct_ai', top: c.picks.map((p) => p.key), labels: c.picks.map((p) => `${p.title} (${p.year ?? '?'})${p.isTv ? ' [TV]' : ''}${p.key ? '' : ' ✗unresolved'}`),
           costUsd: 0, tokens: 0,
@@ -67,8 +69,22 @@ export async function runExperiment(root: string, membersPath: string, nFolds: n
       for (const r of results) {
         const mm = metrics(r, fold, catalogue, watchlist);
         log(`    ${r.system.padEnd(12)} hits@5/10/20 ${mm.hits5}/${mm.hits10}/${mm.hits20}  relevant ${mm.relevant}  median held-out rank ${mm.medianHeldOutRank ?? '–'}`);
+        // Where every held-out title sits in this system's output. A/B/D rank the
+        // whole unwatched catalogue; E2 ranks its shortlist; C/E output a top list only.
+        const full = ['A_kb', 'B_kb_ai', 'D_popular'].includes(r.system);
+        const listLen = r.fullRanks?.size ?? r.top.length;
+        const heldOutPos = fold.heldOut.map((h) => {
+          const c = catalogue.get(h.key);
+          const pos = r.fullRanks ? r.fullRanks.get(h.key) ?? null : (() => { const i = r.top.indexOf(h.key); return i >= 0 ? i + 1 : null; })();
+          return { title: h.title, year: c?.year ?? h.year, recent: (c?.year ?? h.year ?? 0) >= 2025, fam: c?.familiarity ?? null, pos, pct: full && pos ? pos / listLen : null };
+        });
+        const recItems = r.top.slice(0, 20).map((k) => {
+          const c = k ? catalogue.get(k) : undefined;
+          return c ? { title: c.title, year: c.year, tv: c.isTv, genres: c.genreIds, votes: c.voteCount, rating: c.voteAvg, fam: c.familiarity, agreement: c.agreement, nameConf: c.nameConf } : { title: null, unresolvedOrOutsideCatalogue: k };
+        });
         all.push({
           member: m.name, fold: fold.index, cutoff: fold.cutoff, system: r.system, metrics: mm,
+          fullRanking: full, listLen, heldOutPos, recItems, controlStats: r.system === 'C_direct_ai' ? controlStats.get(fold.index) : undefined,
           top: r.labels, heldOut: fold.heldOut.map((h) => `${h.title} (${h.year})${h.isTv ? ' [TV]' : ''}`),
           hits: r.top.slice(0, 20).map((k, i) => (k && fold.heldOut.some((h) => h.key === k) ? `${i + 1}. ${r.labels[i]}` : null)).filter(Boolean),
           costUsd: r.costUsd, tokens: r.tokens,

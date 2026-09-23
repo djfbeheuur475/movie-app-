@@ -18,7 +18,7 @@ import { titleKey, type MemberHistory, type WatchEvent } from './trakt_export.ts
 export interface CatTitle {
   id: number; key: string; tmdb: number; isTv: boolean; title: string; year: number | null;
   voteAvg: number | null; voteCount: number | null; popularity: number | null; genreIds: number[];
-  poster: string | null; vec: number[] | null; familiarity: number | null; traits: string[];  // vec/familiarity/traits: Jev-derived, null/[] if unprofiled
+  poster: string | null; vec: number[] | null; familiarity: number | null; agreement: number | null; nameConf: number | null; traits: string[];  // vec/familiarity/traits: Jev-derived, null/[] if unprofiled
 }
 
 export async function loadCatalogue(fw: CompiledFramework, fwId: number): Promise<Map<string, CatTitle>> {
@@ -31,12 +31,12 @@ export async function loadCatalogue(fw: CompiledFramework, fwId: number): Promis
   // Every catalogue title is loaded (E and D need no profile); Jev profiles are
   // attached where present — only A and B use them.
   type Meta = { id: number; tmdb_id: number; is_tv: boolean; title: string; year: number | null; vote_avg: number | null; vote_count: number | null; popularity: number | null; genre_ids: number[] | null; poster_path: string | null };
-  type Prof = { title_id: number; vals: (number | null)[]; familiarity: number | null };
+  type Prof = { title_id: number; vals: (number | null)[]; familiarity: number | null; agreement: number | null; name_conf: number | null };
   const metas: Meta[] = [], profs = new Map<number, Prof>();
   for (let i = 0; i < ids.length; i += 300) {
     const chunk = ids.slice(i, i + 300);
     metas.push(...(must(await db().from('kb_titles').select('id, tmdb_id, is_tv, title, year, vote_avg, vote_count, popularity, genre_ids, poster_path').in('id', chunk), 'titles') as Meta[]));
-    for (const p of must(await db().from('kb_title_profiles').select('title_id, vals, familiarity').eq('framework_id', fwId).in('title_id', chunk), 'profiles') as Prof[]) profs.set(p.title_id, p);
+    for (const p of must(await db().from('kb_title_profiles').select('title_id, vals, familiarity, agreement, name_conf').eq('framework_id', fwId).in('title_id', chunk), 'profiles') as Prof[]) profs.set(p.title_id, p);
   }
   const rows = [...profs.values()];
 
@@ -57,7 +57,7 @@ export async function loadCatalogue(fw: CompiledFramework, fwId: number): Promis
     const z = r ? slots.map((s, j) => (((r.vals[s.idx] ?? mu[j]) - mu[j]) / sd[j]) * s.w) : null;
     const traits = z ? slots.map((s, j) => ({ s, z: z[j] })).filter((x) => x.s.scalar && x.z > 1).sort((a, b) => b.z - a.z).slice(0, 5).map((x) => x.s.key.replace(/^(genre|theme|content)_/, '').replace(/_/g, ' ')) : [];
     const key = titleKey(t.is_tv, t.tmdb_id);
-    out.set(key, { id: t.id, key, tmdb: t.tmdb_id, isTv: t.is_tv, title: t.title, year: t.year, voteAvg: t.vote_avg, voteCount: t.vote_count, popularity: t.popularity, genreIds: t.genre_ids ?? [], poster: t.poster_path, vec: z, familiarity: r?.familiarity ?? null, traits });
+    out.set(key, { id: t.id, key, tmdb: t.tmdb_id, isTv: t.is_tv, title: t.title, year: t.year, voteAvg: t.vote_avg, voteCount: t.vote_count, popularity: t.popularity, genreIds: t.genre_ids ?? [], poster: t.poster_path, vec: z, familiarity: r?.familiarity ?? null, agreement: r?.agreement ?? null, nameConf: r?.name_conf ?? null, traits });
   }
   return out;
 }
@@ -283,7 +283,11 @@ Output ONLY JSON: {"picks":[numbers, best first]}`;
 }
 
 /** C — control: the deployed ai-chat function, unmodified, called exactly as the app does. */
-export async function rankDirectAI(visible: Map<string, TitleStat>, rounds: number, log: (m: string) => void): Promise<{ picks: { title: string; year: number | null; isTv: boolean; key: string | null }[]; calls: number }> {
+export interface ControlStats { calls: number; emptyReplies: number; failedCalls: number; rawTitles: number; repeats: number; unresolved: number }
+
+export async function rankDirectAI(visible: Map<string, TitleStat>, rounds: number, log: (m: string) => void): Promise<{ picks: { title: string; year: number | null; isTv: boolean; key: string | null }[]; calls: number; stats: ControlStats }> {
+  // Instrumentation only — counts what the control returns; behaviour unchanged.
+  const stats: ControlStats = { calls: 0, emptyReplies: 0, failedCalls: 0, rawTitles: 0, repeats: 0, unresolved: 0 };
   const anon = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_ANON_KEY'), { auth: { persistSession: false } });
   const { data, error } = await anon.auth.signInWithPassword({ email: requireEnv('EXPERIMENT_USER_EMAIL'), password: requireEnv('EXPERIMENT_USER_PASSWORD') });
   if (error || !data.session) throw new Error(`experiment sign-in: ${error?.message}`);
@@ -303,9 +307,11 @@ export async function rankDirectAI(visible: Map<string, TitleStat>, rounds: numb
         favoriteGenres: [], inSessionTitles: picks.map((p) => p.title),
       }),
     });
+    stats.calls++;
     const text = await res.text();
     const done = text.split('\n').filter((l) => l.startsWith('data: ')).map((l) => { try { return JSON.parse(l.slice(6)); } catch { return null; } }).find((e) => e?.t === 'd');
-    if (!done) { log(`    C round ${round + 1}: no result (${res.status} ${text.slice(0, 120)})`); messages.pop(); continue; }
+    if (!done) { stats.failedCalls++; log(`    C round ${round + 1}: no result (${res.status} ${text.slice(0, 120)})`); messages.pop(); continue; }
+    if (!(done.m?.length || done.s?.length)) stats.emptyReplies++;
     messages.push({ role: 'assistant', content: done.r });
     if (process.env.KB_DEBUG) log(`    C round ${round + 1}: movies=${JSON.stringify(done.m)} shows=${JSON.stringify(done.s)}`);
     const add = async (titles: string[], years: (number | null)[], isTv: boolean) => {
@@ -313,9 +319,11 @@ export async function rankDirectAI(visible: Map<string, TitleStat>, rounds: numb
         const title = titles[i].replace(/\s*\(\d{4}\)\s*$/, '').trim();
         const stated = titles[i].match(/\((\d{4})\)/)?.[1];
         const year = years?.[i] ?? (stated ? Number(stated) : null);
-        if (picks.some((p) => p.title.toLowerCase() === title.toLowerCase())) continue;  // the control repeats itself across rounds
+        stats.rawTitles++;
+        if (picks.some((p) => p.title.toLowerCase() === title.toLowerCase())) { stats.repeats++; continue; }  // the control repeats itself across rounds
         // Resolve exactly as the app does (ported searchTitleWithFallback).
         const hit = await resolveLikeApp(title, year, isTv ? 'tv' : 'movie').catch(() => null);
+        if (!hit) stats.unresolved++;
         picks.push({ title, year: year || null, isTv: hit?.isTv ?? isTv, key: hit ? titleKey(hit.isTv, hit.id) : null });
       }
     };
@@ -323,7 +331,7 @@ export async function rankDirectAI(visible: Map<string, TitleStat>, rounds: numb
     await add((done.m ?? []).slice(0, 10), done.my ?? [], false);
     await add((done.s ?? []).slice(0, 10), done.sy ?? [], true);
   }
-  return { picks, calls: rounds };
+  return { picks, calls: rounds, stats };
 }
 
 // ── Metrics ─────────────────────────────────────────────────────────────────
