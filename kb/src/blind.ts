@@ -25,7 +25,7 @@ export async function buildBlind(root: string, membersPath: string, log: (m: str
     const visible = statsBefore(m.events, '9999');
     const a = rankKB(visible, catalogue, new Date().toISOString(), m.bulkKeys);
     const b = await rankKBPlusAI(visible, a.ranked, catalogue);
-    const c = await rankDirectAI(visible, 10, log);
+    const c = process.env.SKIP_C ? { picks: [] } : await rankDirectAI(visible, 10, log);
     const e = await rankDirectQwen(visible, catalogue, 424242);
     const e2 = await rankShortlistQwen(visible, catalogue);
 
@@ -52,17 +52,15 @@ export async function buildBlind(root: string, membersPath: string, log: (m: str
     for (const [s, l] of Object.entries(lists)) log(`  ${m.name} ${s}: ${l.map((i) => i.title).join(', ')}`);
 
     const rand = rng([...m.name].reduce((h, ch) => h * 31 + ch.charCodeAt(0), 7) >>> 0);
-    // Comparisons: B–C (new vs today), B–E (does Jev help Qwen?), B–E2 (Jev vs a
-    // conventional TMDB shortlist), E2–E (does a shortlist alone help?), E–C
-    // (catalogue Qwen vs today), A–E (structured vs generative), A–D (taste
-    // signal beyond popularity). Two bands each (picks 1–5, 6–10) = 14 rounds.
-    const pairs: [string, string][] = [
-      ['B_kb_ai', 'C_direct_ai'], ['B_kb_ai', 'E_direct_qwen'], ['B_kb_ai', 'E2_shortlist_qwen'], ['E2_shortlist_qwen', 'E_direct_qwen'],
-      ['E_direct_qwen', 'C_direct_ai'], ['A_kb', 'E_direct_qwen'], ['A_kb', 'D_popular'],
+    // Priority comparisons get three bands (picks 1–5, 6–10, 11–15), the rest two.
+    // Pairs involving C are built only if C returned ≥5 titles (reference only).
+    const pairs: [string, string, number][] = [
+      ['B_kb_ai', 'E2_shortlist_qwen', 3], ['B_kb_ai', 'E_direct_qwen', 3], ['E2_shortlist_qwen', 'E_direct_qwen', 2],
+      ['A_kb', 'D_popular', 2], ['A_kb', 'E_direct_qwen', 2], ['B_kb_ai', 'C_direct_ai', 1], ['E_direct_qwen', 'C_direct_ai', 1],
     ];
     const mine: { id: string; left: Item[]; right: Item[]; systems: [string, string]; band: string }[] = [];
-    for (const [x, y] of pairs) {
-      for (const [lo, hi] of [[0, 5], [5, 10]]) {
+    for (const [x, y, nBands] of pairs) {
+      for (const [lo, hi] of [[0, 5], [5, 10], [10, 15]].slice(0, nBands)) {
         const rx = lists[x].slice(lo, hi), ry = lists[y].slice(lo, hi);
         if (rx.length < 5 || ry.length < 5) continue;
         const flip = rand() < 0.5;

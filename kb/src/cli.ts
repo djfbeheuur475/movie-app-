@@ -340,6 +340,17 @@ async function experimentReport() {
   log(`Report → ${await writeExperimentReport(ROOT, (flag('results') as string) ?? 'results.json', flag('blind') as string | undefined)}`);
 }
 
+/** Append another run's rows (e.g. C run later) into a results file. */
+async function experimentMerge() {
+  const base = `${ROOT}experiment/${flag('into') as string}`, extra = `${ROOT}experiment/${flag('from') as string}`;
+  const a = JSON.parse(readFileSync(base, 'utf8')), b = JSON.parse(readFileSync(extra, 'utf8'));
+  const systems = new Set(b.rows.map((r: { system: string }) => r.system));
+  a.rows = [...a.rows.filter((r: { system: string }) => !systems.has(r.system)), ...b.rows];
+  a.controlCalls = b.controlCalls; a.controlCostUsd = b.controlCostUsd;
+  writeFileSync(base, JSON.stringify(a, null, 1));
+  log(`Merged ${[...systems].join(', ')} from ${flag('from')} into ${flag('into')}`);
+}
+
 async function compare() {
   const fa = getFramework((flag('a') as string) ?? '1.0'), fb = getFramework((flag('b') as string) ?? LATEST_FRAMEWORK);
   const anchors = ['Hot Fuzz', 'Detectorists', 'Aftersun', 'Hereditary', 'Slow Horses', 'Succession', 'Paddington 2', 'Breaking Bad', 'Arrival', 'Taskmaster', 'In Bruges', 'Barbie', 'The Office', 'Fleabag', 'Seinfeld'];
@@ -352,6 +363,7 @@ const commands: Record<string, () => Promise<void>> = {
   'experiment:run': experimentRun,
   'experiment:blind': experimentBlind,
   'experiment:report': experimentReport,
+  'experiment:merge': experimentMerge,
   'framework:sync': frameworkSync,
   'testset:load': testsetLoad,
   'testset:synthetic': syntheticLoad,

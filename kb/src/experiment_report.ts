@@ -182,14 +182,26 @@ export async function writeExperimentReport(root: string, resultsFile: string, b
   const blind = loadBlind(root, blindChoicesFile);
   const blindFor = (a: string, b: string) => blind?.pairs.get([a, b].sort().join('|'));
   const qs: [string, string, string, string][] = [
-    ['B vs C', 'B_kb_ai', 'C_direct_ai', 'Does Jev + Qwen improve on today\'s NextUp AI?'],
-    ['B vs E', 'B_kb_ai', 'E_direct_qwen', 'Does the Jev KB improve Qwen versus Qwen choosing from the whole catalogue?'],
-    ['B vs E2', 'B_kb_ai', 'E2_shortlist_qwen', 'Does Jev\'s candidate selection beat a conventional TMDB-related shortlist? (cleanest test of Jev\'s semantic value)'],
-    ['E2 vs E', 'E2_shortlist_qwen', 'E_direct_qwen', 'How much comes simply from giving Qwen a sensible shortlist?'],
-    ['A vs D', 'A_kb', 'D_popular', 'Does the Jev KB contain taste signal beyond popularity?'],
-    ['A vs E', 'A_kb', 'E_direct_qwen', 'Structured Jev matching vs direct Qwen selection'],
+    ['B vs E2', 'B_kb_ai', 'E2_shortlist_qwen', 'Does Jev add value beyond giving Qwen a sensible (TMDB) shortlist? — the primary question'],
+    ['B vs E', 'B_kb_ai', 'E_direct_qwen', 'Does structured retrieval + Jev make Qwen better than Qwen reasoning over everything?'],
+    ['E2 vs E', 'E2_shortlist_qwen', 'E_direct_qwen', 'How much comes simply from candidate generation?'],
+    ['A vs D', 'A_kb', 'D_popular', 'Is Jev\'s structured taste model finding things popularity misses?'],
+    ['A vs E', 'A_kb', 'E_direct_qwen', 'Jev-only vs Qwen-only (secondary)'],
+    ['B vs C', 'B_kb_ai', 'C_direct_ai', 'Reference only: vs today\'s NextUp AI'],
   ];
-  L.push('## 7. The key comparisons', '');
+  // Candidate selection: B re-ranks A's top 60; E2 re-ranks TMDB's top 60.
+  const inTop = (s: string, k: number, which: 'all' | 'old' | 'new' = 'all') => of(s).flatMap((r) => r.heldOutPos ?? []).filter((h) => h.pos != null && h.pos <= k && (which === 'all' || (which === 'new') === h.recent)).length;
+  if (systems.includes('A_kb') && systems.includes('E2_shortlist_qwen')) {
+    const n60 = 60 / poolSize * nHeld;
+    L.push('## 7. Candidate selection — which shortlist contains the hidden titles?', '',
+      `B's Qwen step can only choose from the Jev KB's top 60 (A's ranking); E2's can only choose from TMDB's top 60. A random 60 would contain ≈${n60.toFixed(1)} of the ${nHeld} hidden titles.`, '',
+      '| shortlist | hidden titles in top 60 | of which older | of which 2025–26 | then placed in the final top 20 by Qwen |', '|---|---|---|---|---|',
+      `| Jev KB (A's top 60 → B) | **${inTop('A_kb', 60)}** | ${inTop('A_kb', 60, 'old')} | ${inTop('A_kb', 60, 'new')} | ${sum(of('B_kb_ai').map((r) => r.metrics.hits20))} (A's own top 20 held ${sum(of('A_kb').map((r) => r.metrics.hits20))}) |`,
+      `| TMDB related (→ E2) | **${inTop('E2_shortlist_qwen', 60)}** | ${inTop('E2_shortlist_qwen', 60, 'old')} | ${inTop('E2_shortlist_qwen', 60, 'new')} | ${sum(of('E2_shortlist_qwen').map((r) => r.metrics.hits20))} |`,
+      `| _random 60 (expected)_ | ${n60.toFixed(1)} | | | |`, '',
+      `Shortlist recall comparison (Jev ${inTop('A_kb', 60)} vs TMDB ${inTop('E2_shortlist_qwen', 60)}): ${evidence(signTest(inTop('A_kb', 60), inTop('E2_shortlist_qwen', 60)), Math.abs(inTop('A_kb', 60) - inTop('E2_shortlist_qwen', 60)) >= 3)} (${pv(signTest(inTop('A_kb', 60), inTop('E2_shortlist_qwen', 60)))}).`, '');
+  }
+  L.push('## 8. The key comparisons', '');
   for (const [label, a, b, q] of qs) {
     if (!systems.includes(a) || !systems.includes(b)) continue;
     const h = hitCompare(a, b);
@@ -204,7 +216,7 @@ export async function writeExperimentReport(root: string, resultsFile: string, b
   }
 
   // ── 8. Blind test detail ────────────────────────────────────────────────
-  L.push('## 8. Blind preference test', '');
+  L.push('## 9. Blind preference test', '');
   if (blind) {
     L.push(`${blind.answered} of ${blind.key.length} rounds answered. Rows were anonymous ("Row 1/Row 2", sides randomised); each round compares two systems' picks 1–5 or 6–10.`, '',
       '| round | band | Row 1 | Row 2 | chosen | reason |', '|---|---|---|---|---|---|');
@@ -243,7 +255,7 @@ export async function writeExperimentReport(root: string, resultsFile: string, b
     runs.push(...page);
     if (page.length < 1000) break;
   }
-  L.push('## 9. Cost', '', `- Jev, all profiling to date (both framework versions, catalogue + validation): ${runs.length.toLocaleString('en-GB')} profiles, ${(sum(runs.map((r) => r.input_tokens ?? 0)) / 1e6).toFixed(1)}M tokens, **$${sum(runs.map((r) => r.cost_usd ?? 0)).toFixed(2)}** (≈$0.00064/title with the familiarity probe).`,
+  L.push('## 10. Cost', '', `- Jev, all profiling to date (both framework versions, catalogue + validation): ${runs.length.toLocaleString('en-GB')} profiles, ${(sum(runs.map((r) => r.input_tokens ?? 0)) / 1e6).toFixed(1)}M tokens, **$${sum(runs.map((r) => r.cost_usd ?? 0)).toFixed(2)}** (≈$0.00064/title with the familiarity probe).`,
     `- Qwen3-14B via OpenRouter, this run: ${systems.map((s) => `${NAMES[s].split(' · ')[0]} $${(s === 'C_direct_ai' ? res.controlCostUsd : sum(of(s).map((r) => r.costUsd))).toFixed(4)}`).join(' · ')}.`, '');
 
   const concl = `${root}experiment/conclusions.md`;
