@@ -25,7 +25,7 @@ export async function buildBlind(root: string, membersPath: string, log: (m: str
     const visible = statsBefore(m.events, '9999');
     const a = rankKB(visible, catalogue, new Date().toISOString(), m.bulkKeys);
     const b = await rankKBPlusAI(visible, a.ranked, catalogue);
-    const c = await rankDirectAI(visible, 4, log);
+    const c = await rankDirectAI(visible, 10, log);
     const e = await rankDirectQwen(visible, catalogue, 424242);
     const e2 = await rankShortlistQwen(visible, catalogue);
 
