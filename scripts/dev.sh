@@ -48,6 +48,7 @@ get_device() {
     | awk 'NR>1 && $2=="device" {print $1; exit}'
 }
 
+EMU_DNS="8.8.8.8,1.1.1.1"
 DEVICE=$(get_device)
 
 if [ -z "$DEVICE" ]; then
@@ -55,7 +56,9 @@ if [ -z "$DEVICE" ]; then
   [ -z "$AVD" ] && fatal "No Android Virtual Devices found.\n  Create one: Android Studio → Device Manager → Create Device."
 
   info "Starting emulator: $AVD"
-  "$EMU" -avd "$AVD" -no-snapshot-load -no-audio > /tmp/nextup-emu.log 2>&1 &
+  # Pin public DNS: by default the emulator snapshots the Mac's resolver at
+  # boot, so after a network/VPN change DNS silently dies while IP still works.
+  "$EMU" -avd "$AVD" -no-snapshot-load -no-audio -dns-server "$EMU_DNS" > /tmp/nextup-emu.log 2>&1 &
 
   info "Waiting for emulator to appear on adb..."
   ELAPSED=0
@@ -92,6 +95,13 @@ if [ "$INSTALLED" = "0" ]; then
 fi
 ok "App installed"
 
+# A release build (e.g. a Play Store test APK) runs its own embedded JS and
+# never talks to Metro — code changes silently won't show up. Warn loudly.
+if ! "$ADB" -s "$DEVICE" shell dumpsys package "$PACKAGE" 2>/dev/null | grep -q "DEBUGGABLE"; then
+  warn "Installed app is a RELEASE build — it ignores Metro, so your code changes won't appear."
+  warn "  Fix: $ADB -s $DEVICE uninstall $PACKAGE && npm run dev   (wipes app data/logins on the emulator)"
+fi
+
 # ── 4. Network health + adb reverse ──────────────────────────────────────────
 # Check that the emulator can reach the host (10.0.2.2). If not, the QEMU
 # virtual network stack hasn't initialized — reboot the emulator to fix it.
@@ -111,9 +121,29 @@ if [ "$NETWORK_OK" != "ok" ]; then
 fi
 ok "Emulator network  (10.0.2.2 reachable)"
 
-# adb reverse: both Metro (8081) and local backend (3001) must be forwarded.
+# DNS can die independently of 10.0.2.2 (emulator started before a Mac
+# network/VPN change). A reboot doesn't fix it — restart with pinned DNS.
+DNS_OK=$("$ADB" -s "$DEVICE" shell "ping -c 1 -W 2 api.trakt.tv > /dev/null 2>&1 && echo ok || echo fail" 2>/dev/null | tr -d '\r\n')
+if [ "$DNS_OK" != "ok" ]; then
+  AVD=$("$ADB" -s "$DEVICE" emu avd name 2>/dev/null | head -1 | tr -d '\r\n')
+  [ -z "$AVD" ] && AVD=$("$EMU" -list-avds 2>/dev/null | grep -v '^$' | head -1)
+  warn "Emulator DNS broken — restarting $AVD with public DNS..."
+  "$ADB" -s "$DEVICE" emu kill > /dev/null 2>&1 || true
+  while "$ADB" devices | grep -q "^$DEVICE"; do sleep 1; done
+  "$EMU" -avd "$AVD" -no-snapshot-load -no-audio -dns-server "$EMU_DNS" > /tmp/nextup-emu.log 2>&1 &
+  "$ADB" wait-for-device 2>/dev/null
+  DEVICE=$(get_device)
+  ELAPSED=0
+  until [ "$("$ADB" -s "$DEVICE" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')" = "1" ]; do
+    sleep 3; ELAPSED=$((ELAPSED + 3))
+    [ $ELAPSED -ge 180 ] && fatal "Emulator restart timed out."
+  done
+  sleep 3
+fi
+ok "Emulator DNS  (api.trakt.tv resolves)"
+
+# adb reverse: Metro (8081) must be forwarded.
 "$ADB" -s "$DEVICE" reverse tcp:8081 tcp:8081 > /dev/null 2>&1 && ok "adb reverse 8081 (Metro)" || warn "adb reverse 8081 failed"
-"$ADB" -s "$DEVICE" reverse tcp:3001 tcp:3001 > /dev/null 2>&1 && ok "adb reverse 3001 (backend)" || warn "adb reverse 3001 failed"
 
 # ── 5. Metro + launch ─────────────────────────────────────────────────────────
 METRO_PID=$(lsof -iTCP:8081 -sTCP:LISTEN -t 2>/dev/null | head -1 || true)

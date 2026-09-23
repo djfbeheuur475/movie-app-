@@ -22,9 +22,11 @@ interface Props {
   showRating?: boolean;
   showType?: boolean;
   watched?: boolean;
+  /** Series progress — replaces the watched tick, which misreads as "finished" on a show you're midway through. */
+  progress?: { fraction: number; label: string };
 }
 
-function PosterCard({ item, width = 120, showTitle = false, showRating = false, showType = false, watched = false }: Props) {
+function PosterCard({ item, width = 120, showTitle = false, showRating = false, showType = false, watched = false, progress }: Props) {
   const router = useRouter();
   const height = width * 1.5;
   const posterUrl = getPosterUrl(item.posterPath, width > 150 ? 'large' : 'medium');
@@ -73,7 +75,17 @@ function PosterCard({ item, width = 120, showTitle = false, showRating = false, 
               <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
             </View>
           )}
-          {watched && <WatchedBadge />}
+          {watched && !progress && <WatchedBadge />}
+          {progress && (
+            <>
+              <View style={styles.progressLabel}>
+                <Text style={styles.progressLabelText} numberOfLines={1}>{progress.label}</Text>
+              </View>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${Math.round(Math.min(1, progress.fraction) * 100)}%` }]} />
+              </View>
+            </>
+          )}
           {showType && (
             <View style={[styles.typeBadge, item.mediaType === 'tv' ? styles.typeBadgeTV : styles.typeBadgeMovie]}>
               <Text style={[styles.typeBadgeText, item.mediaType === 'tv' ? styles.typeBadgeTextTV : styles.typeBadgeTextMovie]}>
@@ -97,6 +109,35 @@ export default React.memo(PosterCard);
 const styles = StyleSheet.create({
   container: {
     marginRight: 10,
+  },
+  progressLabel: {
+    position: 'absolute',
+    left: 6,
+    right: 6,
+    bottom: 10,
+    alignItems: 'flex-start',
+  },
+  progressLabelText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: Colors.primary,
   },
   poster: {
     overflow: 'hidden',

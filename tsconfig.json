@@ -16,7 +16,10 @@
     ".expo/types/**/*.ts"
   ],
   "exclude": [
-    "backend",
-    "node_modules"
+    "node_modules",
+    "supabase/functions",
+    "android",
+    "dist",
+    "tests"
   ]
 }

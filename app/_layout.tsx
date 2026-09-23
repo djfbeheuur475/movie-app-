@@ -3,7 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { StyleSheet, View, AppState, type AppStateStatus } from 'react-native';
@@ -17,17 +17,9 @@ import { useFollowStore } from '../store/followStore';
 import { Colors } from '../constants/theme';
 import { useEpisodeNotifications } from '../hooks/useEpisodeNotifications';
 
-SplashScreen.preventAutoHideAsync();
+import { queryClient } from '../lib/queryClient';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5,
-      gcTime: 1000 * 60 * 30,
-      retry: 2,
-    },
-  },
-});
+SplashScreen.preventAutoHideAsync();
 
 function NavigationGuard() {
   const router = useRouter();
@@ -107,6 +99,9 @@ export default function RootLayout() {
     async function prepare() {
       try {
         await Promise.all([loadUser(), loadWatchlist(), loadManualWatched(), loadFromStorage(), loadKeys(), loadFollowed()]);
+        // Trakt access tokens only live 24h — renew before any screen fires
+        // a request with a dead one. Not awaited: splash shouldn't wait on it.
+        useApiKeysStore.getState().ensureFreshTraktToken().catch(() => {});
       } catch (e) {
         console.warn('Startup load error:', e);
       } finally {
@@ -128,6 +123,7 @@ export default function RootLayout() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (status: AppStateStatus) => {
       focusManager.setFocused(status === 'active');
+      if (status === 'active') useApiKeysStore.getState().ensureFreshTraktToken().catch(() => {});
     });
     return () => subscription.remove();
   }, []);
@@ -148,10 +144,6 @@ export default function RootLayout() {
           <Stack.Screen
             name="title/[id]"
             options={{ presentation: 'card', animation: 'slide_from_right' }}
-          />
-          <Stack.Screen
-            name="ai-assistant"
-            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
           />
           <Stack.Screen
             name="person/[id]"

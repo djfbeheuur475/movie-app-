@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { useAuthStore } from '../store/authStore';
-import { requestDeviceCode, pollDeviceToken, TRAKT_DEFAULT_CLIENT_ID } from '../lib/trakt';
+import { requestDeviceCode, pollDeviceToken, traktTokenExpiry, TRAKT_DEFAULT_CLIENT_ID } from '../lib/trakt';
 
 type Step = 'intro' | 'trakt';
 
@@ -54,6 +54,7 @@ export default function WelcomeScreen() {
           await saveKeys({
             traktAccessToken: token.access_token,
             traktRefreshToken: token.refresh_token,
+            traktTokenExpiresAt: traktTokenExpiry(token),
           });
           setTraktCode(null);
           setTraktConnecting(false);

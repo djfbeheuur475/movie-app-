@@ -16,6 +16,7 @@ import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constan
 import { tmdbApi, getPosterUrl } from '../../lib/tmdb';
 import { traktApi, TraktUnauthorizedError, effectiveTraktClientId } from '../../lib/trakt';
 import { useWatchlistStore } from '../../store/watchlistStore';
+import { useTraktHistory } from '../../hooks/useTraktHistory';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useFollowStore } from '../../store/followStore';
 
@@ -206,13 +207,7 @@ export default function CalendarScreen() {
 
   // ── Trakt complete watch history (for exclusions + genre affinity) ─────────
 
-  const { data: traktWatchedShows, error: traktWatchedError } = useQuery({
-    queryKey: ['trakt-cal-shows', traktClientIdEff, traktAccessToken],
-    queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
-    enabled: hasTrakt,
-    staleTime: 1000 * 60 * 30,
-    retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
-  });
+  const { shows: traktWatchedShows } = useTraktHistory();
 
   // ── Trakt personal show calendar — full history, next 60 days ────────────
   // Uses /calendars/my/shows which returns every episode from every show the
@@ -239,16 +234,9 @@ export default function CalendarScreen() {
   });
 
   useEffect(() => {
-    const err = traktWatchedError ?? traktCalError;
-    if (err instanceof TraktUnauthorizedError) {
-      handleTraktUnauthorized().then((refreshed) => {
-        if (refreshed) {
-          queryClient.invalidateQueries({ queryKey: ['trakt-cal-shows'] });
-          queryClient.invalidateQueries({ queryKey: ['my-trakt-cal'] });
-        }
-      });
-    }
-  }, [traktWatchedError, traktCalError]);
+    // Refreshed token changes the query key, so the calendar refetches itself.
+    if (traktCalError instanceof TraktUnauthorizedError) handleTraktUnauthorized();
+  }, [traktCalError]);
 
   // Unique TMDB show IDs in the calendar — for fetching posters
   const traktCalShowTmdbIds = useMemo(() => {

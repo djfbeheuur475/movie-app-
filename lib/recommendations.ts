@@ -24,10 +24,8 @@ export interface RecsContext {
 // ─── Scored watch pool ────────────────────────────────────────────────────────
 // Merges movies + shows into one recency×plays-scored, deduplicated pool.
 // minPlaysForShows filters out shows only sampled for a single episode — useful
-// for seeds that should reflect genuine engagement, not a quick bounce. Trakt's
-// /sync/watched/shows doesn't return a per-episode seasons breakdown in
-// practice, so the top-level `plays` count (total episode plays across the
-// show) is the only reliable engagement signal available.
+// for seeds that should reflect genuine engagement, not a quick bounce. Uses
+// the top-level `plays` count (total episode plays across the show).
 
 export function buildScoredWatchPool(
   traktMovies: TraktWatchedMovie[] | undefined,

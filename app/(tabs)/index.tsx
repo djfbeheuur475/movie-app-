@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   ScrollView,
   View,
@@ -10,11 +10,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
-import { traktApi, TraktUnauthorizedError, effectiveTraktClientId } from '../../lib/trakt';
 import { filterAndRankContent, passesQualityFilter } from '../../lib/quality';
 import {
   getTemporalContext, loadRecentRowTitles, saveShownRowTitles,
@@ -35,7 +34,8 @@ import { useAIHomeFeed } from '../../hooks/useAIHomeFeed';
 import { useBecauseYouWatched } from '../../hooks/useBecauseYouWatched';
 import { useIfYouLiked } from '../../hooks/useIfYouLiked';
 import { useHiddenGems } from '../../hooks/useHiddenGems';
-import { useApiKeysStore } from '../../store/apiKeysStore';
+import { computeSeriesProgress, type SeriesProgress, type TmdbShowForProgress } from '../../lib/seriesProgress';
+import { useTraktHistory } from '../../hooks/useTraktHistory';
 import { useWatchlistStore } from '../../store/watchlistStore';
 import { useAuthStore } from '../../store/authStore';
 import { usePreferencesStore } from '../../store/preferencesStore';
@@ -80,13 +80,10 @@ function CuratedFallbackRow({ list }: { list: CuratedFallbackList }) {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { traktClientId, traktAccessToken, handleTraktUnauthorized } = useApiKeysStore();
   const { items: watchlistItems } = useWatchlistStore();
   const { user } = useAuthStore();
   const { favoriteGenres } = usePreferencesStore();
   const userId = user?.id ?? null;
-  const hasTrakt = !!traktAccessToken;
-  const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
   // Stable for the lifetime of this component mount — changes only on app restart,
   // which gives each session a fresh template selection for thematic rows.
@@ -102,35 +99,13 @@ export default function HomeScreen() {
 
   // ─── Trakt watch history ───────────────────────────────────────────────────
 
-  const queryClient = useQueryClient();
-
-  const { data: traktMovies, isFetched: traktMoviesFetched, error: traktMoviesError } = useQuery({
-    queryKey: ['trakt-watched-movies', traktClientIdEff, traktAccessToken],
-    queryFn: () => traktApi.getWatchedMovies(traktClientIdEff, traktAccessToken),
-    enabled: hasTrakt,
-    staleTime: 1000 * 60 * 30,
-    retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
-  });
-
-  const { data: traktShows, isFetched: traktShowsFetched } = useQuery({
-    queryKey: ['trakt-watched-shows', traktClientIdEff, traktAccessToken],
-    queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
-    enabled: hasTrakt,
-    staleTime: 1000 * 60 * 30,
-    retry: (count, error) => !(error instanceof TraktUnauthorizedError) && count < 2,
-  });
-
-  // When Trakt returns 401, try to refresh the token silently then re-fetch
-  useEffect(() => {
-    if (traktMoviesError instanceof TraktUnauthorizedError) {
-      handleTraktUnauthorized().then((refreshed) => {
-        if (refreshed) {
-          queryClient.invalidateQueries({ queryKey: ['trakt-watched-movies'] });
-          queryClient.invalidateQueries({ queryKey: ['trakt-watched-shows'] });
-        }
-      });
-    }
-  }, [traktMoviesError]);
+  // Live from Trakt when connected, last-known cached copy otherwise.
+  const {
+    movies: traktMovies,
+    shows: traktShows,
+    hasHistory: hasTraktHistory,
+    isReady: traktReady,
+  } = useTraktHistory();
 
   // tmdbId → play count from Trakt (used for affinity weighting)
   const playsMap = useMemo(() => {
@@ -284,6 +259,22 @@ export default function HomeScreen() {
       .map(normalizeTVShow);
   }, [newEpsShowDetails, lastEpisodes, traktShows]);
 
+  // Series progress for Continue Watching (replaces the misleading watched tick).
+  const continueProgress = useMemo(() => {
+    const map = new Map<number, SeriesProgress>();
+    const byTmdb = new Map((traktShows ?? []).map((s) => [s.show.ids.tmdb, s]));
+    for (const show of (newEpsShowDetails ?? []) as TmdbShowForProgress[]) {
+      const traktShow = byTmdb.get(show.id);
+      const progress = traktShow && computeSeriesProgress(traktShow, show);
+      if (progress) map.set(show.id, progress);
+    }
+    return map;
+  }, [traktShows, newEpsShowDetails]);
+  const continueProgressFor = useCallback(
+    (item: ContentItem) => continueProgress.get(item.id),
+    [continueProgress],
+  );
+
   // Genre affinity — play-weighted from Trakt history; falls back to stated preferences
   const genreAffinity = useMemo((): GenreAffinity => {
     const fromHistory = computeGenreAffinity(historyItems ?? [], playsMap);
@@ -349,8 +340,6 @@ export default function HomeScreen() {
   const traktMovieFingerprint = (traktMovies ?? []).slice(0, 10).map((m) => m.movie.ids.tmdb).join(',');
   const traktShowFingerprint = (traktShows ?? []).slice(0, 10).map((s) => s.show.ids.tmdb).join(',');
 
-  // Wait until Trakt has settled before firing so DNA gets real history
-  const traktReady = !hasTrakt || (traktMoviesFetched && traktShowsFetched);
 
   // ─── AI Home Feed (orchestrator) ──────────────────────────────────────────
   const { data: aiFeed, isLoading: aiFeedLoading } = useAIHomeFeed({
@@ -716,6 +705,7 @@ export default function HomeScreen() {
               items={continueWatchingItems}
               isLoading={false}
               showRating
+              progressFor={continueProgressFor}
             />
           )}
           {/* Personal rows — most relevant to the user's current taste */}
@@ -816,7 +806,7 @@ export default function HomeScreen() {
               showRating
             />
           ))}
-          {hasTrakt && (
+          {hasTraktHistory && (
             <RecentlyWatchedRow
               items={historyItems ?? []}
               isLoading={historyLoading}

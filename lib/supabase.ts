@@ -71,6 +71,8 @@ export type Database = {
           gemini_key: string | null;
           trakt_client_id: string | null;
           trakt_access_token: string | null;
+          trakt_refresh_token: string | null;
+          trakt_token_expires_at: string | null;
           trakt_username: string | null;
           setup_done: boolean;
           stremio_token: string | null;
@@ -81,6 +83,8 @@ export type Database = {
           gemini_key?: string | null;
           trakt_client_id?: string | null;
           trakt_access_token?: string | null;
+          trakt_refresh_token?: string | null;
+          trakt_token_expires_at?: string | null;
           trakt_username?: string | null;
           setup_done?: boolean;
           stremio_token?: string | null;
@@ -100,6 +104,24 @@ export type Database = {
         };
         Insert: Omit<Database['public']['Tables']['watchlist']['Row'], 'id' | 'added_at'>;
         Update: Partial<Database['public']['Tables']['watchlist']['Insert']>;
+        Relationships: [];
+      };
+      trakt_history_cache: {
+        Row: {
+          user_id: string;
+          movies: unknown;
+          shows: unknown;
+          signature: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          movies?: unknown;
+          shows?: unknown;
+          signature?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['trakt_history_cache']['Insert']>;
         Relationships: [];
       };
       manual_watched: {

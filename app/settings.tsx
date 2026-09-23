@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   View,
   Text,
@@ -17,7 +18,8 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { useAuthStore } from '../store/authStore';
-import { requestDeviceCode, pollDeviceToken, effectiveTraktClientId } from '../lib/trakt';
+import { clearTraktHistory } from '../lib/traktHistoryCache';
+import { requestDeviceCode, pollDeviceToken, traktTokenExpiry, effectiveTraktClientId } from '../lib/trakt';
 import { supabase } from '../lib/supabase';
 
 // Not a security secret — just an opaque, hard-to-guess id for a personal
@@ -123,10 +125,11 @@ function CardHeader({
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, signOut } = useAuthStore();
+  const queryClient = useQueryClient();
   const userId = user?.id ?? null;
   const {
     traktClientId, traktAccessToken,
-    saveKeys, syncToCloud,
+    saveKeys, syncToCloud, disconnectTrakt,
   } = useApiKeysStore();
 
   const [fields, setFields] = useState({
@@ -193,6 +196,7 @@ export default function SettingsScreen() {
             traktClientId: clientId,
             traktAccessToken: token.access_token,
             traktRefreshToken: token.refresh_token,
+            traktTokenExpiresAt: traktTokenExpiry(token),
           });
           // Persist to cloud immediately so token survives sign-out/reinstall
           if (userId) await syncToCloud(userId);
@@ -212,14 +216,24 @@ export default function SettingsScreen() {
   }, [fields.traktClientId, saveKeys]);
 
   const handleDisconnectTrakt = () => {
-    Alert.alert('Disconnect Trakt?', 'This will remove your Trakt access token.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Disconnect',
-        style: 'destructive',
-        onPress: () => saveKeys({ traktAccessToken: '' }),
-      },
-    ]);
+    Alert.alert(
+      'Disconnect Trakt?',
+      'NextUp can keep your imported watch history so recommendations stay personalised, or delete it too.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Disconnect, keep history', onPress: () => disconnectTrakt() },
+        {
+          text: 'Disconnect & delete history',
+          style: 'destructive',
+          onPress: async () => {
+            await disconnectTrakt();
+            await clearTraktHistory(userId ?? 'guest', userId);
+            queryClient.removeQueries({ queryKey: ['trakt-history-cache'] });
+            queryClient.removeQueries({ queryKey: ['trakt-history-live'] });
+          },
+        },
+      ],
+    );
   };
 
   const handleAddToStremio = useCallback(async () => {
@@ -266,9 +280,8 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.pageDesc}>
-            All keys are stored securely on-device.{' '}
-            <Text style={styles.highlight}>Never sent to anyone</Text>
-            {' '}except the respective service.
+            Your Trakt connection is stored securely on this device and backed up to your NextUp account, so it survives reinstalls.{' '}
+            <Text style={styles.highlight}>Only ever used to talk to Trakt.</Text>
           </Text>
 
           {/* ── Account ── */}

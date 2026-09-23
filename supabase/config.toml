@@ -431,3 +431,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/stremio-addon/deno.json"
 entrypoint = "./functions/stremio-addon/index.ts"
+
+[functions.trakt-token]
+enabled = true
+verify_jwt = false
+import_map = "./functions/trakt-token/deno.json"
+entrypoint = "./functions/trakt-token/index.ts"

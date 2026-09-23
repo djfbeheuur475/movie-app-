@@ -35,8 +35,7 @@ async function get<T>(path: string, clientId: string, accessToken?: string): Pro
 // silently truncates to a single page if you don't ask for more — there's no
 // error, no warning, just a smaller-than-real watched history. Loop pages
 // until X-Pagination-Page-Count says there's nothing left.
-async function getAllPages<T>(path: string, clientId: string, accessToken: string): Promise<T[]> {
-  const limit = 250;
+async function getAllPages<T>(path: string, clientId: string, accessToken: string, limit = 250): Promise<T[]> {
   const results: T[] = [];
   let page = 1;
   let pageCount = 1;
@@ -58,28 +57,58 @@ async function getAllPages<T>(path: string, clientId: string, accessToken: strin
   return results;
 }
 
+export type TraktRefreshResult =
+  | { kind: 'ok'; token: DeviceTokenResponse }
+  // The refresh token itself is dead (revoked/rotated/expired) — reconnect.
+  | { kind: 'invalid' }
+  // Network blip, Trakt 5xx, rate limit… keep the tokens and try again later.
+  | { kind: 'error' };
+
+/**
+ * Trakt requires the client secret for the refresh_token grant (and access
+ * tokens only live 24h since 2025-03), so for the app's own client ID the
+ * refresh goes through the `trakt-token` edge function, which holds the
+ * secret. A user-supplied client ID has no secret we know, so that path can
+ * only try a secret-less refresh direct to Trakt.
+ */
 export async function refreshTraktToken(
   refreshToken: string,
   clientId: string,
-  clientSecret = '',
-): Promise<DeviceTokenResponse | null> {
+): Promise<TraktRefreshResult> {
   try {
-    const res = await fetch(`${BASE}/oauth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: 'urn:ietf:wg:oauth:2.0:oob',
-        grant_type: 'refresh_token',
-      }),
-    });
-    if (res.status === 200) return res.json();
-    return null;
+    const viaEdge = clientId === TRAKT_DEFAULT_CLIENT_ID;
+    const res = viaEdge
+      ? await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/trakt-token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+            Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''}`,
+          },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        })
+      : await fetch(`${BASE}/oauth/token`, {
+          method: 'POST',
+          headers: headers(clientId),
+          body: JSON.stringify({
+            refresh_token: refreshToken,
+            client_id: clientId,
+            client_secret: '',
+            redirect_uri: 'urn:ietf:wg:oauth:2.0:oob',
+            grant_type: 'refresh_token',
+          }),
+        });
+    if (res.status === 200) return { kind: 'ok', token: await res.json() };
+    if (res.status === 400 || res.status === 401) return { kind: 'invalid' };
+    return { kind: 'error' };
   } catch {
-    return null;
+    return { kind: 'error' };
   }
+}
+
+/** Absolute expiry (ms epoch) of a freshly issued Trakt token. */
+export function traktTokenExpiry(token: DeviceTokenResponse): number {
+  return (token.created_at + token.expires_in) * 1000;
 }
 
 // ─── Device code OAuth ────────────────────────────────────────────────────────
@@ -104,7 +133,7 @@ export interface DeviceTokenResponse {
 export async function requestDeviceCode(clientId: string): Promise<DeviceCodeResponse> {
   const res = await fetch(`${BASE}/oauth/device/code`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(clientId),
     body: JSON.stringify({ client_id: clientId }),
   });
   if (!res.ok) throw new Error('Failed to get device code');
@@ -118,7 +147,7 @@ export async function pollDeviceToken(
 ): Promise<DeviceTokenResponse | null> {
   const res = await fetch(`${BASE}/oauth/device/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(clientId),
     body: JSON.stringify({ code: deviceCode, client_id: clientId, client_secret: clientSecret }),
   });
   if (res.status === 200) return res.json();
@@ -175,15 +204,29 @@ export async function getListItemsPage(
   return { items, pageCount };
 }
 
+export interface TraktWatchlistItem {
+  listed_at: string;
+  type: 'movie' | 'show' | 'season' | 'episode';
+  movie?: { title: string; year: number; ids: { tmdb: number | null; trakt: number } };
+  show?: { title: string; year: number; ids: { tmdb: number | null; trakt: number } };
+}
+
 export const traktApi = {
+  getWatchlist: (clientId: string, accessToken: string): Promise<TraktWatchlistItem[]> =>
+    getAllPages('/sync/watchlist', clientId, accessToken),
+
   // Watch history (requires access token for private accounts). Paginated —
   // see getAllPages; a large history silently came back truncated to the
   // first 100-250 items without this.
   getWatchedMovies: (clientId: string, accessToken: string): Promise<TraktWatchedMovie[]> =>
     getAllPages('/sync/watched/movies', clientId, accessToken),
 
+  // Since 2026-06-30 Trakt omits per-season/episode data from this endpoint
+  // unless extended=progress is sent (and caps that at 100 per page) — without
+  // it every show came back with no episodes, so episode ticks, "new episodes"
+  // and watched-in-season counts were all silently empty.
   getWatchedShows: (clientId: string, accessToken: string): Promise<TraktWatchedShow[]> =>
-    getAllPages('/sync/watched/shows', clientId, accessToken),
+    getAllPages('/sync/watched/shows?extended=progress', clientId, accessToken, 100),
 
   // Calendar — personal (requires access token)
   getMyShowCalendar: (

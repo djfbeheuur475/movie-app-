@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
+import { useTraktWatchlistImport } from '../../hooks/useTraktWatchlistImport';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -28,6 +29,7 @@ function TabIcon({
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  useTraktWatchlistImport();
 
   return (
     <Tabs
@@ -51,6 +53,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
+          title: 'Home',
+          tabBarAccessibilityLabel: 'Home',
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="home-outline" iconFocused="home" focused={focused} />
           ),
@@ -59,6 +63,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="discover"
         options={{
+          title: 'Discover',
+          tabBarAccessibilityLabel: 'Discover',
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="compass-outline" iconFocused="compass" focused={focused} />
           ),
@@ -67,6 +73,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="watchlist"
         options={{
+          title: 'Watchlist',
+          tabBarAccessibilityLabel: 'Watchlist',
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="bookmark-outline" iconFocused="bookmark" focused={focused} />
           ),
@@ -75,6 +83,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
+          title: 'Calendar',
+          tabBarAccessibilityLabel: 'Calendar',
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="calendar-outline" iconFocused="calendar" focused={focused} />
           ),
@@ -83,6 +93,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="ai"
         options={{
+          title: 'AI Guide',
+          tabBarAccessibilityLabel: 'AI Guide',
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="sparkles-outline" iconFocused="sparkles" focused={focused} />
           ),

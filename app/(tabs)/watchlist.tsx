@@ -70,20 +70,14 @@ export default function WatchlistScreen() {
   const userId = useAuthStore((s) => s.user?.id);
   const { traktAccessToken } = useApiKeysStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
-  const [showMovies, setShowMovies] = useState(true);
-  const [showShows, setShowShows] = useState(true);
+  // Single-select like Discover's toggle — the old two independent toggles
+  // both rendered "active" by default, which read as a broken segmented control.
+  const [mediaType, setMediaType] = useState<'all' | 'movie' | 'tv'>('all');
+  const showMovies = mediaType !== 'tv';
+  const showShows = mediaType !== 'movie';
   const [genreFilter, setGenreFilter] = useState<string>('');
   const [genreOpen, setGenreOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
-
-  const toggleMovies = () => {
-    if (showMovies && !showShows) return; // keep at least one active
-    setShowMovies((v) => !v);
-  };
-  const toggleShows = () => {
-    if (showShows && !showMovies) return;
-    setShowShows((v) => !v);
-  };
 
   const hasTrakt = !!traktAccessToken;
 
@@ -219,36 +213,30 @@ export default function WatchlistScreen() {
         </View>
       </View>
 
-      {/* Movies / TV Shows pill toggle */}
-      <View style={styles.typeToggleWrap}>
-        <TouchableOpacity
-          style={[styles.typeToggleBtn, showMovies && styles.typeToggleBtnActive]}
-          onPress={toggleMovies}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="film-outline"
-            size={16}
-            color={showMovies ? Colors.background : Colors.textSecondary}
-          />
-          <Text style={[styles.typeToggleText, showMovies && styles.typeToggleTextActive]}>
-            Movies
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.typeToggleBtn, showShows && styles.typeToggleBtnActive]}
-          onPress={toggleShows}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="tv-outline"
-            size={16}
-            color={showShows ? Colors.background : Colors.textSecondary}
-          />
-          <Text style={[styles.typeToggleText, showShows && styles.typeToggleTextActive]}>
-            TV Shows
-          </Text>
-        </TouchableOpacity>
+      {/* All / Movies / TV Shows segmented toggle */}
+      <View style={styles.typeToggleWrap} accessibilityRole="tablist">
+        {([
+          { key: 'all', label: 'All', icon: 'albums-outline' },
+          { key: 'movie', label: 'Movies', icon: 'film-outline' },
+          { key: 'tv', label: 'TV Shows', icon: 'tv-outline' },
+        ] as const).map(({ key, label, icon }) => {
+          const active = mediaType === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[styles.typeToggleBtn, active && styles.typeToggleBtnActive]}
+              onPress={() => setMediaType(key)}
+              activeOpacity={0.8}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <Ionicons name={icon} size={16} color={active ? Colors.background : Colors.textSecondary} />
+              <Text style={[styles.typeToggleText, active && styles.typeToggleTextActive]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* Status · Genre dropdowns */}

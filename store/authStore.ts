@@ -5,6 +5,7 @@ import { useApiKeysStore } from './apiKeysStore';
 import { useWatchlistStore } from './watchlistStore';
 import { useManualWatchedStore } from './manualWatchedStore';
 import { usePreferencesStore } from './preferencesStore';
+import { claimDeviceFor, wipeLocalUserData } from '../lib/deviceUserData';
 
 const GUEST_FLAG_KEY = 'nextup_is_guest';
 
@@ -38,6 +39,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         const u = session.user;
+        await claimDeviceFor(u.id);
         set({
           user: {
             id: u.id,
@@ -70,6 +72,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (!session?.user) return;
 
     const u = session.user;
+    // A different account on this device: drop the previous person's local
+    // data (Trakt tokens, lists, caches) before restoring this one's.
+    await claimDeviceFor(u.id);
     const localUser: LocalUser = {
       id: u.id,
       displayName: u.user_metadata?.full_name ?? u.email ?? 'User',
@@ -123,6 +128,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
+    // Everything is in the cloud and restores on next sign-in; leaving it here
+    // would hand this account's Trakt connection to whoever signs in next.
+    await wipeLocalUserData();
     await AsyncStorage.removeItem(GUEST_FLAG_KEY);
     set({ user: null, isAuthenticated: false, isGuest: false });
   },

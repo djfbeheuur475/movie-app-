@@ -10,9 +10,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import ChatBubble from '../../components/ai/ChatBubble';
 import { askAI, summariseConversation, DEFAULT_AI_MODEL } from '../../lib/ai-edge';
-import { traktApi, effectiveTraktClientId } from '../../lib/trakt';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
 import { useQuery } from '@tanstack/react-query';
+import { useTraktHistory } from '../../hooks/useTraktHistory';
 import { useApiKeysStore } from '../../store/apiKeysStore';
 import { useAuthStore } from '../../store/authStore';
 import { usePreferencesStore } from '../../store/preferencesStore';
@@ -215,29 +215,15 @@ const MAX_RAW_TURNS = 8;
 
 export default function AITabScreen() {
   const router = useRouter();
-  const { aiModel, traktClientId, traktAccessToken } = useApiKeysStore();
+  const { aiModel } = useApiKeysStore();
   const { user } = useAuthStore();
   const userId = user?.id ?? null;
   const { favoriteGenres } = usePreferencesStore();
 
   const temporal = getTemporalContext();
-  const hasTrakt = !!traktAccessToken;
-  const traktClientIdEff = effectiveTraktClientId(traktClientId);
 
-  // ─── Trakt via React Query (shared cache with home tab) ───────────────────
-  const { data: traktMovies } = useQuery({
-    queryKey: ['trakt-watched-movies', traktClientIdEff, traktAccessToken],
-    queryFn: () => traktApi.getWatchedMovies(traktClientIdEff, traktAccessToken),
-    enabled: hasTrakt,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  const { data: traktShows } = useQuery({
-    queryKey: ['trakt-watched-shows', traktClientIdEff, traktAccessToken],
-    queryFn: () => traktApi.getWatchedShows(traktClientIdEff, traktAccessToken),
-    enabled: hasTrakt,
-    staleTime: 1000 * 60 * 30,
-  });
+  // Shared with Home — live when connected, cached history otherwise.
+  const { movies: traktMovies, shows: traktShows, hasHistory: hasTrakt } = useTraktHistory();
 
   const defaultChips = buildDefaultChips();
   const [moodChips, setMoodChips] = useState<Chip[]>(defaultChips.mood);

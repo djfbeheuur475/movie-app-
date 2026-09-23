@@ -47,7 +47,6 @@ google-services.json
 google-play-key.json
 
 # Backend build
-backend/dist/
 
 # Local APK builds
 *.apk

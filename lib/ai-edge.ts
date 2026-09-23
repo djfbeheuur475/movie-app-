@@ -2,9 +2,24 @@ import { supabase } from './supabase';
 import type { TraktWatchedMovie, TraktWatchedShow } from './trakt';
 import type { TasteDNA } from './tasteDna';
 
-// Re-export types and constants so callers need only import from this file
-export type { AIReply } from './openrouter';
-export { DEFAULT_AI_MODEL } from './openrouter';
+// All AI calls go through the ai-chat edge function — the OpenRouter key lives
+// only in Supabase secrets. Never import a module that reads a provider key
+// from EXPO_PUBLIC_* env: anything EXPO_PUBLIC_ is compiled into the bundle.
+
+export interface AIReply {
+  reply: string;
+  movies: string[];
+  shows: string[];
+  movieYears: (number | null)[];
+  showYears: (number | null)[];
+  modelUsed: string;
+  tmdbIds: number[];
+  movieIds: number[];
+  tvIds: number[];
+}
+
+// Default used when the user hasn't configured a model in Settings.
+export const DEFAULT_AI_MODEL = 'qwen/qwen3-14b';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -64,7 +79,7 @@ export async function askAI(
   _tasteDNA?: TasteDNA,       // fetched server-side from taste_dna table
   model?: string,
   onChunk?: (text: string) => void,
-): Promise<import('./openrouter').AIReply> {
+): Promise<AIReply> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 

@@ -27,6 +27,8 @@ interface Props {
   showRating?: boolean;
   showType?: boolean;
   accent?: boolean;
+  /** Per-item series progress; when present it replaces the watched tick. */
+  progressFor?: (item: ContentItem) => { fraction: number; label: string } | undefined;
 }
 
 export default function ContentRow({
@@ -42,6 +44,7 @@ export default function ContentRow({
   showRating = false,
   showType = false,
   accent = false,
+  progressFor,
 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
@@ -65,15 +68,19 @@ export default function ContentRow({
     [itemSize]
   );
 
-  const renderItem = useCallback(({ item }: { item: ContentItem }) => (
-    <PosterCard
-      item={item}
-      width={cardWidth}
-      showRating={showRating}
-      showType={showType}
-      watched={isWatched(item.id, item.mediaType)}
-    />
-  ), [cardWidth, showRating, showType, isWatched]);
+  const renderItem = useCallback(({ item }: { item: ContentItem }) => {
+    const progress = progressFor?.(item);
+    return (
+      <PosterCard
+        item={item}
+        width={cardWidth}
+        showRating={showRating}
+        showType={showType}
+        watched={!progress && isWatched(item.id, item.mediaType)}
+        progress={progress}
+      />
+    );
+  }, [cardWidth, showRating, showType, isWatched, progressFor]);
 
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>

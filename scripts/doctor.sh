@@ -193,7 +193,6 @@ check_env() {
 check_env "EXPO_PUBLIC_SUPABASE_URL"
 check_env "EXPO_PUBLIC_SUPABASE_ANON_KEY"
 check_env "EXPO_PUBLIC_TMDB_API_KEY"
-check_env "EXPO_PUBLIC_BACKEND_URL"
 check_env "GEMINI_API_KEY"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
