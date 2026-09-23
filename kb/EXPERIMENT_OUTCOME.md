@@ -40,6 +40,7 @@ Primary comparison B vs E2: hidden titles 2 vs 0 (inconclusive), blind 2–1 (to
 ### What the Jev systems actually recommend (a product-quality concern, not a statistic)
 - **Heavy clumping:** 80% of A's and B's picks were comedy TV (Friends, French & Saunders, Second City Television, Portlandia, Will & Grace…), versus 35% for E2 and 13% for E. Genre variety was lowest of all systems (A 1.3 bits vs E 3.3).
 - **Skews obscure:** two-thirds of A/B picks have under 500 TMDB votes (E: 37%).
+- **Viewer feedback:** the viewer reported that the KB's recommendations included shows they actively dislike — **Friends (A's #1) and The Big Bang Theory (A's #3)**. Jev profiles both as warm, friendship-driven, rewatchable comedies, which places them close to comedies the viewer did watch (Platonic, Colin from Accounts, Seinfeld, The Four Seasons, Planes, Trains and Automobiles). The attributes capture the broad category but not what separates the comedies this viewer likes from the ones they don't (comic sensibility, multi-cam laugh-track vs sharper single-cam), and the history has no explicit dislike signal to correct it. This is direct evidence that Jev's representation is too coarse to drive taste matching on its own.
 - These are exactly the kind of lists a viewer finds samey. Fixing them would mean tuning (diversification, popularity priors), which was out of scope — and there's no evidence the underlying signal is strong enough to be worth tuning.
 
 ### Practical answers
