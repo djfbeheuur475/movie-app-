@@ -103,9 +103,18 @@ export function buildFolds(h: MemberHistory, catalogue: Map<string, CatTitle>, n
 
 const DAY = 86_400_000;
 
+/** Familiarity used as a trust weight — except for recent releases, where low
+ * familiarity just means "newer than the model's knowledge", not "unreliable
+ * profile"; those get a neutral 75 so new titles aren't systematically buried. */
+function trustFam(c: CatTitle, cutoffYear: number): number {
+  if (c.year != null && c.year >= cutoffYear - 1) return 75;
+  return c.familiarity ?? 70;
+}
+
 /** A — knowledge base only: weighted item-kNN over Jev attribute profiles. */
 export function rankKB(visible: Map<string, TitleStat>, catalogue: Map<string, CatTitle>, cutoff: string, bulk: Set<string>): { ranked: string[]; scores: Map<string, number> } {
   const now = Date.parse(cutoff);
+  const cutoffYear = Number(cutoff.slice(0, 4));
   const items: { vec: number[]; w: number; fam: number }[] = [];
   for (const s of visible.values()) {
     const c = catalogue.get(s.key);
@@ -115,7 +124,7 @@ export function rankKB(visible: Map<string, TitleStat>, catalogue: Map<string, C
     const damp = 0.35 + 0.65 * recency;
     const dropped = s.isTv && s.episodes <= 2 && ageDays > 60;           // sampled and abandoned
     const engagement = s.isTv ? Math.min(1.5, 0.4 + s.episodes / 10) : 1 + 0.5 * Math.min(s.plays - 1, 2);
-    items.push({ vec: c.vec!, w: dropped ? -0.4 * damp : engagement * damp, fam: c.familiarity ?? 70 });
+    items.push({ vec: c.vec!, w: dropped ? -0.4 * damp : engagement * damp, fam: trustFam(c, cutoffYear) });
   }
   const pos = items.filter((i) => i.w > 0), neg = items.filter((i) => i.w < 0);
   const ratings = [...catalogue.values()].map((c) => c.voteAvg ?? 65);
@@ -130,7 +139,7 @@ export function rankKB(visible: Map<string, TitleStat>, catalogue: Map<string, C
     let score = sims.reduce((a, { i, s }) => a + i.w * s * s * (0.6 + 0.4 * i.fam / 100), 0);
     const nsims = neg.map((i) => ({ w: i.w, s: cosine(cv, i.vec) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 5);
     score -= nsims.reduce((a, { w, s }) => a + Math.abs(w) * s * s, 0);
-    const trust = 0.6 + 0.4 * ((c.familiarity ?? 70) / 100);
+    const trust = 0.6 + 0.4 * (trustFam(c, cutoffYear) / 100);
     const quality = 1 + 0.1 * Math.max(-2, Math.min(2, ((c.voteAvg ?? rMu) - rMu) / rSd));
     scores.set(c.key, score * trust * quality);
   }
