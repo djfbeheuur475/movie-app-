@@ -1,0 +1,850 @@
+[
+ {
+  "t": "Jurassic Park",
+  "y": 1993,
+  "type": "movie",
+  "label": "blockbuster",
+  "tmdb_id": 329,
+  "matched": "Jurassic Park (1993)"
+ },
+ {
+  "t": "Titanic",
+  "y": 1997,
+  "type": "movie",
+  "label": "blockbuster",
+  "tmdb_id": 597,
+  "matched": "Titanic (1997)"
+ },
+ {
+  "t": "The Dark Knight",
+  "y": 2008,
+  "type": "movie",
+  "label": "blockbuster",
+  "tmdb_id": 155,
+  "matched": "The Dark Knight (2008)"
+ },
+ {
+  "t": "Avengers: Endgame",
+  "y": 2019,
+  "type": "movie",
+  "label": "blockbuster",
+  "tmdb_id": 299534,
+  "matched": "Avengers: Endgame (2019)"
+ },
+ {
+  "t": "Top Gun: Maverick",
+  "y": 2022,
+  "type": "movie",
+  "label": "blockbuster",
+  "tmdb_id": 361743,
+  "matched": "Top Gun: Maverick (2022)"
+ },
+ {
+  "t": "Barbie",
+  "y": 2023,
+  "type": "movie",
+  "label": "blockbuster",
+  "tmdb_id": 346698,
+  "matched": "Barbie (2023)"
+ },
+ {
+  "t": "Dune: Part Two",
+  "y": 2024,
+  "type": "movie",
+  "label": "blockbuster",
+  "tmdb_id": 693134,
+  "matched": "Dune: Part Two (2024)"
+ },
+ {
+  "t": "Jaws",
+  "y": 1975,
+  "type": "movie",
+  "label": "blockbuster",
+  "tmdb_id": 578,
+  "matched": "Jaws (1975)"
+ },
+ {
+  "t": "The Godfather",
+  "y": 1972,
+  "type": "movie",
+  "label": "prestige drama",
+  "tmdb_id": 238,
+  "matched": "The Godfather (1972)"
+ },
+ {
+  "t": "Moonlight",
+  "y": 2016,
+  "type": "movie",
+  "label": "prestige drama",
+  "tmdb_id": 376867,
+  "matched": "Moonlight (2016)"
+ },
+ {
+  "t": "Manchester by the Sea",
+  "y": 2016,
+  "type": "movie",
+  "label": "prestige drama",
+  "tmdb_id": 334541,
+  "matched": "Manchester by the Sea (2016)"
+ },
+ {
+  "t": "There Will Be Blood",
+  "y": 2007,
+  "type": "movie",
+  "label": "prestige drama",
+  "tmdb_id": 7345,
+  "matched": "There Will Be Blood (2007)"
+ },
+ {
+  "t": "Oppenheimer",
+  "y": 2023,
+  "type": "movie",
+  "label": "prestige drama",
+  "tmdb_id": 872585,
+  "matched": "Oppenheimer (2023)"
+ },
+ {
+  "t": "Past Lives",
+  "y": 2023,
+  "type": "movie",
+  "label": "prestige drama",
+  "tmdb_id": 666277,
+  "matched": "Past Lives (2023)"
+ },
+ {
+  "t": "The Social Network",
+  "y": 2010,
+  "type": "movie",
+  "label": "prestige drama",
+  "tmdb_id": 37799,
+  "matched": "The Social Network (2010)"
+ },
+ {
+  "t": "Superbad",
+  "y": 2007,
+  "type": "movie",
+  "label": "comedy",
+  "tmdb_id": 8363,
+  "matched": "Superbad (2007)"
+ },
+ {
+  "t": "The Grand Budapest Hotel",
+  "y": 2014,
+  "type": "movie",
+  "label": "comedy",
+  "tmdb_id": 120467,
+  "matched": "The Grand Budapest Hotel (2014)"
+ },
+ {
+  "t": "Airplane!",
+  "y": 1980,
+  "type": "movie",
+  "label": "comedy",
+  "tmdb_id": 813,
+  "matched": "Airplane! (1980)"
+ },
+ {
+  "t": "Bridesmaids",
+  "y": 2011,
+  "type": "movie",
+  "label": "comedy",
+  "tmdb_id": 55721,
+  "matched": "Bridesmaids (2011)"
+ },
+ {
+  "t": "Hot Fuzz",
+  "y": 2007,
+  "type": "movie",
+  "label": "comedy",
+  "tmdb_id": 4638,
+  "matched": "Hot Fuzz (2007)"
+ },
+ {
+  "t": "Groundhog Day",
+  "y": 1993,
+  "type": "movie",
+  "label": "comedy",
+  "tmdb_id": 137,
+  "matched": "Groundhog Day (1993)"
+ },
+ {
+  "t": "In Bruges",
+  "y": 2008,
+  "type": "movie",
+  "label": "dark comedy",
+  "tmdb_id": 8321,
+  "matched": "In Bruges (2008)"
+ },
+ {
+  "t": "Hereditary",
+  "y": 2018,
+  "type": "movie",
+  "label": "horror",
+  "tmdb_id": 493922,
+  "matched": "Hereditary (2018)"
+ },
+ {
+  "t": "The Shining",
+  "y": 1980,
+  "type": "movie",
+  "label": "horror",
+  "tmdb_id": 694,
+  "matched": "The Shining (1980)"
+ },
+ {
+  "t": "Get Out",
+  "y": 2017,
+  "type": "movie",
+  "label": "horror",
+  "tmdb_id": 419430,
+  "matched": "Get Out (2017)"
+ },
+ {
+  "t": "Scream",
+  "y": 1996,
+  "type": "movie",
+  "label": "horror",
+  "tmdb_id": 4232,
+  "matched": "Scream (1996)"
+ },
+ {
+  "t": "The Conjuring",
+  "y": 2013,
+  "type": "movie",
+  "label": "horror",
+  "tmdb_id": 138843,
+  "matched": "The Conjuring (2013)"
+ },
+ {
+  "t": "Talk to Me",
+  "y": 2023,
+  "type": "movie",
+  "label": "horror",
+  "tmdb_id": 1008042,
+  "matched": "Talk to Me (2023)"
+ },
+ {
+  "t": "John Wick",
+  "y": 2014,
+  "type": "movie",
+  "label": "action",
+  "tmdb_id": 245891,
+  "matched": "John Wick (2014)"
+ },
+ {
+  "t": "Mad Max: Fury Road",
+  "y": 2015,
+  "type": "movie",
+  "label": "action",
+  "tmdb_id": 76341,
+  "matched": "Mad Max: Fury Road (2015)"
+ },
+ {
+  "t": "Die Hard",
+  "y": 1988,
+  "type": "movie",
+  "label": "action",
+  "tmdb_id": 562,
+  "matched": "Die Hard (1988)"
+ },
+ {
+  "t": "The Raid",
+  "y": 2011,
+  "type": "movie",
+  "label": "action",
+  "tmdb_id": 94329,
+  "matched": "The Raid (2012)"
+ },
+ {
+  "t": "Heat",
+  "y": 1995,
+  "type": "movie",
+  "label": "action/crime",
+  "tmdb_id": 949,
+  "matched": "Heat (1995)"
+ },
+ {
+  "t": "Blade Runner 2049",
+  "y": 2017,
+  "type": "movie",
+  "label": "sci-fi",
+  "tmdb_id": 335984,
+  "matched": "Blade Runner 2049 (2017)"
+ },
+ {
+  "t": "Arrival",
+  "y": 2016,
+  "type": "movie",
+  "label": "sci-fi",
+  "tmdb_id": 329865,
+  "matched": "Arrival (2016)"
+ },
+ {
+  "t": "The Matrix",
+  "y": 1999,
+  "type": "movie",
+  "label": "sci-fi",
+  "tmdb_id": 603,
+  "matched": "The Matrix (1999)"
+ },
+ {
+  "t": "Ex Machina",
+  "y": 2015,
+  "type": "movie",
+  "label": "sci-fi",
+  "tmdb_id": 264660,
+  "matched": "Ex Machina (2015)"
+ },
+ {
+  "t": "Interstellar",
+  "y": 2014,
+  "type": "movie",
+  "label": "sci-fi",
+  "tmdb_id": 157336,
+  "matched": "Interstellar (2014)"
+ },
+ {
+  "t": "Primer",
+  "y": 2004,
+  "type": "movie",
+  "label": "obscure sci-fi",
+  "tmdb_id": 14337,
+  "matched": "Primer (2004)"
+ },
+ {
+  "t": "Parasite",
+  "y": 2019,
+  "type": "movie",
+  "label": "arthouse/foreign",
+  "tmdb_id": 496243,
+  "matched": "Parasite (2019)"
+ },
+ {
+  "t": "Portrait of a Lady on Fire",
+  "y": 2019,
+  "type": "movie",
+  "label": "arthouse/foreign",
+  "tmdb_id": 531428,
+  "matched": "Portrait of a Lady on Fire (2019)"
+ },
+ {
+  "t": "Amélie",
+  "y": 2001,
+  "type": "movie",
+  "label": "arthouse/foreign",
+  "tmdb_id": 194,
+  "matched": "Amélie (2001)"
+ },
+ {
+  "t": "Drive My Car",
+  "y": 2021,
+  "type": "movie",
+  "label": "arthouse/foreign",
+  "tmdb_id": 758866,
+  "matched": "Drive My Car (2021)"
+ },
+ {
+  "t": "The Lobster",
+  "y": 2015,
+  "type": "movie",
+  "label": "arthouse",
+  "tmdb_id": 254320,
+  "matched": "The Lobster (2015)"
+ },
+ {
+  "t": "Stalker",
+  "y": 1979,
+  "type": "movie",
+  "label": "arthouse/older",
+  "tmdb_id": 1398,
+  "matched": "Stalker (1979)"
+ },
+ {
+  "t": "Aftersun",
+  "y": 2022,
+  "type": "movie",
+  "label": "arthouse",
+  "tmdb_id": 965150,
+  "matched": "Aftersun (2022)"
+ },
+ {
+  "t": "Free Solo",
+  "y": 2018,
+  "type": "movie",
+  "label": "documentary",
+  "tmdb_id": 515042,
+  "matched": "Free Solo (2018)"
+ },
+ {
+  "t": "Won't You Be My Neighbor?",
+  "y": 2018,
+  "type": "movie",
+  "label": "documentary",
+  "tmdb_id": 490003,
+  "matched": "Won't You Be My Neighbor? (2018)"
+ },
+ {
+  "t": "The Act of Killing",
+  "y": 2012,
+  "type": "movie",
+  "label": "documentary",
+  "tmdb_id": 123678,
+  "matched": "The Act of Killing (2012)"
+ },
+ {
+  "t": "Spirited Away",
+  "y": 2001,
+  "type": "movie",
+  "label": "animation",
+  "tmdb_id": 129,
+  "matched": "Spirited Away (2001)"
+ },
+ {
+  "t": "Toy Story",
+  "y": 1995,
+  "type": "movie",
+  "label": "animation",
+  "tmdb_id": 862,
+  "matched": "Toy Story (1995)"
+ },
+ {
+  "t": "Spider-Man: Into the Spider-Verse",
+  "y": 2018,
+  "type": "movie",
+  "label": "animation",
+  "tmdb_id": 324857,
+  "matched": "Spider-Man: Into the Spider-Verse (2018)"
+ },
+ {
+  "t": "Frozen",
+  "y": 2013,
+  "type": "movie",
+  "label": "animation/family",
+  "tmdb_id": 109445,
+  "matched": "Frozen (2013)"
+ },
+ {
+  "t": "Anomalisa",
+  "y": 2015,
+  "type": "movie",
+  "label": "adult animation",
+  "tmdb_id": 291270,
+  "matched": "Anomalisa (2015)"
+ },
+ {
+  "t": "Casablanca",
+  "y": 1942,
+  "type": "movie",
+  "label": "older",
+  "tmdb_id": 289,
+  "matched": "Casablanca (1943)"
+ },
+ {
+  "t": "Some Like It Hot",
+  "y": 1959,
+  "type": "movie",
+  "label": "older comedy",
+  "tmdb_id": 239,
+  "matched": "Some Like It Hot (1959)"
+ },
+ {
+  "t": "Psycho",
+  "y": 1960,
+  "type": "movie",
+  "label": "older horror",
+  "tmdb_id": 539,
+  "matched": "Psycho (1960)"
+ },
+ {
+  "t": "Seven Samurai",
+  "y": 1954,
+  "type": "movie",
+  "label": "older foreign",
+  "tmdb_id": 346,
+  "matched": "Seven Samurai (1954)"
+ },
+ {
+  "t": "Chinatown",
+  "y": 1974,
+  "type": "movie",
+  "label": "older noir",
+  "tmdb_id": 829,
+  "matched": "Chinatown (1974)"
+ },
+ {
+  "t": "Notting Hill",
+  "y": 1999,
+  "type": "movie",
+  "label": "romance",
+  "tmdb_id": 509,
+  "matched": "Notting Hill (1999)"
+ },
+ {
+  "t": "Paddington 2",
+  "y": 2017,
+  "type": "movie",
+  "label": "family",
+  "tmdb_id": 346648,
+  "matched": "Paddington 2 (2017)"
+ },
+ {
+  "t": "Little Miss Sunshine",
+  "y": 2006,
+  "type": "movie",
+  "label": "indie comedy-drama",
+  "tmdb_id": 773,
+  "matched": "Little Miss Sunshine (2006)"
+ },
+ {
+  "t": "Unforgiven",
+  "y": 1992,
+  "type": "movie",
+  "label": "western",
+  "tmdb_id": 33,
+  "matched": "Unforgiven (1992)"
+ },
+ {
+  "t": "1917",
+  "y": 2019,
+  "type": "movie",
+  "label": "war",
+  "tmdb_id": 530915,
+  "matched": "1917 (2019)"
+ },
+ {
+  "t": "La La Land",
+  "y": 2016,
+  "type": "movie",
+  "label": "musical",
+  "tmdb_id": 313369,
+  "matched": "La La Land (2016)"
+ },
+ {
+  "t": "Coherence",
+  "y": 2013,
+  "type": "movie",
+  "label": "obscure",
+  "tmdb_id": 220289,
+  "matched": "Coherence (2014)"
+ },
+ {
+  "t": "The Vast of Night",
+  "y": 2019,
+  "type": "movie",
+  "label": "obscure",
+  "tmdb_id": 565743,
+  "matched": "The Vast of Night (2019)"
+ },
+ {
+  "t": "Columbus",
+  "y": 2017,
+  "type": "movie",
+  "label": "obscure",
+  "tmdb_id": 414453,
+  "matched": "Columbus (2017)"
+ },
+ {
+  "t": "A Ghost Story",
+  "y": 2017,
+  "type": "movie",
+  "label": "obscure",
+  "tmdb_id": 428449,
+  "matched": "A Ghost Story (2017)"
+ },
+ {
+  "t": "Hunt for the Wilderpeople",
+  "y": 2016,
+  "type": "movie",
+  "label": "indie",
+  "tmdb_id": 371645,
+  "matched": "Hunt for the Wilderpeople (2016)"
+ },
+ {
+  "t": "Breaking Bad",
+  "y": 2008,
+  "type": "tv",
+  "label": "tv drama",
+  "tmdb_id": 1396,
+  "matched": "Breaking Bad (2008)"
+ },
+ {
+  "t": "The Wire",
+  "y": 2002,
+  "type": "tv",
+  "label": "tv drama",
+  "tmdb_id": 1438,
+  "matched": "The Wire (2002)"
+ },
+ {
+  "t": "Succession",
+  "y": 2018,
+  "type": "tv",
+  "label": "tv drama",
+  "tmdb_id": 76331,
+  "matched": "Succession (2018)"
+ },
+ {
+  "t": "The Sopranos",
+  "y": 1999,
+  "type": "tv",
+  "label": "tv drama",
+  "tmdb_id": 1398,
+  "matched": "The Sopranos (1999)"
+ },
+ {
+  "t": "Mad Men",
+  "y": 2007,
+  "type": "tv",
+  "label": "tv drama",
+  "tmdb_id": 1104,
+  "matched": "Mad Men (2007)"
+ },
+ {
+  "t": "Chernobyl",
+  "y": 2019,
+  "type": "tv",
+  "label": "miniseries",
+  "tmdb_id": 87108,
+  "matched": "Chernobyl (2019)"
+ },
+ {
+  "t": "Slow Horses",
+  "y": 2022,
+  "type": "tv",
+  "label": "tv spy",
+  "tmdb_id": 95480,
+  "matched": "Slow Horses (2022)"
+ },
+ {
+  "t": "Severance",
+  "y": 2022,
+  "type": "tv",
+  "label": "tv sci-fi",
+  "tmdb_id": 95396,
+  "matched": "Severance (2022)"
+ },
+ {
+  "t": "The Crown",
+  "y": 2016,
+  "type": "tv",
+  "label": "tv period",
+  "tmdb_id": 65494,
+  "matched": "The Crown (2016)"
+ },
+ {
+  "t": "MobLand",
+  "y": 2025,
+  "type": "tv",
+  "label": "tv crime",
+  "tmdb_id": 247718,
+  "matched": "MobLand (2025)"
+ },
+ {
+  "t": "Friends",
+  "y": 1994,
+  "type": "tv",
+  "label": "sitcom",
+  "tmdb_id": 1668,
+  "matched": "Friends (1994)"
+ },
+ {
+  "t": "The Office",
+  "y": 2005,
+  "type": "tv",
+  "label": "sitcom",
+  "tmdb_id": 2316,
+  "matched": "The Office (2005)"
+ },
+ {
+  "t": "Seinfeld",
+  "y": 1989,
+  "type": "tv",
+  "label": "sitcom",
+  "tmdb_id": 1400,
+  "matched": "Seinfeld (1989)"
+ },
+ {
+  "t": "Brooklyn Nine-Nine",
+  "y": 2013,
+  "type": "tv",
+  "label": "sitcom",
+  "tmdb_id": 48891,
+  "matched": "Brooklyn Nine-Nine (2013)"
+ },
+ {
+  "t": "It's Always Sunny in Philadelphia",
+  "y": 2005,
+  "type": "tv",
+  "label": "sitcom",
+  "tmdb_id": 2710,
+  "matched": "It's Always Sunny in Philadelphia (2005)"
+ },
+ {
+  "t": "Fleabag",
+  "y": 2016,
+  "type": "tv",
+  "label": "comedy-drama",
+  "tmdb_id": 67070,
+  "matched": "Fleabag (2016)"
+ },
+ {
+  "t": "Schitt's Creek",
+  "y": 2015,
+  "type": "tv",
+  "label": "sitcom",
+  "tmdb_id": 61662,
+  "matched": "Schitt's Creek (2015)"
+ },
+ {
+  "t": "Law & Order: Special Victims Unit",
+  "y": 1999,
+  "type": "tv",
+  "label": "procedural",
+  "tmdb_id": 2734,
+  "matched": "Law & Order: Special Victims Unit (1999)"
+ },
+ {
+  "t": "Line of Duty",
+  "y": 2012,
+  "type": "tv",
+  "label": "uk crime",
+  "tmdb_id": 43982,
+  "matched": "Line of Duty (2012)"
+ },
+ {
+  "t": "Broadchurch",
+  "y": 2013,
+  "type": "tv",
+  "label": "uk crime",
+  "tmdb_id": 1427,
+  "matched": "Broadchurch (2013)"
+ },
+ {
+  "t": "True Detective",
+  "y": 2014,
+  "type": "tv",
+  "label": "crime anthology",
+  "tmdb_id": 46648,
+  "matched": "True Detective (2014)"
+ },
+ {
+  "t": "Mindhunter",
+  "y": 2017,
+  "type": "tv",
+  "label": "crime",
+  "tmdb_id": 67744,
+  "matched": "MINDHUNTER (2017)"
+ },
+ {
+  "t": "Game of Thrones",
+  "y": 2011,
+  "type": "tv",
+  "label": "tv fantasy",
+  "tmdb_id": 1399,
+  "matched": "Game of Thrones (2011)"
+ },
+ {
+  "t": "Stranger Things",
+  "y": 2016,
+  "type": "tv",
+  "label": "tv sci-fi/horror",
+  "tmdb_id": 66732,
+  "matched": "Stranger Things (2016)"
+ },
+ {
+  "t": "Black Mirror",
+  "y": 2011,
+  "type": "tv",
+  "label": "anthology",
+  "tmdb_id": 42009,
+  "matched": "Black Mirror (2011)"
+ },
+ {
+  "t": "Dark",
+  "y": 2017,
+  "type": "tv",
+  "label": "foreign tv",
+  "tmdb_id": 70523,
+  "matched": "Dark (2017)"
+ },
+ {
+  "t": "BoJack Horseman",
+  "y": 2014,
+  "type": "tv",
+  "label": "adult animation",
+  "tmdb_id": 61222,
+  "matched": "BoJack Horseman (2014)"
+ },
+ {
+  "t": "Bluey",
+  "y": 2018,
+  "type": "tv",
+  "label": "kids animation",
+  "tmdb_id": 82728,
+  "matched": "Bluey (2018)"
+ },
+ {
+  "t": "Arcane",
+  "y": 2021,
+  "type": "tv",
+  "label": "animation",
+  "tmdb_id": 94605,
+  "matched": "Arcane (2021)"
+ },
+ {
+  "t": "Planet Earth II",
+  "y": 2016,
+  "type": "tv",
+  "label": "docuseries",
+  "tmdb_id": 68595,
+  "matched": "Planet Earth II (2016)"
+ },
+ {
+  "t": "Making a Murderer",
+  "y": 2015,
+  "type": "tv",
+  "label": "true crime",
+  "tmdb_id": 64439,
+  "matched": "Making a Murderer (2015)"
+ },
+ {
+  "t": "The Great British Bake Off",
+  "y": 2010,
+  "type": "tv",
+  "label": "reality",
+  "tmdb_id": 34549,
+  "matched": "The Great British Bake Off (2010)"
+ },
+ {
+  "t": "Taskmaster",
+  "y": 2015,
+  "type": "tv",
+  "label": "panel show",
+  "tmdb_id": 63404,
+  "matched": "Taskmaster (2015)"
+ },
+ {
+  "t": "Last Week Tonight with John Oliver",
+  "y": 2014,
+  "type": "tv",
+  "label": "talk/news",
+  "tmdb_id": 60694,
+  "matched": "Last Week Tonight with John Oliver (2014)"
+ },
+ {
+  "t": "Detectorists",
+  "y": 2014,
+  "type": "tv",
+  "label": "obscure uk",
+  "tmdb_id": 61828,
+  "matched": "Detectorists (2014)"
+ },
+ {
+  "t": "Patriot",
+  "y": 2015,
+  "type": "tv",
+  "label": "obscure",
+  "tmdb_id": 64396,
+  "matched": "Patriot (2015)"
+ }
+]

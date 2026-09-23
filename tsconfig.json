@@ -20,6 +20,7 @@
     "supabase/functions",
     "android",
     "dist",
-    "tests"
+    "tests",
+    "kb"
   ]
 }

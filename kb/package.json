@@ -1,0 +1,27 @@
+{
+  "name": "nextup-kb",
+  "private": true,
+  "type": "module",
+  "description": "NextUp entertainment knowledge base: TMDB catalogue + Jev structured profiles in Supabase",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "framework:sync": "node --env-file=.env src/cli.ts framework:sync",
+    "testset:load": "node --env-file=.env src/cli.ts testset:load",
+    "probe": "node --env-file=.env src/cli.ts probe",
+    "profile:dry": "node --env-file=.env src/cli.ts profile --set test --dry-run",
+    "profile:test": "node --env-file=.env src/cli.ts profile --set test --limit 10",
+    "profile:batch": "node --env-file=.env src/cli.ts profile",
+    "profile:resume": "node --env-file=.env src/cli.ts profile",
+    "profile:failed": "node --env-file=.env src/cli.ts profile --failed",
+    "retest": "node --env-file=.env src/cli.ts retest --set test --limit 20",
+    "report": "node --env-file=.env src/cli.ts report --set test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~6.0.3"
+  }
+}

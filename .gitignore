@@ -54,3 +54,7 @@ google-play-key.json
 
 # Claude worktrees
 .claude/worktrees/
+
+# Knowledge-base pipeline local artefacts
+kb/output/
+kb/logs/
