@@ -3,7 +3,7 @@ import { getFramework, LATEST_FRAMEWORK } from './framework.ts';
 import { db, must } from './db.ts';
 import { fetchTitle } from './tmdb.ts';
 import { loadMembers } from './trakt_export.ts';
-import { loadCatalogue, statsBefore, rankKB, rankKBPlusAI, rankDirectAI, rankDirectQwen, type CatTitle } from './experiment.ts';
+import { loadCatalogue, statsBefore, rankKB, rankKBPlusAI, rankDirectAI, rankDirectQwen, rankShortlistQwen, type CatTitle } from './experiment.ts';
 
 // Blind human test: recommendations from each system using the member's FULL
 // current history, cut into 5-title rows and paired anonymously. The page only
@@ -27,6 +27,7 @@ export async function buildBlind(root: string, membersPath: string, log: (m: str
     const b = await rankKBPlusAI(visible, a.ranked, catalogue);
     const c = await rankDirectAI(visible, 4, log);
     const e = await rankDirectQwen(visible, catalogue, 424242);
+    const e2 = await rankShortlistQwen(visible, catalogue);
 
     const toItem = async (k: string | null, fallback: { title: string; year: number | null; isTv: boolean }): Promise<Item> => {
       const cat = k ? catalogue.get(k) : undefined;
@@ -44,17 +45,19 @@ export async function buildBlind(root: string, membersPath: string, log: (m: str
       A_kb: await fromCat(a.ranked),
       B_kb_ai: await fromCat(b.ranked),
       E_direct_qwen: await fromCat(e.ranked),
+      E2_shortlist_qwen: await fromCat(e2.ranked),
       C_direct_ai: await Promise.all(c.picks.filter((p) => !p.key || !visible.has(p.key)).slice(0, 15).map((p) => toItem(p.key, p))),
     };
     for (const [s, l] of Object.entries(lists)) log(`  ${m.name} ${s}: ${l.map((i) => i.title).join(', ')}`);
 
     const rand = rng([...m.name].reduce((h, ch) => h * 31 + ch.charCodeAt(0), 7) >>> 0);
-    // The four key comparisons: B–C (new vs today), B–E (does Jev help Qwen?),
-    // E–C (catalogue-bound Qwen vs today's free-pick), A–E (structured vs generative).
-    const pairs: [string, string][] = [['B_kb_ai', 'C_direct_ai'], ['B_kb_ai', 'E_direct_qwen'], ['E_direct_qwen', 'C_direct_ai'], ['A_kb', 'E_direct_qwen']];
+    // Key comparisons: B–C (new vs today), B–E (does Jev help Qwen?), B–E2 (does
+    // Jev beat a generic shortlist?), E–C (catalogue Qwen vs today), A–E
+    // (structured vs generative). Two bands each (picks 1–5, 6–10) = 10 rounds.
+    const pairs: [string, string][] = [['B_kb_ai', 'C_direct_ai'], ['B_kb_ai', 'E_direct_qwen'], ['B_kb_ai', 'E2_shortlist_qwen'], ['E_direct_qwen', 'C_direct_ai'], ['A_kb', 'E_direct_qwen']];
     const mine: { id: string; left: Item[]; right: Item[]; systems: [string, string]; band: string }[] = [];
     for (const [x, y] of pairs) {
-      for (const [lo, hi] of [[0, 5], [5, 10], [10, 15]]) {
+      for (const [lo, hi] of [[0, 5], [5, 10]]) {
         const rx = lists[x].slice(lo, hi), ry = lists[y].slice(lo, hi);
         if (rx.length < 5 || ry.length < 5) continue;
         const flip = rand() < 0.5;

@@ -12,6 +12,7 @@ import { loadMembers } from './trakt_export.ts';
 import { buildCatalogue } from './catalogue.ts';
 import { runExperiment } from './experiment_run.ts';
 import { buildBlind } from './blind.ts';
+import { writeExperimentReport } from './experiment_report.ts';
 
 // ── Args ────────────────────────────────────────────────────────────────────
 
@@ -335,6 +336,10 @@ async function experimentBlind() {
   await buildBlind(ROOT, (flag('members') as string) ?? 'experiment/members.json', log);
 }
 
+async function experimentReport() {
+  log(`Report → ${await writeExperimentReport(ROOT, (flag('results') as string) ?? 'results.json', flag('blind') as string | undefined)}`);
+}
+
 async function compare() {
   const fa = getFramework((flag('a') as string) ?? '1.0'), fb = getFramework((flag('b') as string) ?? LATEST_FRAMEWORK);
   const anchors = ['Hot Fuzz', 'Detectorists', 'Aftersun', 'Hereditary', 'Slow Horses', 'Succession', 'Paddington 2', 'Breaking Bad', 'Arrival', 'Taskmaster', 'In Bruges', 'Barbie', 'The Office', 'Fleabag', 'Seinfeld'];
@@ -346,6 +351,7 @@ const commands: Record<string, () => Promise<void>> = {
   'catalogue:build': catalogueBuild,
   'experiment:run': experimentRun,
   'experiment:blind': experimentBlind,
+  'experiment:report': experimentReport,
   'framework:sync': frameworkSync,
   'testset:load': testsetLoad,
   'testset:synthetic': syntheticLoad,

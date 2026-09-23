@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { db, must } from './db.ts';
 import { requireEnv } from './env.ts';
 import type { CompiledFramework } from './framework.ts';
-import { resolveLikeApp, GENRE_NAMES } from './tmdb.ts';
+import { resolveLikeApp, tmdbRecommendations, GENRE_NAMES } from './tmdb.ts';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { titleKey, type MemberHistory, type WatchEvent } from './trakt_export.ts';
 
 // Offline recommendation experiment (see kb/DESIGN.md §7 Stage B).
@@ -196,6 +197,58 @@ Output ONLY JSON: {"picks":[numbers, best first]}`;
   const nums = (r.content?.match(/\[([\d,\s]+)\]/)?.[1] ?? '').split(',').map((n) => Number(n.trim())).filter((n) => n >= 1 && n <= pool.length);
   const ranked = [...new Set(nums)].map((n) => pool[n - 1].key);
   return { ranked, costUsd: r.usage?.cost ?? 0, tokens: (r.usage?.prompt_tokens ?? 0) + (r.usage?.completion_tokens ?? 0), poolSize: pool.length };
+}
+
+// TMDB "recommendations" per title, cached on disk so every run and fold sees
+// the same lists (TMDB's lists drift over time).
+const RECS_CACHE = new URL('../experiment/tmdb-recs-cache.json', import.meta.url).pathname;
+let recsCache: Record<string, number[]> | null = null;
+async function cachedRecs(key: string, tmdb: number, isTv: boolean): Promise<number[]> {
+  recsCache ??= existsSync(RECS_CACHE) ? JSON.parse(readFileSync(RECS_CACHE, 'utf8')) : {};
+  if (!recsCache![key]) {
+    recsCache![key] = await tmdbRecommendations(tmdb, isTv).catch(() => []);
+    writeFileSync(RECS_CACHE, JSON.stringify(recsCache));
+  }
+  return recsCache![key];
+}
+
+/** E2 — Qwen re-ranking a NON-Jev shortlist: the 60 unwatched catalogue titles
+ * most recommended by TMDB for the viewer's 25 most recent pre-cut-off titles
+ * (weighted by recency rank and engagement). Same prompt, model and history as
+ * B, minus the Jev trait column. B vs E2 isolates what Jev adds over a generic
+ * shortlist; E2 vs E isolates what shortlisting adds for a small model. */
+export async function rankShortlistQwen(visible: Map<string, TitleStat>, catalogue: Map<string, CatTitle>): Promise<{ ranked: string[]; costUsd: number; tokens: number; shortlist: number }> {
+  const recent = [...visible.values()].sort((a, b) => (a.lastAt > b.lastAt ? -1 : 1)).slice(0, 25);
+  const score = new Map<string, number>();
+  for (let i = 0; i < recent.length; i++) {
+    const s = recent[i];
+    const engagement = s.isTv ? Math.min(1.5, 0.4 + s.episodes / 10) : 1 + 0.5 * Math.min(s.plays - 1, 2);
+    const w = engagement / (1 + 0.1 * i);
+    const recs = await cachedRecs(s.key, s.tmdb, s.isTv);
+    recs.forEach((id, pos) => {
+      const k = titleKey(s.isTv, id);
+      if (!catalogue.has(k) || visible.has(k)) return;
+      score.set(k, (score.get(k) ?? 0) + w * (1 - pos / 40));   // earlier in TMDB's list counts more
+    });
+  }
+  const shortlist = [...score].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  const pool = shortlist.slice(0, 60).map((k) => catalogue.get(k)!);
+  const cands = pool.map((c, i) => `${i + 1}. ${c.title} (${c.year}) · ${c.isTv ? 'TV' : 'film'}`).join('\n');
+  const prompt = `/no_think
+You are a recommendation engine for one viewer. From the CANDIDATES below, choose the 20 they are most likely to actually watch next, best first.
+
+${historyBlock(visible)}
+
+CANDIDATES
+${cands}
+
+Rules: only pick from the candidates; use their numbers; balance films and TV the way this viewer does; prefer genuine taste matches over famous titles.
+Output ONLY JSON: {"picks":[numbers, best first]}`;
+  const r = await llm([{ role: 'user', content: prompt }], 400);
+  const nums = (r.content?.match(/\[([\d,\s]+)\]/)?.[1] ?? '').split(',').map((n) => Number(n.trim())).filter((n) => n >= 1 && n <= pool.length);
+  const picked = [...new Set(nums)].map((n) => pool[n - 1].key);
+  const ranked = [...picked, ...shortlist.filter((k) => !picked.includes(k))];
+  return { ranked, costUsd: r.usage?.cost ?? 0, tokens: (r.usage?.prompt_tokens ?? 0) + (r.usage?.completion_tokens ?? 0), shortlist: pool.length };
 }
 
 /** B — knowledge base retrieval (A's top 60) re-ranked by the same LLM the control uses. */

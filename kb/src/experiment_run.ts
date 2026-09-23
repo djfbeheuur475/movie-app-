@@ -3,16 +3,17 @@ import { getFramework, LATEST_FRAMEWORK } from './framework.ts';
 import { db, must } from './db.ts';
 import { loadMembers } from './trakt_export.ts';
 import {
-  loadCatalogue, buildFolds, rankKB, rankPopular, rankKBPlusAI, rankDirectAI, rankDirectQwen, metrics, label,
+  loadCatalogue, buildFolds, rankKB, rankPopular, rankKBPlusAI, rankDirectAI, rankDirectQwen, rankShortlistQwen, metrics, label,
   type SystemResult, type CatTitle,
 } from './experiment.ts';
 
 const QWEN_IN = 0.12 / 1e6, QWEN_OUT = 0.24 / 1e6;   // OpenRouter qwen/qwen3-14b, 2026-09-23
 
-// Systems: A_kb, B_kb_ai, C_direct_ai (control), D_popular, E_direct_qwen.
-export const ALL_SYSTEMS = ['A_kb', 'B_kb_ai', 'C_direct_ai', 'D_popular', 'E_direct_qwen'];
+// Systems: A_kb, B_kb_ai, C_direct_ai (control), D_popular, E_direct_qwen, E2_shortlist_qwen.
+export const ALL_SYSTEMS = ['A_kb', 'B_kb_ai', 'C_direct_ai', 'D_popular', 'E_direct_qwen', 'E2_shortlist_qwen'];
 
 export async function runExperiment(root: string, membersPath: string, nFolds: number, rounds: number, log: (m: string) => void, systems = ALL_SYSTEMS, outName = 'results.json') {
+  const runStart = new Date().toISOString();
   const fw = getFramework(LATEST_FRAMEWORK);
   const fwId = must(await db().from('kb_frameworks').select('id').eq('version', fw.version).single(), 'fw').id as number;
   const catalogue = await loadCatalogue(fw, fwId);
@@ -48,6 +49,11 @@ export async function runExperiment(root: string, membersPath: string, nFolds: n
         results.push(toResult('E_direct_qwen', e.ranked, { costUsd: e.costUsd, tokens: e.tokens }));
         log(`    E: ${e.ranked.length} picks from a pool of ${e.poolSize} (${e.tokens} tokens)`);
       }
+      if (want('E2_shortlist_qwen')) {
+        const e2 = await rankShortlistQwen(fold.visible, catalogue);
+        results.push(toResult('E2_shortlist_qwen', e2.ranked, { costUsd: e2.costUsd, tokens: e2.tokens }));
+        log(`    E2: ${e2.ranked.slice(0, 20).length} picks from a TMDB-related shortlist of ${e2.shortlist}`);
+      }
       if (want('C_direct_ai')) {
         const t0 = Date.now();
         const c = await rankDirectAI(fold.visible, rounds, log);
@@ -72,7 +78,7 @@ export async function runExperiment(root: string, membersPath: string, nFolds: n
   }
 
   // Control token usage is logged server-side in ai_requests for the experiment account.
-  const { data: reqs } = await db().from('ai_requests').select('prompt_tokens, completion_tokens, user_id').gte('created_at', new Date(Date.now() - 6 * 3600_000).toISOString());
+  const { data: reqs } = await db().from('ai_requests').select('prompt_tokens, completion_tokens, user_id').gte('created_at', runStart);
   const { data: userList } = await db().auth.admin.listUsers({ perPage: 1000 });
   const expUser = userList?.users.find((u) => u.email === process.env.EXPERIMENT_USER_EMAIL)?.id;
   const cReqs = (reqs ?? []).filter((r) => r.user_id === expUser);
