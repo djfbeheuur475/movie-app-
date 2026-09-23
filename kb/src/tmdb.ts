@@ -144,3 +144,27 @@ export async function tmdbDiscover(isTv: boolean, params: Record<string, string 
   const d = await tmdb<{ results: { id: number }[] }>(isTv ? '/discover/tv' : '/discover/movie', { include_adult: 'false', ...params });
   return d.results.map((r) => r.id);
 }
+
+// Verbatim port of the app's searchTitleWithFallback (app/(tabs)/ai.tsx) so the
+// control's picks resolve exactly as a user would see them in NextUp.
+const normTitle = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+const titleMatch = (a: string, b: string) => { const na = normTitle(a), nb = normTitle(b); return na === nb ? 1 : na.includes(nb) || nb.includes(na) ? 0.7 : 0; };
+
+export async function resolveLikeApp(title: string, year: number | null, prefer: 'movie' | 'tv'): Promise<{ id: number; isTv: boolean } | null> {
+  type R = { id: number; title?: string; name?: string };
+  const search = (tv: boolean, y?: number | null) =>
+    tmdb<{ results: R[] }>(tv ? '/search/tv' : '/search/movie', { query: title, page: 1, ...(y ? (tv ? { first_air_date_year: y } : { year: y }) : {}) }).then((d) => d.results);
+  const ok = (r: R | undefined) => !!r && titleMatch(r.title ?? r.name ?? '', title) >= 0.5;
+  const first = prefer === 'tv';
+  const primary = await search(first, year);
+  if (ok(primary[0])) return { id: primary[0].id, isTv: first };
+  const other = await search(!first, year);
+  if (ok(other[0])) return { id: other[0].id, isTv: !first };
+  if (year) {
+    const p2 = await search(first);
+    if (ok(p2[0])) return { id: p2[0].id, isTv: first };
+    const o2 = await search(!first);
+    if (ok(o2[0])) return { id: o2[0].id, isTv: !first };
+  }
+  return primary[0] ? { id: primary[0].id, isTv: first } : null;
+}

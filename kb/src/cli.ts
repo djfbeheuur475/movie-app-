@@ -327,7 +327,8 @@ async function catalogueBuild() {
 
 async function experimentRun() {
   requireEnv('KB_LLM_TOKEN'); requireEnv('EXPERIMENT_USER_EMAIL');
-  await runExperiment(ROOT, (flag('members') as string) ?? 'experiment/members.json', num('folds', 4), num('rounds', 5), log);
+  const systems = typeof flag('systems') === 'string' ? (flag('systems') as string).split(',') : undefined;
+  await runExperiment(ROOT, (flag('members') as string) ?? 'experiment/members.json', num('folds', 4), num('rounds', 10), log, systems, (flag('out') as string) ?? 'results.json');
 }
 
 async function experimentBlind() {

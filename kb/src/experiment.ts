@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { db, must } from './db.ts';
 import { requireEnv } from './env.ts';
 import type { CompiledFramework } from './framework.ts';
-import { searchTitle, GENRE_NAMES } from './tmdb.ts';
+import { resolveLikeApp, GENRE_NAMES } from './tmdb.ts';
 import { titleKey, type MemberHistory, type WatchEvent } from './trakt_export.ts';
 
 // Offline recommendation experiment (see kb/DESIGN.md §7 Stage B).
@@ -17,7 +17,7 @@ import { titleKey, type MemberHistory, type WatchEvent } from './trakt_export.ts
 export interface CatTitle {
   id: number; key: string; tmdb: number; isTv: boolean; title: string; year: number | null;
   voteAvg: number | null; voteCount: number | null; popularity: number | null; genreIds: number[];
-  poster: string | null; vec: number[]; familiarity: number | null; traits: string[];
+  poster: string | null; vec: number[] | null; familiarity: number | null; traits: string[];  // vec/familiarity/traits: Jev-derived, null/[] if unprofiled
 }
 
 export async function loadCatalogue(fw: CompiledFramework, fwId: number): Promise<Map<string, CatTitle>> {
@@ -27,13 +27,17 @@ export async function loadCatalogue(fw: CompiledFramework, fwId: number): Promis
     ids.push(...page.map((r) => r.title_id));
     if (page.length < 1000) break;
   }
-  type Row = { title_id: number; vals: (number | null)[]; familiarity: number | null; kb_titles: { tmdb_id: number; is_tv: boolean; title: string; year: number | null; vote_avg: number | null; vote_count: number | null; popularity: number | null; genre_ids: number[] | null; poster_path: string | null } };
-  const rows: Row[] = [];
+  // Every catalogue title is loaded (E and D need no profile); Jev profiles are
+  // attached where present — only A and B use them.
+  type Meta = { id: number; tmdb_id: number; is_tv: boolean; title: string; year: number | null; vote_avg: number | null; vote_count: number | null; popularity: number | null; genre_ids: number[] | null; poster_path: string | null };
+  type Prof = { title_id: number; vals: (number | null)[]; familiarity: number | null };
+  const metas: Meta[] = [], profs = new Map<number, Prof>();
   for (let i = 0; i < ids.length; i += 300) {
-    rows.push(...(must(await db().from('kb_title_profiles')
-      .select('title_id, vals, familiarity, kb_titles!inner(tmdb_id, is_tv, title, year, vote_avg, vote_count, popularity, genre_ids, poster_path)')
-      .eq('framework_id', fwId).in('title_id', ids.slice(i, i + 300)), 'profiles') as unknown as Row[]));
+    const chunk = ids.slice(i, i + 300);
+    metas.push(...(must(await db().from('kb_titles').select('id, tmdb_id, is_tv, title, year, vote_avg, vote_count, popularity, genre_ids, poster_path').in('id', chunk), 'titles') as Meta[]));
+    for (const p of must(await db().from('kb_title_profiles').select('title_id, vals, familiarity').eq('framework_id', fwId).in('title_id', chunk), 'profiles') as Prof[]) profs.set(p.title_id, p);
   }
+  const rows = [...profs.values()];
 
   // Feature vector: every slot of dimensions that apply to both formats,
   // z-scored across the catalogue; choice-option slots at half weight.
@@ -42,16 +46,17 @@ export async function loadCatalogue(fw: CompiledFramework, fwId: number): Promis
     if (d.appliesTo !== 'all') continue;
     for (let k = 0; k < d.slotCount; k++) slots.push({ idx: d.slotStart - 1 + k, w: d.type === 'choice' ? 0.5 : 1, key: d.type === 'choice' ? `${d.key}:${d.options[k]}` : d.key, scalar: d.type !== 'choice' });
   }
-  const mu = slots.map((s) => rows.reduce((a, r) => a + (r.vals[s.idx] ?? 0), 0) / rows.length);
-  const sd = slots.map((s, j) => Math.sqrt(rows.reduce((a, r) => a + ((r.vals[s.idx] ?? 0) - mu[j]) ** 2, 0) / rows.length) || 1);
+  const n = rows.length || 1;
+  const mu = slots.map((s) => rows.reduce((a, r) => a + (r.vals[s.idx] ?? 0), 0) / n);
+  const sd = slots.map((s, j) => Math.sqrt(rows.reduce((a, r) => a + ((r.vals[s.idx] ?? 0) - mu[j]) ** 2, 0) / n) || 1);
 
   const out = new Map<string, CatTitle>();
-  for (const r of rows) {
-    const t = r.kb_titles;
-    const z = slots.map((s, j) => (((r.vals[s.idx] ?? mu[j]) - mu[j]) / sd[j]) * s.w);
-    const traits = slots.map((s, j) => ({ s, z: z[j] })).filter((x) => x.s.scalar && x.z > 1).sort((a, b) => b.z - a.z).slice(0, 5).map((x) => x.s.key.replace(/^(genre|theme|content)_/, '').replace(/_/g, ' '));
+  for (const t of metas) {
+    const r = profs.get(t.id);
+    const z = r ? slots.map((s, j) => (((r.vals[s.idx] ?? mu[j]) - mu[j]) / sd[j]) * s.w) : null;
+    const traits = z ? slots.map((s, j) => ({ s, z: z[j] })).filter((x) => x.s.scalar && x.z > 1).sort((a, b) => b.z - a.z).slice(0, 5).map((x) => x.s.key.replace(/^(genre|theme|content)_/, '').replace(/_/g, ' ')) : [];
     const key = titleKey(t.is_tv, t.tmdb_id);
-    out.set(key, { id: r.title_id, key, tmdb: t.tmdb_id, isTv: t.is_tv, title: t.title, year: t.year, voteAvg: t.vote_avg, voteCount: t.vote_count, popularity: t.popularity, genreIds: t.genre_ids ?? [], poster: t.poster_path, vec: z, familiarity: r.familiarity, traits });
+    out.set(key, { id: t.id, key, tmdb: t.tmdb_id, isTv: t.is_tv, title: t.title, year: t.year, voteAvg: t.vote_avg, voteCount: t.vote_count, popularity: t.popularity, genreIds: t.genre_ids ?? [], poster: t.poster_path, vec: z, familiarity: r?.familiarity ?? null, traits });
   }
   return out;
 }
@@ -103,13 +108,13 @@ export function rankKB(visible: Map<string, TitleStat>, catalogue: Map<string, C
   const items: { vec: number[]; w: number; fam: number }[] = [];
   for (const s of visible.values()) {
     const c = catalogue.get(s.key);
-    if (!c) continue;
+    if (!c?.vec) continue;
     const ageDays = (now - Date.parse(s.lastAt)) / DAY;
     const recency = bulk.has(s.key) || s.lastAt < '2005' ? 0.3 : Math.exp(-ageDays / 365);
     const damp = 0.35 + 0.65 * recency;
     const dropped = s.isTv && s.episodes <= 2 && ageDays > 60;           // sampled and abandoned
     const engagement = s.isTv ? Math.min(1.5, 0.4 + s.episodes / 10) : 1 + 0.5 * Math.min(s.plays - 1, 2);
-    items.push({ vec: c.vec, w: dropped ? -0.4 * damp : engagement * damp, fam: c.familiarity ?? 70 });
+    items.push({ vec: c.vec!, w: dropped ? -0.4 * damp : engagement * damp, fam: c.familiarity ?? 70 });
   }
   const pos = items.filter((i) => i.w > 0), neg = items.filter((i) => i.w < 0);
   const ratings = [...catalogue.values()].map((c) => c.voteAvg ?? 65);
@@ -118,10 +123,11 @@ export function rankKB(visible: Map<string, TitleStat>, catalogue: Map<string, C
 
   const scores = new Map<string, number>();
   for (const c of catalogue.values()) {
-    if (visible.has(c.key) || (c.voteCount ?? 0) < 30) continue;
-    const sims = pos.map((i) => ({ i, s: cosine(c.vec, i.vec) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 20);
+    if (!c.vec || visible.has(c.key) || (c.voteCount ?? 0) < 30) continue;
+    const cv = c.vec;
+    const sims = pos.map((i) => ({ i, s: cosine(cv, i.vec) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 20);
     let score = sims.reduce((a, { i, s }) => a + i.w * s * s * (0.6 + 0.4 * i.fam / 100), 0);
-    const nsims = neg.map((i) => ({ w: i.w, s: cosine(c.vec, i.vec) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 5);
+    const nsims = neg.map((i) => ({ w: i.w, s: cosine(cv, i.vec) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 5);
     score -= nsims.reduce((a, { w, s }) => a + Math.abs(w) * s * s, 0);
     const trust = 0.6 + 0.4 * ((c.familiarity ?? 70) / 100);
     const quality = 1 + 0.1 * Math.max(-2, Math.min(2, ((c.voteAvg ?? rMu) - rMu) / rSd));
@@ -154,21 +160,53 @@ function traktArrays(visible: Map<string, TitleStat>) {
   return { watchedMovies, watchedShows };
 }
 
-/** B — knowledge base retrieval (A's top 60) re-ranked by the same LLM the control uses. */
-export async function rankKBPlusAI(visible: Map<string, TitleStat>, aRanked: string[], catalogue: Map<string, CatTitle>): Promise<{ ranked: string[]; costUsd: number; tokens: number }> {
-  const pool = aRanked.slice(0, 60).map((k) => catalogue.get(k)!);
+/** Viewer history exactly as B and E both see it (same wording, same caps). */
+function historyBlock(visible: Map<string, TitleStat>): string {
   const { watchedMovies, watchedShows } = traktArrays(visible);
   const recentM = watchedMovies.slice(0, 50).map((m) => `${m.movie.title} (${m.movie.year})`).join(', ');
   const recentS = watchedShows.slice(0, 30).map((s) => `${s.show.title} (${s.show.year}, ${visible.get(titleKey(true, s.show.ids.tmdb))?.episodes ?? 0} eps)`).join(', ');
   const lovedM = watchedMovies.filter((m) => m.plays > 1).sort((a, b) => b.plays - a.plays).slice(0, 15).map((m) => `${m.movie.title} (×${m.plays})`).join(', ');
+  return `VIEWER HISTORY (newest first)
+- Films: ${recentM || 'none'}
+- TV: ${recentS || 'none'}
+${lovedM ? `- Rewatched films: ${lovedM}` : ''}`;
+}
+
+/** E — direct Qwen over the same catalogue universe, with NO Jev input:
+ * no retrieval, no traits, no familiarity. Candidates are every unwatched
+ * catalogue title (title, year, format only), shuffled with a fixed seed so
+ * list order carries no ranking signal. Same model, history and rules as B. */
+export async function rankDirectQwen(visible: Map<string, TitleStat>, catalogue: Map<string, CatTitle>, seed: number): Promise<{ ranked: string[]; costUsd: number; tokens: number; poolSize: number }> {
+  let x = seed >>> 0 || 1;
+  const rand = () => ((x = (x * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const pool = [...catalogue.values()].filter((c) => !visible.has(c.key));
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const cands = pool.map((c, i) => `${i + 1}. ${c.title} (${c.year}) · ${c.isTv ? 'TV' : 'film'}`).join('\n');
+  const prompt = `/no_think
+You are a recommendation engine for one viewer. From the CANDIDATES below, choose the 20 they are most likely to actually watch next, best first.
+
+${historyBlock(visible)}
+
+CANDIDATES
+${cands}
+
+Rules: only pick from the candidates; use their numbers; balance films and TV the way this viewer does; prefer genuine taste matches over famous titles.
+Output ONLY JSON: {"picks":[numbers, best first]}`;
+  const r = await llm([{ role: 'user', content: prompt }], 400);
+  const nums = (r.content?.match(/\[([\d,\s]+)\]/)?.[1] ?? '').split(',').map((n) => Number(n.trim())).filter((n) => n >= 1 && n <= pool.length);
+  const ranked = [...new Set(nums)].map((n) => pool[n - 1].key);
+  return { ranked, costUsd: r.usage?.cost ?? 0, tokens: (r.usage?.prompt_tokens ?? 0) + (r.usage?.completion_tokens ?? 0), poolSize: pool.length };
+}
+
+/** B — knowledge base retrieval (A's top 60) re-ranked by the same LLM the control uses. */
+export async function rankKBPlusAI(visible: Map<string, TitleStat>, aRanked: string[], catalogue: Map<string, CatTitle>): Promise<{ ranked: string[]; costUsd: number; tokens: number }> {
+  const pool = aRanked.slice(0, 60).map((k) => catalogue.get(k)!);
+  const history = historyBlock(visible);
   const cands = pool.map((c, i) => `${i + 1}. ${c.title} (${c.year}) · ${c.isTv ? 'TV' : 'film'} · ${c.traits.join(', ') || 'no standout traits'}`).join('\n');
   const prompt = `/no_think
 You are a recommendation engine for one viewer. From the CANDIDATES below, choose the 20 they are most likely to actually watch next, best first.
 
-VIEWER HISTORY (newest first)
-- Films: ${recentM || 'none'}
-- TV: ${recentS || 'none'}
-${lovedM ? `- Rewatched films: ${lovedM}` : ''}
+${history}
 
 CANDIDATES (with their most distinctive traits)
 ${cands}
@@ -207,21 +245,21 @@ export async function rankDirectAI(visible: Map<string, TitleStat>, rounds: numb
     const done = text.split('\n').filter((l) => l.startsWith('data: ')).map((l) => { try { return JSON.parse(l.slice(6)); } catch { return null; } }).find((e) => e?.t === 'd');
     if (!done) { log(`    C round ${round + 1}: no result (${res.status} ${text.slice(0, 120)})`); messages.pop(); continue; }
     messages.push({ role: 'assistant', content: done.r });
+    if (process.env.KB_DEBUG) log(`    C round ${round + 1}: movies=${JSON.stringify(done.m)} shows=${JSON.stringify(done.s)}`);
     const add = async (titles: string[], years: (number | null)[], isTv: boolean) => {
       for (let i = 0; i < titles.length; i++) {
         const title = titles[i].replace(/\s*\(\d{4}\)\s*$/, '').trim();
         const stated = titles[i].match(/\((\d{4})\)/)?.[1];
         const year = years?.[i] ?? (stated ? Number(stated) : null);
-        if (picks.some((p) => p.title.toLowerCase() === title.toLowerCase())) continue;
-        // Resolve like the app: stated type first, then the other type.
-        let id = year ? await searchTitle(title, year, isTv).catch(() => null) : null;
-        let tv = isTv;
-        if (!id && year) { id = await searchTitle(title, year, !isTv).catch(() => null); tv = !isTv; }
-        picks.push({ title, year: year || null, isTv: tv, key: id ? titleKey(tv, id) : null });
+        if (picks.some((p) => p.title.toLowerCase() === title.toLowerCase())) continue;  // the control repeats itself across rounds
+        // Resolve exactly as the app does (ported searchTitleWithFallback).
+        const hit = await resolveLikeApp(title, year, isTv ? 'tv' : 'movie').catch(() => null);
+        picks.push({ title, year: year || null, isTv: hit?.isTv ?? isTv, key: hit ? titleKey(hit.isTv, hit.id) : null });
       }
     };
-    await add(done.m ?? [], done.my ?? [], false);
-    await add(done.s ?? [], done.sy ?? [], true);
+    // Like the app: at most 10 of each type per reply.
+    await add((done.m ?? []).slice(0, 10), done.my ?? [], false);
+    await add((done.s ?? []).slice(0, 10), done.sy ?? [], true);
   }
   return { picks, calls: rounds };
 }
@@ -247,7 +285,8 @@ export function metrics(r: SystemResult, fold: Fold, catalogue: Map<string, CatT
   const tot = [...genres.values()].reduce((a, b) => a + b, 0);
   const entropy = tot ? -[...genres.values()].reduce((a, n) => a + (n / tot) * Math.log2(n / tot), 0) : 0;
   let pd = 0, pn = 0;
-  for (let i = 0; i < known.length; i++) for (let j = i + 1; j < known.length; j++) { pd += 1 - cosine(known[i].vec, known[j].vec); pn++; }
+  const vecs = known.map((c) => c.vec).filter((v): v is number[] => !!v);
+  for (let i = 0; i < vecs.length; i++) for (let j = i + 1; j < vecs.length; j++) { pd += 1 - cosine(vecs[i], vecs[j]); pn++; }
   const votes = known.map((c) => c.voteCount ?? 0).sort((a, b) => a - b);
   const bad = top.filter((k) => !k).length + known.filter((c) => (c.voteAvg ?? 0) < 60 || (c.voteCount ?? 0) < 100).length;
   const fullRank = r.fullRanks ? fold.heldOut.map((h) => r.fullRanks!.get(h.key) ?? Infinity).filter(Number.isFinite) : [];

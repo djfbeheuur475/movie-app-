@@ -3,17 +3,20 @@ import { getFramework, LATEST_FRAMEWORK } from './framework.ts';
 import { db, must } from './db.ts';
 import { loadMembers } from './trakt_export.ts';
 import {
-  loadCatalogue, buildFolds, rankKB, rankPopular, rankKBPlusAI, rankDirectAI, metrics, label,
+  loadCatalogue, buildFolds, rankKB, rankPopular, rankKBPlusAI, rankDirectAI, rankDirectQwen, metrics, label,
   type SystemResult, type CatTitle,
 } from './experiment.ts';
 
 const QWEN_IN = 0.12 / 1e6, QWEN_OUT = 0.24 / 1e6;   // OpenRouter qwen/qwen3-14b, 2026-09-23
 
-export async function runExperiment(root: string, membersPath: string, nFolds: number, rounds: number, log: (m: string) => void) {
+// Systems: A_kb, B_kb_ai, C_direct_ai (control), D_popular, E_direct_qwen.
+export const ALL_SYSTEMS = ['A_kb', 'B_kb_ai', 'C_direct_ai', 'D_popular', 'E_direct_qwen'];
+
+export async function runExperiment(root: string, membersPath: string, nFolds: number, rounds: number, log: (m: string) => void, systems = ALL_SYSTEMS, outName = 'results.json') {
   const fw = getFramework(LATEST_FRAMEWORK);
   const fwId = must(await db().from('kb_frameworks').select('id').eq('version', fw.version).single(), 'fw').id as number;
   const catalogue = await loadCatalogue(fw, fwId);
-  log(`Catalogue: ${catalogue.size} profiled titles (framework ${fw.version})`);
+  log(`Catalogue: ${catalogue.size} titles, ${[...catalogue.values()].filter((c) => c.vec).length} with Jev ${fw.version} profiles`);
   const members = loadMembers(`${root}${membersPath}`);
   const all: unknown[] = [];
 
@@ -28,21 +31,34 @@ export async function runExperiment(root: string, membersPath: string, nFolds: n
         fullRanks: new Map(ranked.map((k, i) => [k, i + 1])), costUsd: 0, tokens: 0, ...extra,
       });
 
-      const P = toResult('P_popular', rankPopular(fold.visible, catalogue));
-      const a = rankKB(fold.visible, catalogue, fold.cutoff, m.bulkKeys);
-      const A = toResult('A_kb', a.ranked);
-      const b = await rankKBPlusAI(fold.visible, a.ranked, catalogue);
-      const B = toResult('B_kb_ai', b.ranked, { costUsd: b.costUsd, tokens: b.tokens });
+      const want = (x: string) => systems.includes(x);
+      const results: SystemResult[] = [];
+      if (want('D_popular')) results.push(toResult('D_popular', rankPopular(fold.visible, catalogue)));
+      if (want('A_kb') || want('B_kb_ai')) {
+        const a = rankKB(fold.visible, catalogue, fold.cutoff, m.bulkKeys);
+        if (want('A_kb')) results.push(toResult('A_kb', a.ranked));
+        if (want('B_kb_ai')) {
+          const b = await rankKBPlusAI(fold.visible, a.ranked, catalogue);
+          results.push(toResult('B_kb_ai', b.ranked, { costUsd: b.costUsd, tokens: b.tokens }));
+        }
+      }
+      if (want('E_direct_qwen')) {
+        // Seed per member+fold: reproducible shuffle, independent of other systems.
+        const e = await rankDirectQwen(fold.visible, catalogue, fold.index * 7919 + m.name.length);
+        results.push(toResult('E_direct_qwen', e.ranked, { costUsd: e.costUsd, tokens: e.tokens }));
+        log(`    E: ${e.ranked.length} picks from a pool of ${e.poolSize} (${e.tokens} tokens)`);
+      }
+      if (want('C_direct_ai')) {
+        const t0 = Date.now();
+        const c = await rankDirectAI(fold.visible, rounds, log);
+        results.push({
+          system: 'C_direct_ai', top: c.picks.map((p) => p.key), labels: c.picks.map((p) => `${p.title} (${p.year ?? '?'})${p.isTv ? ' [TV]' : ''}${p.key ? '' : ' ✗unresolved'}`),
+          costUsd: 0, tokens: 0,
+        });
+        log(`    C: ${c.picks.length} titles from ${c.calls} calls in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+      }
 
-      const t0 = Date.now();
-      const c = await rankDirectAI(fold.visible, rounds, log);
-      const C: SystemResult = {
-        system: 'C_direct_ai', top: c.picks.map((p) => p.key), labels: c.picks.map((p) => `${p.title} (${p.year ?? '?'})${p.isTv ? ' [TV]' : ''}${p.key ? '' : ' ✗unresolved'}`),
-        costUsd: 0, tokens: 0,
-      };
-      log(`    C: ${c.picks.length} titles from ${c.calls} calls in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-
-      for (const r of [P, A, B, C]) {
+      for (const r of results) {
         const mm = metrics(r, fold, catalogue, watchlist);
         log(`    ${r.system.padEnd(12)} hits@5/10/20 ${mm.hits5}/${mm.hits10}/${mm.hits20}  relevant ${mm.relevant}  median held-out rank ${mm.medianHeldOutRank ?? '–'}`);
         all.push({
@@ -62,7 +78,7 @@ export async function runExperiment(root: string, membersPath: string, nFolds: n
   const cReqs = (reqs ?? []).filter((r) => r.user_id === expUser);
   const cCost = cReqs.reduce((s, r) => s + (r.prompt_tokens ?? 0) * QWEN_IN + (r.completion_tokens ?? 0) * QWEN_OUT, 0);
 
-  const out = `${root}experiment/results.json`;
+  const out = `${root}experiment/${outName}`;
   writeFileSync(out, JSON.stringify({ generatedAt: new Date().toISOString(), framework: fw.version, catalogueSize: catalogue.size, controlCalls: cReqs.length, controlCostUsd: cCost, rows: all }, null, 1));
   log(`Results → ${out} (control: ${cReqs.length} logged calls ≈ $${cCost.toFixed(4)})`);
 }
