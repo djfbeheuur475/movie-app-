@@ -6,7 +6,8 @@ import * as Notifications from 'expo-notifications';
 import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
-import { StyleSheet, View, AppState, type AppStateStatus } from 'react-native';
+import { StyleSheet, View, AppState, Platform, type AppStateStatus } from 'react-native';
+import '../lib/webAlert';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useWatchlistStore } from '../store/watchlistStore';
@@ -55,6 +56,7 @@ function NotificationTapHandler() {
   const router = useRouter();
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     // Handle tapping a notification when the app is foregrounded or cold-started
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as {
@@ -154,6 +156,8 @@ export default function RootLayout() {
             options={{ presentation: 'card', animation: 'slide_from_right' }}
           />
           <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
+          <Stack.Screen name="taste/index" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="taste/rate" options={{ animation: 'slide_from_bottom' }} />
         </Stack>
         {/* Invisible swipe zone — catches downward swipes from the top edge to reveal the status bar */}
         <GestureDetector gesture={swipeDownGesture}>

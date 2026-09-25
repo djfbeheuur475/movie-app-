@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Config } from '../constants/config';
@@ -10,7 +11,9 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    // Web sign-in is a full-page redirect that lands back with the session in the URL;
+    // native uses an in-app browser and hands the tokens over itself.
+    detectSessionInUrl: Platform.OS === 'web',
     flowType: 'implicit',
   },
 });
@@ -136,6 +139,43 @@ export type Database = {
         };
         Insert: Omit<Database['public']['Tables']['manual_watched']['Row'], 'id' | 'watched_at'>;
         Update: Partial<Database['public']['Tables']['manual_watched']['Insert']>;
+        Relationships: [];
+      };
+      title_ratings: {
+        Row: {
+          user_id: string;
+          tmdb_id: number;
+          media_type: 'movie' | 'tv';
+          title: string;
+          year: number | null;
+          poster_path: string | null;
+          rating: number | null;
+          source: 'rater' | 'recommendation' | 'detail';
+          rated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['title_ratings']['Row'], 'rated_at' | 'year' | 'poster_path' | 'source'> & {
+          year?: number | null;
+          poster_path?: string | null;
+          source?: 'rater' | 'recommendation' | 'detail';
+          rated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['title_ratings']['Insert']>;
+        Relationships: [];
+      };
+      taste_profiles: {
+        Row: {
+          user_id: string;
+          profile: unknown;
+          user_notes: string | null;
+          ratings_count: number;
+          profile_model: string | null;
+          profile_built_at: string | null;
+          rows: unknown;
+          rows_built_at: string | null;
+          updated_at: string;
+        };
+        Insert: { user_id: string; user_notes?: string | null; updated_at?: string };
+        Update: { user_notes?: string | null; updated_at?: string };
         Relationships: [];
       };
       taste_dna: {

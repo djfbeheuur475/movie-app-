@@ -42,6 +42,8 @@ export const RATE_LIMITS: Record<string, number> = {
   recommendations: 50,
   taste_dna: 20,
   summaries: 50,
+  taste_seed: 30,
+  taste_profile: 20,
 };
 
 export const CORS_HEADERS = {

@@ -45,6 +45,7 @@ import PaginatedAIRow from '../../components/home/PaginatedAIRow';
 import NewEpsRow from '../../components/home/NewEpsRow';
 import RecentlyWatchedRow from '../../components/home/RecentlyWatchedRow';
 import TasteModeChip from '../../components/home/TasteModeChip';
+import ForYouSection from '../../components/home/ForYouSection';
 import LoadingSkeleton from '../../components/common/LoadingSkeleton';
 import type { ContentItem } from '../../types';
 
@@ -707,6 +708,10 @@ export default function HomeScreen() {
               showRating
               progressFor={continueProgressFor}
             />
+          )}
+          {/* For You — rows from the viewer's own taste profile (ratings → profile → picks) */}
+          {!!userId && (
+            <ForYouSection userId={userId} movies={traktMovies} shows={traktShows} historyReady={traktReady} />
           )}
           {/* Personal rows — most relevant to the user's current taste */}
           {filteredHiddenGemsItems.length >= 3 && (

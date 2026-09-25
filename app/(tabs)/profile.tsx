@@ -117,6 +117,15 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Taste */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Taste</Text>
+          <View style={styles.settingsCard}>
+            <SettingRow icon="✦" label="Your taste profile" value="What you like, in plain English" onPress={() => router.push('/taste')} />
+            <SettingRow icon="👍" label="Rate titles" value="Sharpen your recommendations" onPress={() => router.push('/taste/rate')} />
+          </View>
+        </View>
+
         {/* API Keys */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>API Keys</Text>

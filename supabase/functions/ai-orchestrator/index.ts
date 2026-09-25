@@ -6,6 +6,7 @@ import { assembleContext } from "./lib/context.ts";
 import { handlePing } from "./actions/ping.ts";
 import { handleHomepage } from "./actions/homepage.ts";
 import { handleIndexTrakt } from "./actions/index_trakt.ts";
+import { handleForYou, handleTasteProfile, handleTasteSeed } from "./actions/taste.ts";
 
 // Phase 8: import handleChat from actions/chat.ts
 
@@ -52,7 +53,8 @@ Deno.serve(async (req) => {
     // meant routine repeat opens (or a burst of testing) could exhaust the
     // daily quota before a single real AI generation ever ran.
     let ctx;
-    if (action === "homepage") {
+    // for_you is cache-first like homepage and rate-limits its own regenerations.
+    if (action === "homepage" || action === "for_you") {
       ctx = await assembleContext(admin, user.id, body, openRouterKey);
     } else {
       const [{ data: allowed, error: rlErr }, assembledCtx] = await Promise.all([
@@ -76,6 +78,15 @@ Deno.serve(async (req) => {
 
       case "index_trakt":
         return handleIndexTrakt(ctx);
+
+      case "taste_seed":
+        return handleTasteSeed(ctx, Deno.env.get("TMDB_API_KEY") ?? "");
+
+      case "taste_profile":
+        return handleTasteProfile(ctx);
+
+      case "for_you":
+        return handleForYou(ctx, Deno.env.get("TMDB_API_KEY") ?? "");
 
       // Phase 8: case "chat": return handleChat(ctx);
 
