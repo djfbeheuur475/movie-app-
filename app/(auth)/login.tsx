@@ -174,7 +174,9 @@ export default function LoginScreen() {
         // out of the returning URL (detectSessionInUrl) on /auth/callback.
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: `${window.location.origin}/auth/callback` },
+          // Include the site's base path (/movie-app-/app on GitHub Pages) — without it the
+          // URL misses Supabase's redirect allow-list and it falls back to the Site URL.
+          options: { redirectTo: `${window.location.origin}${process.env.EXPO_BASE_URL ?? ''}/auth/callback` },
         });
         if (error) throw error;
         return;
