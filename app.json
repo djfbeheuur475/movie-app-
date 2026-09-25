@@ -30,7 +30,12 @@
     ],
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "single",
+      "name": "NextUp",
+      "shortName": "NextUp",
+      "themeColor": "#0a0a0a",
+      "backgroundColor": "#0a0a0a"
     },
     "plugins": [
       "expo-router",

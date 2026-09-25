@@ -65,7 +65,8 @@
     "android:apk": "eas build --platform android --profile apk",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "node --test 'tests/**/*.test.ts'"
+    "test": "node --test 'tests/**/*.test.ts'",
+    "build:web": "bash scripts/build-web.sh"
   },
   "private": true
 }

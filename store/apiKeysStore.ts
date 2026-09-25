@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../lib/secureStorage';
 import { supabase } from '../lib/supabase';
 import { refreshTraktToken, traktTokenExpiry, TRAKT_DEFAULT_CLIENT_ID } from '../lib/trakt';
 

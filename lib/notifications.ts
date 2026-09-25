@@ -1,7 +1,10 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-Notifications.setNotificationHandler({
+// Local scheduled notifications don't exist on web — every entry point is a no-op there.
+const unsupported = Platform.OS === 'web';
+
+if (!unsupported) Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
     shouldShowList: true,
@@ -11,6 +14,7 @@ Notifications.setNotificationHandler({
 });
 
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (unsupported) return false;
   const { status: existing } = await Notifications.getPermissionsAsync();
   if (existing === 'granted') return true;
   const { status } = await Notifications.requestPermissionsAsync();
@@ -37,6 +41,7 @@ export interface EpisodeAlert {
 }
 
 export async function scheduleEpisodeNotifications(alerts: EpisodeAlert[]) {
+  if (unsupported) return;
   // Cancel only episode notifications — leave nextup-follow-* untouched.
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
@@ -102,6 +107,7 @@ export async function scheduleFollowNotification(
   mediaType: 'movie' | 'tv',
   airDate: string,
 ): Promise<void> {
+  if (unsupported) return;
   const identifier = `nextup-follow-${tmdbId}`;
   const [y, m, d] = airDate.split('-').map(Number);
   const fireAt = new Date(y, m - 1, d, 9, 0, 0, 0);
@@ -146,6 +152,7 @@ export async function scheduleFollowNotification(
 }
 
 export async function cancelFollowNotification(tmdbId: number): Promise<void> {
+  if (unsupported) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(`nextup-follow-${tmdbId}`);
   } catch {

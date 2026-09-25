@@ -169,6 +169,16 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
+      if (Platform.OS === 'web') {
+        // Full-page redirect to Google and back; supabase-js picks the session
+        // out of the returning URL (detectSessionInUrl) on /auth/callback.
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: `${window.location.origin}/auth/callback` },
+        });
+        if (error) throw error;
+        return;
+      }
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: REDIRECT_URL, skipBrowserRedirect: true },

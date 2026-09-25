@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './secureStorage';
 import { queryClient } from './queryClient';
 import { useApiKeysStore } from '../store/apiKeysStore';
 import { useWatchlistStore } from '../store/watchlistStore';
