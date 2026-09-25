@@ -2,12 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import PosterCard from '../common/PosterCard';
 import ContentRow from './ContentRow';
-import { compactHistory, fetchForYou, loadTasteProfile, rateTitle, toContentItem, type ForYouItem, type ForYouRow } from '../../lib/taste';
-import { getTemporalContext } from '../../lib/tasteDna';
+import { rateTitle, toContentItem, type ForYouItem, type ForYouRow } from '../../lib/taste';
+import { useForYou } from '../../hooks/useForYou';
 import type { TraktWatchedMovie, TraktWatchedShow } from '../../lib/trakt';
 
 const CARD_WIDTH = 132;
@@ -25,22 +24,7 @@ interface Props {
  */
 export default function ForYouSection({ userId, movies, shows, historyReady }: Props) {
   const router = useRouter();
-  const dateKey = getTemporalContext().dateKey.slice(0, 10);
-
-  const profile = useQuery({
-    queryKey: ['taste-profile', userId],
-    queryFn: () => loadTasteProfile(userId),
-    staleTime: 1000 * 60 * 10,
-  });
-  const hasProfile = !!profile.data?.profile;
-
-  const rows = useQuery({
-    queryKey: ['for-you', userId, dateKey, profile.data?.builtAt ?? null],
-    queryFn: () => fetchForYou(compactHistory(movies, shows), dateKey),
-    enabled: hasProfile && historyReady,
-    staleTime: 1000 * 60 * 60,
-    retry: 1,
-  });
+  const { profile, rows, hasProfile } = useForYou(userId, movies, shows, historyReady);
 
   if (profile.isLoading) return null;
 

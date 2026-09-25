@@ -31,6 +31,8 @@ import { pickDailyCuratedLists, fetchCuratedListPage, type CuratedFallbackList }
 import { isMismatchedNiche, rankItemsByProfile, buildScoredWatchPool } from '../../lib/recommendations';
 import type { RecsContext, WatchSeed } from '../../lib/recommendations';
 import { useAIHomeFeed } from '../../hooks/useAIHomeFeed';
+import { useForYou } from '../../hooks/useForYou';
+import { toContentItem } from '../../lib/taste';
 import { useBecauseYouWatched } from '../../hooks/useBecauseYouWatched';
 import { useIfYouLiked } from '../../hooks/useIfYouLiked';
 import { useHiddenGems } from '../../hooks/useHiddenGems';
@@ -342,11 +344,23 @@ export default function HomeScreen() {
   const traktShowFingerprint = (traktShows ?? []).slice(0, 10).map((s) => s.show.ids.tmdb).join(',');
 
 
+  // ─── For You (taste profile) ──────────────────────────────────────────────
+  // Once someone has a taste profile, For You replaces the generic rows (TMDB
+  // "similar titles", the older AI list feed, hidden gems) — those don't read the
+  // profile and skew to blockbusters the viewer has said aren't for them.
+  const forYou = useForYou(userId, traktMovies, traktShows, traktReady);
+  const tasteProfiled = forYou.hasProfile;
+  const forYouHero = useMemo(
+    // The top pick from each row — one banner that previews the range, not just Safe bets.
+    () => (forYou.rows.data?.rows ?? []).map((r) => r.items[0]).filter(Boolean).map((i) => toContentItem(i, i.reason)),
+    [forYou.rows.data],
+  );
+
   // ─── AI Home Feed (orchestrator) ──────────────────────────────────────────
   const { data: aiFeed, isLoading: aiFeedLoading } = useAIHomeFeed({
     watchedMovies: traktMovies ?? [],
     watchedShows: traktShows ?? [],
-    enabled: traktReady && !!userId,
+    enabled: traktReady && !!userId && forYou.profile.isFetched && !tasteProfiled,
   });
 
   const aiHeroSection = aiFeed?.sections.find((s) => s.type === 'hero');
@@ -629,6 +643,7 @@ export default function HomeScreen() {
 
   // Hero carousel — AI items when available, otherwise trending sorted by affinity
   const heroItems: ContentItem[] = useMemo(() => {
+    if (tasteProfiled) return forYouHero;
     if (aiHeroSection?.items.length) return aiHeroSection.items;
 
     if (!trending?.length) return [];
@@ -651,7 +666,7 @@ export default function HomeScreen() {
     }
 
     return qualified.slice(0, 10);
-  }, [aiHeroSection, trending, genreAffinity]);
+  }, [tasteProfiled, forYouHero, aiHeroSection, trending, genreAffinity]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -690,7 +705,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Hero */}
-        {trendingLoading ? (
+        {(tasteProfiled ? forYou.rows.isLoading : trendingLoading) ? (
           <LoadingSkeleton width="100%" height={HERO_SKELETON_HEIGHT} borderRadius={0} />
         ) : heroItems.length > 0 ? (
           <HeroSection items={heroItems} />
@@ -714,7 +729,7 @@ export default function HomeScreen() {
             <ForYouSection userId={userId} movies={traktMovies} shows={traktShows} historyReady={traktReady} />
           )}
           {/* Personal rows — most relevant to the user's current taste */}
-          {filteredHiddenGemsItems.length >= 3 && (
+          {!tasteProfiled && filteredHiddenGemsItems.length >= 3 && (
             <ContentRow
               title="Hidden Gems For You"
               subtitle="Critically loved, under the radar — matched to your taste"
@@ -724,7 +739,7 @@ export default function HomeScreen() {
             />
           )}
           {/* AI-curated rows — Brain + Candidate Builder + Curator pipeline */}
-          {!userId ? (
+          {tasteProfiled ? null : !userId ? (
             // Guest (no account) — no server session to build an AI/personalized
             // feed with (any cached aiFeed/thematic-row data here would be stale
             // leftovers from a previous signed-in session), so serve the same
@@ -778,7 +793,7 @@ export default function HomeScreen() {
               isLoading={newEpsLoading}
             />
           )}
-          {filteredIylRows.map(({ seed, items }) => (
+          {!tasteProfiled && filteredIylRows.map(({ seed, items }) => (
             <ContentRow
               key={`if-you-liked-${seed.tmdbId}`}
               title={`If you liked ${seed.title}...`}
@@ -795,7 +810,7 @@ export default function HomeScreen() {
               showRating
             />
           ))}
-          {(bywRows ?? []).map(({ seed, items }) => (
+          {!tasteProfiled && (bywRows ?? []).map(({ seed, items }) => (
             <ContentRow
               key={`byw-${seed.tmdbId}`}
               title={`Because you watched ${seed.title}`}
