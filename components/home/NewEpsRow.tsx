@@ -12,8 +12,7 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constants/theme';
 import { PosterSkeleton } from '../common/LoadingSkeleton';
 import { getPosterUrl } from '../../lib/tmdb';
-import { useTraktWatched } from '../../hooks/useTraktWatched';
-import WatchedBadge from '../common/WatchedBadge';
+import type { NewEpisodeEntry } from '../../lib/newEpisodes';
 
 const CARD_WIDTH = 120;
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
@@ -38,24 +37,25 @@ function formatAirDate(dateStr: string): { dayLabel: string; dateLabel: string }
   return { dayLabel, dateLabel };
 }
 
-function NewEpsCard({ show, watched }: { show: any; watched: boolean }) {
+function NewEpsCard({ show, entry }: { show: any; entry: NewEpisodeEntry }) {
   const router = useRouter();
-  const ep = show.next_episode_to_air;
-  if (!ep) return null;
-
   const posterUrl = getPosterUrl(show.poster_path, 'medium');
-  const { dayLabel, dateLabel } = formatAirDate(ep.air_date);
-  const epCode = `S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`;
-  const isToday = dayLabel === 'TODAY';
+  const { dayLabel, dateLabel } = formatAirDate(entry.airDate);
+  const epCode = `S${String(entry.season).padStart(2, '0')}E${String(entry.episode).padStart(2, '0')}`;
+  const watchable = entry.status !== 'upcoming';
+  const badge = entry.status === 'upcoming'
+    ? dayLabel
+    : entry.status === 'today' ? 'TODAY' : entry.unwatchedCount > 1 ? `${entry.unwatchedCount} NEW` : 'NEW';
 
   return (
     <TouchableOpacity
       style={styles.card}
       onPress={() => router.push(`/title/${show.id}?type=tv`)}
       activeOpacity={0.8}
+      accessibilityLabel={`${show.name}, ${epCode}, ${watchable ? 'out now' : `airs ${dateLabel}`}`}
     >
-      {/* Poster */}
-      <View style={styles.posterWrap}>
+      {/* Poster — ringed when there's something to watch right now */}
+      <View style={[styles.posterWrap, watchable && styles.posterWrapNew]}>
         {posterUrl ? (
           <Image source={{ uri: posterUrl }} style={styles.posterImg} contentFit="cover" transition={300} />
         ) : (
@@ -64,27 +64,20 @@ function NewEpsCard({ show, watched }: { show: any; watched: boolean }) {
           </View>
         )}
 
-        {/* Rating */}
         {show.vote_average > 0 && (
           <View style={styles.ratingBadge}>
             <Text style={styles.ratingText}>★ {show.vote_average.toFixed(1)}</Text>
           </View>
         )}
 
-        {watched && <WatchedBadge />}
-
-        {/* Day badge */}
-        <View style={[styles.dayBadge, isToday && styles.dayBadgeToday]}>
-          <Text style={[styles.dayBadgeText, isToday && styles.dayBadgeTextToday]}>
-            {dayLabel}
-          </Text>
+        <View style={[styles.dayBadge, watchable && styles.dayBadgeNew]}>
+          <Text style={[styles.dayBadgeText, watchable && styles.dayBadgeTextNew]}>{badge}</Text>
         </View>
       </View>
 
-      {/* Text info */}
       <Text style={styles.epInfo} numberOfLines={1}>
         {epCode}
-        <Text style={styles.epDate}>{`  ·  ${dateLabel}`}</Text>
+        <Text style={styles.epDate}>{watchable ? '  ·  Out now' : `  ·  ${dateLabel}`}</Text>
       </Text>
     </TouchableOpacity>
   );
@@ -92,33 +85,34 @@ function NewEpsCard({ show, watched }: { show: any; watched: boolean }) {
 
 interface Props {
   title: string;
-  shows: any[];
+  subtitle?: string;
+  items: { show: any; entry: NewEpisodeEntry }[];
   isLoading?: boolean;
 }
 
 const NEW_EPS_ITEM_SIZE = CARD_WIDTH + 10;
 
-export default function NewEpsRow({ title, shows, isLoading }: Props) {
+export default function NewEpsRow({ title, subtitle, items, isLoading }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
   const hasAnimated = useRef(false);
-  const { isEpisodeWatched } = useTraktWatched();
 
   useEffect(() => {
     if (hasAnimated.current) return;
-    if (isLoading || shows.length > 0) {
+    if (isLoading || items.length > 0) {
       hasAnimated.current = true;
       Animated.parallel([
         Animated.timing(opacity, { toValue: 1, duration: 400, useNativeDriver: true }),
         Animated.timing(translateY, { toValue: 0, duration: 400, useNativeDriver: true }),
       ]).start();
     }
-  }, [isLoading, shows.length]);
+  }, [isLoading, items.length]);
 
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{title}</Text>
+        {!!subtitle && <Text style={styles.headerSubtitle}>{subtitle}</Text>}
       </View>
 
       {isLoading ? (
@@ -132,20 +126,16 @@ export default function NewEpsRow({ title, shows, isLoading }: Props) {
         />
       ) : (
         <FlatList
-          data={shows}
+          data={items}
           horizontal
           showsHorizontalScrollIndicator={false}
-          keyExtractor={(s) => String(s.id)}
+          keyExtractor={(x) => String(x.show.id)}
           contentContainerStyle={styles.list}
           getItemLayout={(_, index) => ({ length: NEW_EPS_ITEM_SIZE, offset: Spacing.lg + NEW_EPS_ITEM_SIZE * index, index })}
           initialNumToRender={5}
           maxToRenderPerBatch={5}
           windowSize={3}
-          renderItem={({ item }) => {
-            const ep = item.next_episode_to_air;
-            const watched = ep ? isEpisodeWatched(item.id, ep.season_number, ep.episode_number) : false;
-            return <NewEpsCard show={item} watched={watched} />;
-          }}
+          renderItem={({ item }) => <NewEpsCard show={item.show} entry={item.entry} />}
         />
       )}
     </Animated.View>
@@ -155,13 +145,11 @@ export default function NewEpsRow({ title, shows, isLoading }: Props) {
 const styles = StyleSheet.create({
   container: { marginBottom: Spacing.xl },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
   },
   headerTitle: { ...Typography.heading, color: Colors.text },
+  headerSubtitle: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
   list: { paddingHorizontal: Spacing.lg },
 
   card: { width: CARD_WIDTH, marginRight: 10 },
@@ -199,14 +187,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5, paddingVertical: 2,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
   },
-  dayBadgeToday: {
+  dayBadgeNew: {
     backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  posterWrapNew: {
+    borderWidth: 2,
     borderColor: Colors.primary,
   },
   dayBadgeText: {
     fontSize: 8, fontWeight: '800', color: '#ccc', letterSpacing: 0.5,
   },
-  dayBadgeTextToday: { color: Colors.background },
+  dayBadgeTextNew: { color: Colors.background },
 
   title: {
     fontSize: 11,

@@ -33,6 +33,8 @@ import type { RecsContext, WatchSeed } from '../../lib/recommendations';
 import { useAIHomeFeed } from '../../hooks/useAIHomeFeed';
 import { useForYou } from '../../hooks/useForYou';
 import { toContentItem } from '../../lib/taste';
+import { buildNewEpisodes, seasonsToFetch, type ShowForNewEpisodes } from '../../lib/newEpisodes';
+import { useTraktWatched } from '../../hooks/useTraktWatched';
 import { useBecauseYouWatched } from '../../hooks/useBecauseYouWatched';
 import { useIfYouLiked } from '../../hooks/useIfYouLiked';
 import { useHiddenGems } from '../../hooks/useHiddenGems';
@@ -191,12 +193,14 @@ export default function HomeScreen() {
       .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
       .map((s) => s.show.ids.tmdb)
       .filter((id): id is number => !!id);
-    const seen = new Set(watchlistShowIds);
-    const merged = [...watchlistShowIds];
-    traktIds.forEach((id) => {
+    // Most recently watched first, so shows being watched right now are never
+    // crowded out of the new-episodes check by a long watchlist.
+    const seen = new Set<number>();
+    const merged: number[] = [];
+    [...traktIds, ...watchlistShowIds].forEach((id) => {
       if (!seen.has(id)) { seen.add(id); merged.push(id); }
     });
-    return merged.slice(0, 24);
+    return merged.slice(0, 30);
   }, [watchlistShowIds, traktShows]);
 
   const { data: newEpsShowDetails, isLoading: newEpsLoading } = useQuery({
@@ -213,23 +217,48 @@ export default function HomeScreen() {
     staleTime: 1000 * 60 * 30,
   });
 
-  const newEpsThisWeek = useMemo((): any[] => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    return (newEpsShowDetails ?? [])
-      .filter((show: any) => {
-        if (!show.next_episode_to_air?.air_date) return false;
-        const [y, m, d] = show.next_episode_to_air.air_date.split('-').map(Number);
-        const airDate = new Date(y, m - 1, d);
-        return airDate >= today && airDate <= weekFromNow;
-      })
-      .sort((a: any, b: any) => {
-        const [ay, am, ad] = a.next_episode_to_air.air_date.split('-').map(Number);
-        const [by, bm, bd] = b.next_episode_to_air.air_date.split('-').map(Number);
-        return new Date(ay, am - 1, ad).getTime() - new Date(by, bm - 1, bd).getTime();
-      });
-  }, [newEpsShowDetails]);
+  // Episode lists for shows watched in the last two weeks whose latest episode
+  // is also recent — needed to find released episodes that haven't been watched.
+  const { isEpisodeWatched } = useTraktWatched();
+  const lastWatchedByShow = useMemo(
+    () => new Map((traktShows ?? []).map((s) => [s.show.ids.tmdb, s.last_watched_at])),
+    [traktShows],
+  );
+  const recentSeasonRequests = useMemo(() => {
+    const now = new Date();
+    const activeSince = now.getTime() - 14 * 24 * 60 * 60 * 1000;
+    return ((newEpsShowDetails ?? []) as any[]).flatMap((show) => {
+      const last = lastWatchedByShow.get(show.id);
+      if (!last || new Date(last).getTime() < activeSince) return [];
+      return seasonsToFetch(show.last_episode_to_air, now).map((season) => ({ showId: show.id as number, season }));
+    });
+  }, [newEpsShowDetails, lastWatchedByShow]);
+  const { data: recentSeasons, isLoading: recentSeasonsLoading } = useQuery({
+    queryKey: ['home-new-eps-seasons', recentSeasonRequests.map((r) => `${r.showId}:${r.season}`)],
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        recentSeasonRequests.map((r) => tmdbApi.getTVSeason(r.showId, r.season).then((d) => ({ ...r, episodes: d.episodes }))),
+      );
+      return results.filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled').map((r) => r.value);
+    },
+    enabled: recentSeasonRequests.length > 0,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const newEpsThisWeek = useMemo(() => {
+    const details = (newEpsShowDetails ?? []) as any[];
+    const shows: ShowForNewEpisodes[] = details.map((show) => ({
+      showId: show.id,
+      lastWatchedAt: lastWatchedByShow.get(show.id) ?? null,
+      episodes: (recentSeasons ?? []).filter((r: any) => r.showId === show.id).flatMap((r: any) => r.episodes),
+      next: show.next_episode_to_air ?? null,
+    }));
+    const byId = new Map(details.map((d) => [d.id, d]));
+    return buildNewEpisodes(shows, isEpisodeWatched, new Date())
+      .map((entry) => ({ show: byId.get(entry.showId), entry }))
+      .filter((x) => x.show);
+  }, [newEpsShowDetails, recentSeasons, lastWatchedByShow, isEpisodeWatched]);
+  const newEpsLoadingAll = newEpsLoading || (recentSeasonRequests.length > 0 && recentSeasonsLoading);
 
   // ─── Continue Watching ────────────────────────────────────────────────────
   // TV shows the user has started but not finished: last watched season < total
@@ -786,11 +815,12 @@ export default function HomeScreen() {
               />
             ))
           ) : null}
-          {(newEpsLoading || newEpsThisWeek.length > 0) && (
+          {(newEpsLoadingAll || newEpsThisWeek.length > 0) && (
             <NewEpsRow
               title="New Eps of Shows You're Watching"
-              shows={newEpsThisWeek}
-              isLoading={newEpsLoading}
+              subtitle="Out now and coming this week"
+              items={newEpsThisWeek}
+              isLoading={newEpsLoadingAll}
             />
           )}
           {!tasteProfiled && filteredIylRows.map(({ seed, items }) => (
