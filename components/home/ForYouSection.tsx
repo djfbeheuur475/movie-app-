@@ -7,6 +7,7 @@ import PosterCard from '../common/PosterCard';
 import ContentRow from './ContentRow';
 import { rateTitle, toContentItem, type ForYouItem, type ForYouRow } from '../../lib/taste';
 import { useForYou } from '../../hooks/useForYou';
+import { filterByMedia, useMediaFilter } from '../../lib/mediaFilter';
 import type { TraktWatchedMovie, TraktWatchedShow } from '../../lib/trakt';
 
 const CARD_WIDTH = 132;
@@ -64,7 +65,8 @@ export default function ForYouSection({ userId, movies, shows, historyReady }: P
 
 function ForYouRowView({ row, userId }: { row: ForYouRow; userId: string }) {
   const [hidden, setHidden] = useState<Set<number>>(new Set());
-  const items = row.items.filter((i) => !hidden.has(i.tmdbId));
+  const media = useMediaFilter();
+  const items = filterByMedia(row.items, media).filter((i) => !hidden.has(i.tmdbId));
   if (items.length === 0) return null;
   return (
     <View style={styles.row}>

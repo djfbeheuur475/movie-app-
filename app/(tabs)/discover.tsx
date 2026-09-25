@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme';
 import { tmdbApi, normalizeMovie, normalizeTVShow } from '../../lib/tmdb';
+import MediaToggle from '../../components/common/MediaToggle';
 import { getListItemsPage } from '../../lib/trakt';
 import { hasGoodMetadata } from '../../lib/quality';
 import ContentRow from '../../components/home/ContentRow';
@@ -206,36 +207,14 @@ export default function DiscoverScreen() {
         </View>
       </View>
 
-      <View style={styles.mediaToggle}>
-        <TouchableOpacity
-          style={[styles.mediaBtn, media === 'movies' && styles.mediaBtnActive]}
-          onPress={() => handleMediaChange('movies')}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="film-outline"
-            size={16}
-            color={media === 'movies' ? Colors.background : Colors.textSecondary}
-          />
-          <Text style={[styles.mediaBtnText, media === 'movies' && styles.mediaBtnTextActive]}>
-            Movies
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.mediaBtn, media === 'shows' && styles.mediaBtnActive]}
-          onPress={() => handleMediaChange('shows')}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="tv-outline"
-            size={16}
-            color={media === 'shows' ? Colors.background : Colors.textSecondary}
-          />
-          <Text style={[styles.mediaBtnText, media === 'shows' && styles.mediaBtnTextActive]}>
-            TV Shows
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <MediaToggle
+        options={[
+          { value: 'movies', label: 'Movies', icon: 'film-outline' },
+          { value: 'shows', label: 'TV Shows', icon: 'tv-outline' },
+        ]}
+        value={media}
+        onChange={handleMediaChange}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {media === 'movies' ? (
@@ -333,29 +312,6 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 2,
   },
-  mediaToggle: {
-    flexDirection: 'row',
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: 4,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  mediaBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: BorderRadius.md,
-  },
-  mediaBtnActive: { backgroundColor: Colors.primary },
-  mediaBtnText: { ...Typography.subheading, color: Colors.textMuted },
-  mediaBtnTextActive: { color: Colors.background },
   scroll: { paddingTop: Spacing.sm },
   bottomPad: { height: 32 },
 });

@@ -13,6 +13,7 @@ import { Colors, Spacing, Typography, BorderRadius, Shadow } from '../../constan
 import { PosterSkeleton } from '../common/LoadingSkeleton';
 import { getPosterUrl } from '../../lib/tmdb';
 import type { NewEpisodeEntry } from '../../lib/newEpisodes';
+import { useMediaFilter } from '../../lib/mediaFilter';
 
 const CARD_WIDTH = 120;
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
@@ -96,6 +97,7 @@ export default function NewEpsRow({ title, subtitle, items, isLoading }: Props) 
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
   const hasAnimated = useRef(false);
+  const moviesOnly = useMediaFilter() === 'movie';
 
   useEffect(() => {
     if (hasAnimated.current) return;
@@ -107,6 +109,8 @@ export default function NewEpsRow({ title, subtitle, items, isLoading }: Props) 
       ]).start();
     }
   }, [isLoading, items.length]);
+
+  if (moviesOnly) return null; // episodes are TV-only
 
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>

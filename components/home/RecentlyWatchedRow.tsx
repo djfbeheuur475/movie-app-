@@ -16,6 +16,7 @@ import { useTraktWatched } from '../../hooks/useTraktWatched';
 import WatchedBadge from '../common/WatchedBadge';
 import { PosterSkeleton } from '../common/LoadingSkeleton';
 import type { ContentItem } from '../../types';
+import { filterByMedia, useMediaFilter } from '../../lib/mediaFilter';
 
 const CARD_WIDTH = 120;
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
@@ -92,6 +93,7 @@ export default function RecentlyWatchedRow({ items, isLoading, lastEpisodes }: P
   const translateY = useRef(new Animated.Value(12)).current;
   const hasAnimated = useRef(false);
   const { isWatched } = useTraktWatched();
+  const shown = filterByMedia(items, useMediaFilter());
 
   useEffect(() => {
     if (hasAnimated.current) return;
@@ -115,6 +117,8 @@ export default function RecentlyWatchedRow({ items, isLoading, lastEpisodes }: P
     [lastEpisodes, isWatched]
   );
 
+  if (!isLoading && items.length > 0 && shown.length === 0) return null;
+
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
       <View style={styles.header}>
@@ -132,7 +136,7 @@ export default function RecentlyWatchedRow({ items, isLoading, lastEpisodes }: P
         />
       ) : (
         <FlatList
-          data={items}
+          data={shown}
           horizontal
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item) => `rw-${item.mediaType}-${item.id}`}
