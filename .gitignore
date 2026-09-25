@@ -60,5 +60,3 @@ kb/output/
 kb/logs/
 kb/experiment/
 
-# The web build (npm run build:web) bundles fonts/images under assets/node_modules/ — they must be published.
-!docs/app/assets/node_modules/

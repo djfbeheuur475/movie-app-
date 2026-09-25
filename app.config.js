@@ -1,5 +1,5 @@
 // Extends app.json. EXPO_WEB_BASE_URL lets the web build live under a sub-path
-// (GitHub Pages serves this repo at /movie-app-/); native builds never set it.
+// (e.g. a GitHub Pages project site); the Cloudflare deploy serves from the root; native builds never set it.
 module.exports = ({ config }) => ({
   ...config,
   experiments: {

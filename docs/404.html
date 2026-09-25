@@ -1,48 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
-    <meta name="description" content="Track what you watch and get recommendations that fit your taste." />
-    <meta name="theme-color" content="#0a0a0a" />
-    <link rel="manifest" href="/movie-app-/app/manifest.json" />
-    <!-- iPhone "Add to Home Screen": full-screen app with its own icon -->
-    <link rel="apple-touch-icon" href="/movie-app-/app/apple-touch-icon.png" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="NextUp" />
-    <title>NextUp</title>
-    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
-    <style id="expo-reset">
-      /* These styles make the body full-height */
-      html,
-      body {
-        height: 100%;
-        background-color: #0a0a0a;
-      }
-      /* These styles disable body scrolling if you are using <ScrollView> */
-      body {
-        overflow: hidden;
-      }
-      /* These styles make the root element full-height */
-      #root {
-        display: flex;
-        height: 100%;
-        flex: 1;
-      }
-    </style>
-  <meta name="theme-color" content="#0a0a0a">
-<link rel="icon" href="/movie-app-/app/favicon.ico"/></head>
-
-  <body>
-    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
-    <noscript>
-      You need to enable JavaScript to run this app.
-    </noscript>
-    <!-- The root element for your Expo app. -->
-    <div id="root"></div>
-  <script src="/movie-app-/app/_expo/static/js/web/index-155b7d563c026d5809193983d72d7b94.js" defer></script>
+<head>
+  <meta charset="utf-8" />
+  <title>Not found</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <script>
+    // Old NextUp web-app links (/movie-app-/app/...) → the app's new home, keeping path + sign-in hash.
+    if (location.pathname.startsWith('/movie-app-/app')) {
+      location.replace('https://nextup-tv.pages.dev' + location.pathname.replace(/^\/movie-app-\/app/, '') + location.search + location.hash);
+    }
+  </script>
+</head>
+<body style="background:#0a0a0a;color:#fff;font-family:system-ui;padding:24px">
+  Page not found. Looking for NextUp? It's at <a style="color:#f59e0b" href="https://nextup-tv.pages.dev/">nextup-tv.pages.dev</a>.
 </body>
 </html>

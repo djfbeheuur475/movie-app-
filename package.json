@@ -66,7 +66,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "node --test 'tests/**/*.test.ts'",
-    "build:web": "bash scripts/build-web.sh"
+    "deploy:web": "bash scripts/deploy-web.sh"
   },
   "private": true
 }
