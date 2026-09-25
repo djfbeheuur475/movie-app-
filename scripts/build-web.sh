@@ -19,5 +19,7 @@ cp -R "$OUT" docs/app
 # GitHub Pages has no SPA rewrites: unknown paths get the site's 404.html, so
 # make that the app shell — deep links like /movie-app-/app/taste/rate then boot the app.
 cp docs/app/index.html docs/404.html
+# Pages runs Jekyll by default, which drops folders starting with "_" — i.e. _expo/, the app bundle.
+touch docs/.nojekyll
 
 echo "Built → docs/app ($(du -sh docs/app | cut -f1)). Deploy by committing docs/ and pushing."
