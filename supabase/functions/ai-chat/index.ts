@@ -136,6 +136,30 @@ Example output structure:
 {"reply":"[Opening sentence tailored to their taste.]\\n\\nTitle One (YEAR) — [One sentence on why this viewer specifically will love it.]\\n\\nTitle Two (YEAR) — [One sentence.]\\n\\nTitle Three (YEAR) — [One sentence.]","movies":["Title One (YEAR)","Title Three (YEAR)"],"shows":["Title Two (YEAR)"]}`;
 }
 
+// ─── Prose ↔ JSON ─────────────────────────────────────────────────────────────
+
+// Pull "Title (YEAR) — why" lines out of a prose reply. The type is a guess from the blurb;
+// the client's cross-type TMDB fallback corrects misses.
+function extractProseTitles(text: string): { movies: string[]; shows: string[] } {
+  const movies: string[] = []; const shows: string[] = [];
+  const lineRe = /^\s*(?:[-*•]|\d+[.)])?\s*\**([^\n*—–]+?\(\d{4}\))\**\s*[—–-]\s*(.+)$/gm;
+  let m;
+  while ((m = lineRe.exec(text)) !== null) {
+    const title = m[1].trim();
+    const isShow = /\b(series|show|season|seasons|episodes?|sitcom|miniseries|limited series)\b/i.test(m[2]);
+    (isShow ? shows : movies).push(title);
+  }
+  return { movies, shows };
+}
+
+// The client sends prior assistant turns as the plain reply text. Left as prose, the model
+// imitates it after a turn or two and stops emitting JSON (no titles → no posters), so
+// re-present each prior turn in the JSON shape we ask for.
+function assistantTurnAsJson(content: string): string {
+  if (content.trim().startsWith("{")) return content;
+  return JSON.stringify({ reply: content, ...extractProseTitles(content) });
+}
+
 // ─── Response parsing ─────────────────────────────────────────────────────────
 
 function parseResponse(rawText: string): Omit<AIReply, "modelUsed"> {
@@ -216,7 +240,14 @@ function parseResponse(rawText: string): Omit<AIReply, "modelUsed"> {
   }
 
   const plain = stripped.replace(/^\s*\{?\s*"reply"\s*:\s*"/, "").replace(/",?\s*"(?:movies|shows|movieIds|tvIds|tmdbIds)"\s*:[\s\S]*$/, "").replace(/"\s*}\s*$/, "");
-  return { reply: cleanMd(plain) || cleanMd(stripped), movies, movieYears, shows, showYears, ...emptyIds };
+  const reply = cleanMd(plain) || cleanMd(stripped);
+  if (!movies.length && !shows.length) {
+    // Model answered in prose — recover the titles from its "Title (YEAR) — why" lines.
+    const prose = extractProseTitles(plain || stripped);
+    const pm = parseTitlesWithYears(prose.movies); const ps = parseTitlesWithYears(prose.shows);
+    return { reply, movies: pm.titles, movieYears: pm.years, shows: ps.titles, showYears: ps.years, ...emptyIds };
+  }
+  return { reply, movies, movieYears, shows, showYears, ...emptyIds };
 }
 
 // ─── OpenRouter streaming call ────────────────────────────────────────────────
@@ -439,10 +470,16 @@ Deno.serve(async (req) => {
     const alreadyRecommended = [...new Set([...(inSessionTitles as string[]), ...dbTitles])];
 
     const systemPrompt = buildSystemPrompt(watchedMovies, watchedShows, alreadyRecommended, favoriteGenres, tasteDNA);
-    const chatMessages = [
-      { role: "system", content: systemPrompt },
-      ...(messages as ChatMessage[]).map((m) => ({ role: m.role, content: m.content })),
-    ];
+    const history = (messages as ChatMessage[]).map((m) => ({
+      role: m.role, content: m.role === "assistant" ? assistantTurnAsJson(m.content) : m.content,
+    }));
+    // Re-state the output contract on the final user turn; small models drift from a
+    // system-prompt-only instruction as the conversation grows.
+    const lastUser = history.findLastIndex((m) => m.role === "user");
+    if (lastUser !== -1 && history.some((m) => m.role === "assistant")) {
+      history[lastUser] = { ...history[lastUser], content: `${history[lastUser].content}\n\n(Answer with the raw JSON object only: {"reply":…,"movies":[…],"shows":[…]}.)` };
+    }
+    const chatMessages = [{ role: "system", content: systemPrompt }, ...history];
 
     // 6. Set up streaming response
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
