@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef, useCallback, useState } from 'react';
+import React, { useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   ScrollView,
   View,
@@ -50,8 +50,6 @@ import NewEpsRow from '../../components/home/NewEpsRow';
 import RecentlyWatchedRow from '../../components/home/RecentlyWatchedRow';
 import TasteModeChip from '../../components/home/TasteModeChip';
 import ForYouSection from '../../components/home/ForYouSection';
-import MediaToggle from '../../components/common/MediaToggle';
-import { MediaFilterContext, filterByMedia, type MediaFilter } from '../../lib/mediaFilter';
 import LoadingSkeleton from '../../components/common/LoadingSkeleton';
 import type { ContentItem } from '../../types';
 
@@ -672,9 +670,6 @@ export default function HomeScreen() {
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
-  // All / Movies / TV — same switch as Discover; rows filter themselves via context.
-  const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
-
   // Hero carousel — AI items when available, otherwise trending sorted by affinity
   const heroItems: ContentItem[] = useMemo(() => {
     if (tasteProfiled) return forYouHero;
@@ -738,22 +733,11 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <MediaToggle
-          options={[
-            { value: 'all', label: 'All', icon: 'apps-outline' },
-            { value: 'movie', label: 'Movies', icon: 'film-outline' },
-            { value: 'tv', label: 'TV Shows', icon: 'tv-outline' },
-          ]}
-          value={mediaFilter}
-          onChange={setMediaFilter}
-        />
-
-        <MediaFilterContext.Provider value={mediaFilter}>
         {/* Hero */}
         {(tasteProfiled ? forYou.rows.isLoading : trendingLoading) ? (
           <LoadingSkeleton width="100%" height={HERO_SKELETON_HEIGHT} borderRadius={0} />
-        ) : filterByMedia(heroItems, mediaFilter).length > 0 ? (
-          <HeroSection key={mediaFilter} items={filterByMedia(heroItems, mediaFilter)} />
+        ) : heroItems.length > 0 ? (
+          <HeroSection items={heroItems} />
         ) : null}
 
         {/* Rows */}
@@ -880,7 +864,6 @@ export default function HomeScreen() {
             />
           )}
         </View>
-        </MediaFilterContext.Provider>
       </ScrollView>
     </SafeAreaView>
   );

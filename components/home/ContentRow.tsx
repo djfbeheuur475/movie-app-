@@ -13,7 +13,6 @@ import PosterCard from '../common/PosterCard';
 import { PosterSkeleton } from '../common/LoadingSkeleton';
 import { useTraktWatched } from '../../hooks/useTraktWatched';
 import type { ContentItem } from '../../types';
-import { filterByMedia, useMediaFilter } from '../../lib/mediaFilter';
 
 interface Props {
   title: string;
@@ -51,8 +50,6 @@ export default function ContentRow({
   const translateY = useRef(new Animated.Value(12)).current;
   const hasAnimated = useRef(false);
   const { isWatched } = useTraktWatched();
-  const mediaFilter = useMediaFilter();
-  const shown = filterByMedia(items, mediaFilter);
 
   useEffect(() => {
     if (hasAnimated.current) return;
@@ -85,9 +82,6 @@ export default function ContentRow({
     );
   }, [cardWidth, showRating, showType, isWatched, progressFor]);
 
-  // Nothing of the chosen type in this row (Home's Movies / TV toggle) — hide it.
-  if (!isLoading && items.length > 0 && shown.length === 0) return null;
-
   return (
     <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
       <View style={[styles.header, accent && styles.headerAccent]}>
@@ -116,7 +110,7 @@ export default function ContentRow({
         />
       ) : (
         <FlatList
-          data={shown}
+          data={items}
           horizontal
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item) => `${item.mediaType}-${item.id}`}
