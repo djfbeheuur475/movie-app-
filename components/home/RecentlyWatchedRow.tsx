@@ -76,6 +76,13 @@ function RecentCard({
         )}
 
         {watched && <WatchedBadge />}
+
+        {/* Same Movie / TV label as the Watchlist and other Home rows */}
+        <View style={[styles.typeBadge, item.mediaType === 'tv' && styles.typeBadgeTv]}>
+          <Text style={[styles.typeBadgeText, item.mediaType === 'tv' && styles.typeBadgeTextTv]}>
+            {item.mediaType === 'tv' ? 'TV' : 'Movie'}
+          </Text>
+        </View>
       </View>
 
       {epCode && (
@@ -149,6 +156,22 @@ export default function RecentlyWatchedRow({ items, isLoading, lastEpisodes }: P
 }
 
 const styles = StyleSheet.create({
+  typeBadge: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: Colors.primary,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  typeBadgeTv: {
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  typeBadgeText: { fontSize: 9, fontWeight: '800', color: Colors.background, letterSpacing: 0.5 },
+  typeBadgeTextTv: { color: Colors.text },
   container: { marginBottom: Spacing.xl },
   header: {
     paddingHorizontal: Spacing.lg,

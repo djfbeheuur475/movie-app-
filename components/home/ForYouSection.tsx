@@ -92,7 +92,7 @@ function ForYouCard({ item, userId, onDislike }: { item: ForYouItem; userId: str
   };
   return (
     <View style={{ width: CARD_WIDTH }}>
-      <PosterCard item={toContentItem(item, item.reason)} width={CARD_WIDTH} showRating />
+      <PosterCard item={toContentItem(item, item.reason)} width={CARD_WIDTH} showRating showType />
       <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
       {!!item.reason && <Text style={styles.reason} numberOfLines={3}>{item.reason}</Text>}
       <View style={styles.thumbs}>

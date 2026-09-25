@@ -75,6 +75,7 @@ export default function PaginatedAIRow({ title, subtitle, initialItems, traktLis
       isLoadingMore={isLoadingMore}
       onEndReached={hasMore ? loadMore : undefined}
       showRating
+      showType
       accent
     />
   );

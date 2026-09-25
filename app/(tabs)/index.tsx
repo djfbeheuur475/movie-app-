@@ -71,6 +71,7 @@ function CuratedFallbackRow({ list }: { list: CuratedFallbackList }) {
 
   return (
     <ContentRow
+              showType
       title={`✦ ${list.name}`}
       subtitle={list.subtitle}
       items={items}
@@ -760,6 +761,7 @@ export default function HomeScreen() {
           {/* Personal rows — most relevant to the user's current taste */}
           {!tasteProfiled && filteredHiddenGemsItems.length >= 3 && (
             <ContentRow
+              showType
               title="Hidden Gems For You"
               subtitle="Critically loved, under the radar — matched to your taste"
               items={filteredHiddenGemsItems}
@@ -780,6 +782,7 @@ export default function HomeScreen() {
           ) : aiFeedLoading && traktReady ? (
             [0, 1, 2, 3].map((i) => (
               <ContentRow
+              showType
                 key={`ai-skeleton-${i}`}
                 title="✦ Curating your picks..."
                 subtitle=""
@@ -805,6 +808,7 @@ export default function HomeScreen() {
             // Fallback to thematic rows if AI feed failed
             filteredThematicRows.map((row, i) => (
               <ContentRow
+              showType
                 key={`thematic-${i}`}
                 title={`✦ ${row.title}`}
                 subtitle={row.subtitle}
@@ -825,6 +829,7 @@ export default function HomeScreen() {
           )}
           {!tasteProfiled && filteredIylRows.map(({ seed, items }) => (
             <ContentRow
+              showType
               key={`if-you-liked-${seed.tmdbId}`}
               title={`If you liked ${seed.title}...`}
               titleComponent={
@@ -842,6 +847,7 @@ export default function HomeScreen() {
           ))}
           {!tasteProfiled && (bywRows ?? []).map(({ seed, items }) => (
             <ContentRow
+              showType
               key={`byw-${seed.tmdbId}`}
               title={`Because you watched ${seed.title}`}
               titleComponent={
