@@ -62,7 +62,8 @@ Deno.serve(async (req) => {
         assembleContext(admin, user.id, body, openRouterKey),
       ]);
       if (rlErr) console.error(`[orchestrator] rate limit error:`, rlErr.message);
-      if (allowed === false) return jsonError(`Daily limit reached for action '${action}'`, 429);
+      // Fail closed: an unchecked limit must not spend.
+      if (allowed !== true) return jsonError(`Daily limit reached for action '${action}'`, 429);
       ctx = assembledCtx;
     }
 

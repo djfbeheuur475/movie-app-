@@ -16,11 +16,16 @@ export async function assembleContext(
   const byRecency = <T extends { last_watched_at: string }>(items: T[]) =>
     [...items].sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime());
 
-  const watchedMovies = byRecency((body.watchedMovies as WatchedMovie[]) ?? []);
-  const watchedShows = byRecency((body.watchedShows as WatchedShow[]) ?? []);
-  const watchlistIds = (body.watchlistIds as number[]) ?? [];
-  const favoriteGenres = (body.favoriteGenres as number[]) ?? [];
-  const modelOverride = typeof body.model === "string" ? body.model.trim() : undefined;
+  // Everything here is client-supplied and ends up in prompts billed to our key — bound it.
+  const list = <T,>(v: unknown, n: number): T[] => (Array.isArray(v) ? (v.slice(0, n) as T[]) : []);
+  const watchedMovies = byRecency(list<WatchedMovie>(body.watchedMovies, 1500));
+  const watchedShows = byRecency(list<WatchedShow>(body.watchedShows, 600));
+  const watchlistIds = list<number>(body.watchlistIds, 500);
+  const favoriteGenres = list<number>(body.favoriteGenres, 30);
+  // Only our own models: a client-chosen model would bill any model on OpenRouter to our key.
+  const modelOverride = typeof body.model === "string" && [DEFAULT_MODEL, FALLBACK_MODEL].includes(body.model.trim())
+    ? body.model.trim()
+    : undefined;
 
   const { data: dnaRow } = await admin
     .from("taste_dna")

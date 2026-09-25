@@ -248,7 +248,7 @@ export async function handleTasteProfile(ctx: ActionContext): Promise<Response> 
     loadRatings(ctx),
     ctx.admin.from("taste_profiles").select("user_notes").eq("user_id", ctx.userId).maybeSingle(),
   ]);
-  const notes: string = (typeof ctx.rawBody.userNotes === "string" ? ctx.rawBody.userNotes : existing?.user_notes) ?? "";
+  const notes: string = ((typeof ctx.rawBody.userNotes === "string" ? ctx.rawBody.userNotes : existing?.user_notes) ?? "").slice(0, 2000);
   const answered = ratings.filter((r) => r.rating !== null);
   const history = readHistory(ctx);
   if (answered.length < 5 && !history.movies.length && !history.shows.length) {
@@ -364,7 +364,7 @@ export async function handleForYou(ctx: ActionContext, tmdbKey: string): Promise
 
   // Regeneration is the only part that costs — rate-limit it here, not on cache hits.
   const { data: allowed } = await ctx.admin.rpc("check_ai_rate_limit", { p_user_id: ctx.userId, p_action: "for_you", p_limit: FOR_YOU_DAILY_LIMIT });
-  if (allowed === false) {
+  if (allowed !== true) { // fail closed
     return tp.rows?.rows ? json({ rows: tp.rows.rows, builtAt: tp.rows_built_at, cached: true }) : json({ error: "Daily limit reached" }, 429);
   }
 

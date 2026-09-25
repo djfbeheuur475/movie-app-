@@ -274,7 +274,8 @@ export async function handleHomepage(ctx: ActionContext): Promise<Response> {
     p_limit: RATE_LIMITS.homepage ?? 50,
   });
   if (rlErr) console.error(`[homepage] rate limit check error:`, rlErr.message);
-  if (allowed === false) return jsonError("Daily limit reached for action 'homepage'", 429);
+  // Fail closed: an unchecked limit must not spend.
+  if (allowed !== true) return jsonError("Daily limit reached for action 'homepage'", 429);
 
   const startMs = Date.now();
   const hasDNA = ctx.tasteDNA !== null &&

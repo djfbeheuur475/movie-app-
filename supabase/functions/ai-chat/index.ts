@@ -7,6 +7,13 @@ const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const DEFAULT_MODEL = "qwen/qwen3-14b";
 const FALLBACK_MODEL = "qwen/qwen3-8b";
 const DAILY_LIMIT = 100;
+// Cost guards — every request is billed to our OpenRouter key, so nothing about
+// model choice or request size is taken from the client unchecked.
+const ALLOWED_MODELS = new Set([DEFAULT_MODEL, FALLBACK_MODEL]);
+const MAX_HISTORY_MESSAGES = 12;
+const MAX_MESSAGE_CHARS = 2000;
+const MAX_REPLY_TOKENS = 1200;
+const MAX_SUMMARY_TOKENS = 300;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -273,6 +280,7 @@ async function streamFromOpenRouter(
       model: modelId,
       messages,
       stream: true,
+      max_tokens: MAX_REPLY_TOKENS,
       // Prefer fast Qwen3 providers; disable thinking to avoid silent 5-30s think-blocks
       provider: { order: ["Fireworks", "Together", "Nebius"], allow_fallbacks: true },
       chat_template_kwargs: { enable_thinking: false },
@@ -418,20 +426,35 @@ Deno.serve(async (req) => {
     // 3. Rate limit + context + body — all in parallel (saves ~100ms serial DB wait)
     const [body, { data: allowed, error: rlError }, dnaResult, conversationsResult] = await Promise.all([
       bodyPromise,
-      admin.rpc("check_ai_rate_limit", { p_user_id: user.id, p_limit: DAILY_LIMIT }),
+      admin.rpc("check_ai_rate_limit", { p_user_id: user.id, p_action: "chat", p_limit: DAILY_LIMIT }),
       admin.from("taste_dna").select("taste_profile, genre_affinity, profile_metadata").eq("user_id", user.id).maybeSingle(),
       admin.from("ai_conversations").select("titles_mentioned").eq("user_id", user.id).order("session_at", { ascending: false }).limit(5),
     ]);
 
-    if (rlError) console.error("[ai-chat] Rate limit error:", rlError.message);
-    if (allowed === false) return jsonError(`Daily AI limit reached (${DAILY_LIMIT}/day)`, 429);
+    // Fail closed: if the limit can't be checked, don't spend.
+    if (rlError) {
+      console.error("[ai-chat] Rate limit error:", rlError.message);
+      return jsonError("AI is temporarily unavailable", 503);
+    }
+    if (allowed !== true) return jsonError(`Daily AI limit reached (${DAILY_LIMIT}/day)`, 429);
 
-    const { action = "ask", messages = [], watchedMovies = [], watchedShows = [], favoriteGenres = [], model, inSessionTitles = [] } = body;
+    const { action = "ask", model } = body;
+    // Bound everything that ends up in the prompt: recent turns only, each capped.
+    const messages: ChatMessage[] = (Array.isArray(body.messages) ? body.messages : [])
+      .filter((m: ChatMessage) => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string")
+      .slice(-MAX_HISTORY_MESSAGES)
+      .map((m: ChatMessage) => ({ role: m.role, content: m.content.slice(0, MAX_MESSAGE_CHARS) }));
+    const list = (v: unknown, n: number) => (Array.isArray(v) ? v.slice(0, n) : []);
+    const watchedMovies = list(body.watchedMovies, 500);
+    const watchedShows = list(body.watchedShows, 300);
+    const favoriteGenres = list(body.favoriteGenres, 30);
+    const inSessionTitles = list(body.inSessionTitles, 100).filter((t: unknown) => typeof t === "string").map((t: string) => t.slice(0, 120));
 
     const orKey = Deno.env.get("OPENROUTER_KEY") ?? "";
     if (!orKey) return jsonError("AI service not configured", 503);
 
-    const primaryModel = (typeof model === "string" && model.trim()) ? model.trim() : DEFAULT_MODEL;
+    // Only our own models — a client-supplied model name would let anyone bill any model to our key.
+    const primaryModel = typeof model === "string" && ALLOWED_MODELS.has(model.trim()) ? model.trim() : DEFAULT_MODEL;
     const cascade = primaryModel === FALLBACK_MODEL ? [primaryModel] : [primaryModel, FALLBACK_MODEL];
 
     // ── Summarise (non-streaming) ─────────────────────────────────────────────
@@ -444,7 +467,7 @@ Deno.serve(async (req) => {
           const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
             method: "POST",
             headers: { "Authorization": `Bearer ${orKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://nextup.app", "X-Title": "NextUp" },
-            body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: prompt }], provider: { order: ["Fireworks", "Together"], allow_fallbacks: true }, chat_template_kwargs: { enable_thinking: false } }),
+            body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: prompt }], max_tokens: MAX_SUMMARY_TOKENS, provider: { order: ["Fireworks", "Together"], allow_fallbacks: true }, chat_template_kwargs: { enable_thinking: false } }),
           });
           if (!res.ok) continue;
           const data = await res.json();
@@ -529,7 +552,7 @@ Deno.serve(async (req) => {
           user_id: user.id, model: modelUsed,
           prompt_tokens: promptTokens || null, completion_tokens: completionTokens || null,
           latency_ms: latencyMs, success: true,
-        }).then(() => {}).catch((e: Error) => console.warn("[ai-chat] Log failed:", e.message));
+        }).then(() => {}, (e: Error) => console.warn("[ai-chat] Log failed:", e.message));
       }
 
       writer.close();
